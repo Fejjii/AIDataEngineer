@@ -20,7 +20,7 @@ from aide.orchestration.worker import (
     mark_dispatched,
     renew_heartbeat,
 )
-from aide.persistence.models import MaterializedTaskModel, TaskAttemptModel
+from aide.persistence.models import AuditEventModel, MaterializedTaskModel, TaskAttemptModel
 
 
 def moment() -> datetime:
@@ -71,6 +71,14 @@ async def test_stale_worker_after_recovery_updates_nothing(
             reconcile_deadline=now + timedelta(minutes=5),
         )
     assert recovery is not None
+    async with session_factory() as session:
+        attempt_before = await session.get(TaskAttemptModel, claim.attempt_id)
+        assert attempt_before is not None
+        expected_attempt_state = (
+            attempt_before.outcome,
+            attempt_before.result,
+            attempt_before.finished_at,
+        )
     async with session_factory() as session, session.begin():
         assert not await finalize_success(
             session,
@@ -83,6 +91,21 @@ async def test_stale_worker_after_recovery_updates_nothing(
         assert task is not None
         assert task.outputs is None
         assert task.status == TaskState.RECONCILING.value
+        attempt_after = await session.get(TaskAttemptModel, claim.attempt_id)
+        assert attempt_after is not None
+        assert (
+            attempt_after.outcome,
+            attempt_after.result,
+            attempt_after.finished_at,
+        ) == expected_attempt_state
+        stale_audit = await session.scalar(
+            select(AuditEventModel).where(
+                AuditEventModel.task_id == seeded.task_id,
+                AuditEventModel.attempt_id == claim.attempt_id,
+                AuditEventModel.event_type == "STALE_RESULT_REJECTED",
+            )
+        )
+        assert stale_audit is not None
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -14,12 +15,14 @@ from aide.orchestration.coordination import (
     propagate_required_dependency_failures,
     reduce_and_advance,
 )
+from aide.orchestration.cancellation import request_cancellation
 from aide.orchestration.materialization import (
     ConcurrentStateError,
     create_phase_occurrence,
     resume_existing_phase,
 )
 from aide.persistence.models import (
+    AuditEventModel,
     MaterializedTaskModel,
     PhaseRunModel,
     TaskTemplateModel,
@@ -195,3 +198,125 @@ async def test_generation_must_be_monotonic(
                 contract_snapshot_id=seeded.snapshot_id,
                 templates=(),
             )
+
+
+@pytest.mark.parametrize(
+    "forbidden_state",
+    [
+        WorkflowState.CANCEL_REQUESTED,
+        WorkflowState.CANCELLING,
+        WorkflowState.CANCELLED,
+        WorkflowState.COMPLETED,
+        WorkflowState.FAILED,
+    ],
+)
+@pytest.mark.asyncio
+async def test_phase_creation_rejects_cancellation_and_terminal_states(
+    session_factory: async_sessionmaker[AsyncSession],
+    forbidden_state: WorkflowState,
+) -> None:
+    seeded = await seed_task(session_factory)
+    async with session_factory() as session, session.begin():
+        workflow = await session.get(WorkflowModel, seeded.workflow_id)
+        assert workflow is not None
+        workflow.state = forbidden_state.value
+        workflow.version += 1
+        expected_version = workflow.version
+
+    with pytest.raises(ValueError, match="forbids phase creation"):
+        async with session_factory() as session, session.begin():
+            await create_phase_occurrence(
+                session,
+                workflow_id=seeded.workflow_id,
+                phase_run_id=uuid4(),
+                phase=WorkflowState.VALIDATION,
+                expected_workflow_version=expected_version,
+                expected_generation=2,
+                contract_snapshot_id=seeded.snapshot_id,
+                templates=(),
+            )
+
+    async with session_factory() as session:
+        phase_count = await session.scalar(
+            select(func.count())
+            .select_from(PhaseRunModel)
+            .where(PhaseRunModel.workflow_id == seeded.workflow_id)
+        )
+        plan_count = await session.scalar(
+            select(func.count())
+            .select_from(AuditEventModel)
+            .where(
+                AuditEventModel.workflow_id == seeded.workflow_id,
+                AuditEventModel.event_type == "PLAN_ACCEPTED",
+            )
+        )
+        assert phase_count == 1
+        assert plan_count == 1
+
+
+@pytest.mark.asyncio
+async def test_stale_and_current_coordinators_cannot_advance_after_cancellation(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    seeded = await seed_task(session_factory)
+    async with session_factory() as session, session.begin():
+        task = await session.get(MaterializedTaskModel, seeded.task_id)
+        workflow = await session.get(WorkflowModel, seeded.workflow_id)
+        assert task is not None and workflow is not None
+        task.status = TaskState.SUCCEEDED.value
+        stale_version = workflow.version
+
+    async with session_factory() as session, session.begin():
+        await request_cancellation(
+            session,
+            workflow_id=seeded.workflow_id,
+            expected_workflow_version=stale_version,
+            actor_principal_id=uuid4(),
+            reason="stop before advancement",
+            now=datetime(2026, 9, 11, 18, 0, 0),
+        )
+    async with session_factory() as session:
+        workflow = await session.get(WorkflowModel, seeded.workflow_id)
+        assert workflow is not None
+        current_version = workflow.version
+
+    async def coordinate(expected_version: int) -> object:
+        try:
+            async with session_factory() as session, session.begin():
+                return await reduce_and_advance(
+                    session,
+                    workflow_id=seeded.workflow_id,
+                    expected_workflow_version=expected_version,
+                    expected_generation=1,
+                    next_phase=NextPhase(
+                        phase_run_id=uuid4(),
+                        phase=WorkflowState.VALIDATION,
+                        contract_snapshot_id=seeded.snapshot_id,
+                        templates=(),
+                    ),
+                )
+        except (ConcurrentStateError, ValueError) as exc:
+            return exc
+
+    results = await asyncio.gather(
+        coordinate(stale_version),
+        coordinate(current_version),
+    )
+    assert any(isinstance(result, ConcurrentStateError) for result in results)
+    assert any(isinstance(result, ValueError) for result in results)
+    async with session_factory() as session:
+        phase_count = await session.scalar(
+            select(func.count())
+            .select_from(PhaseRunModel)
+            .where(PhaseRunModel.workflow_id == seeded.workflow_id)
+        )
+        plan_count = await session.scalar(
+            select(func.count())
+            .select_from(AuditEventModel)
+            .where(
+                AuditEventModel.workflow_id == seeded.workflow_id,
+                AuditEventModel.event_type == "PLAN_ACCEPTED",
+            )
+        )
+        assert phase_count == 1
+        assert plan_count == 1

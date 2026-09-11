@@ -12,13 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from aide.connectors.base.reconcile import EffectFound, InProgress, NoEffect, Unknown
 from aide.domain.identity import canonical_json_bytes
-from aide.domain.states import AttemptOutcome, DispatchState, TaskState
+from aide.domain.states import AttemptOutcome, DispatchState, TaskState, WorkflowState
+from aide.orchestration.materialization import acquire_workflow_lock
 from aide.orchestration.worker import RecoveryClaim
 from aide.persistence.audit import append_audit_event
 from aide.persistence.models import (
     MaterializedTaskModel,
     RecoveryEventModel,
     TaskAttemptModel,
+    WorkflowModel,
 )
 
 ReconcileValue = EffectFound | NoEffect | InProgress | Unknown
@@ -36,6 +38,24 @@ async def apply_reconcile_result(
     output_validator: OutputValidator | None = None,
 ) -> TaskState:
     """Apply one connector result under fenced recovery ownership."""
+    workflow_id = await session.scalar(
+        select(MaterializedTaskModel.workflow_id).where(
+            MaterializedTaskModel.task_id == claim.task_id
+        )
+    )
+    if workflow_id is None:
+        raise RuntimeError("stale recovery result rejected")
+    await acquire_workflow_lock(session, workflow_id)
+    workflow = await session.scalar(
+        select(WorkflowModel)
+        .where(
+            WorkflowModel.workflow_id == workflow_id,
+            WorkflowModel.cancellation_epoch == claim.cancellation_epoch,
+        )
+        .with_for_update()
+    )
+    if workflow is None:
+        raise RuntimeError("stale recovery result rejected")
     task = await session.scalar(
         select(MaterializedTaskModel)
         .where(
@@ -83,18 +103,25 @@ async def apply_reconcile_result(
         event_type = "TASK_RECOVERED"
     elif isinstance(result, NoEffect):
         attempt.dispatch_state = DispatchState.REJECTED_NO_EFFECT.value
-        attempt.outcome = AttemptOutcome.FAILED.value
-        attempt.finished_at = now
-        if task.attempt_count < task.max_attempts:
+        if workflow.state == WorkflowState.CANCELLING.value:
+            attempt.outcome = AttemptOutcome.CANCELLED.value
+            task.status = TaskState.CANCELLED.value
+            task.disposition_reason = "NO_EFFECT_DURING_CANCELLATION"
+            task.finished_at = now
+            event_type = "RECOVERY_NO_EFFECT_CANCELLED"
+        elif task.attempt_count < task.max_attempts:
+            attempt.outcome = AttemptOutcome.FAILED.value
             task.status = TaskState.RETRY_WAIT.value
             task.retry_not_before = now
             event_type = "RECOVERY_NO_EFFECT_RETRY"
         else:
+            attempt.outcome = AttemptOutcome.FAILED.value
             task.status = TaskState.FAILED.value
             task.failure_classification = "AMBIGUOUS_OUTCOME"
             task.disposition_reason = "NO_EFFECT_ATTEMPTS_EXHAUSTED"
             task.finished_at = now
             event_type = "RECOVERY_NO_EFFECT_EXHAUSTED"
+        attempt.finished_at = now
         await _clear_recovery(task)
     elif isinstance(result, InProgress):
         exhausted = (
@@ -103,14 +130,20 @@ async def apply_reconcile_result(
             or now >= task.reconcile_deadline
         )
         if exhausted:
-            await _park_ambiguous(task, attempt, now, "IN_PROGRESS_EXHAUSTED")
+            if workflow.state == WorkflowState.CANCELLING.value:
+                task.disposition_reason = "IN_PROGRESS_EXHAUSTED"
+            else:
+                await _park_ambiguous(task, attempt, now, "IN_PROGRESS_EXHAUSTED")
             event_type = "RECOVERY_IN_PROGRESS_EXHAUSTED"
         else:
             attempt.external_ref = result.external_ref
             task.recovery_lease_expires_at = now + recovery_lease_duration
             event_type = "RECOVERY_IN_PROGRESS"
     else:
-        await _park_ambiguous(task, attempt, now, "UNKNOWN")
+        if workflow.state == WorkflowState.CANCELLING.value:
+            task.disposition_reason = "UNKNOWN"
+        else:
+            await _park_ambiguous(task, attempt, now, "UNKNOWN")
         event_type = "RECOVERY_UNKNOWN"
 
     await append_audit_event(

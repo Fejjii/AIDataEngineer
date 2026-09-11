@@ -15,6 +15,7 @@ from aide.orchestration.materialization import (
     TemplateSpec,
     acquire_workflow_lock,
     create_phase_occurrence,
+    ensure_phase_creation_allowed,
 )
 from aide.persistence.audit import append_audit_event
 from aide.persistence.models import (
@@ -127,6 +128,7 @@ async def reduce_and_advance(
         raise LookupError("workflow has no active phase occurrence")
     if workflow.version != expected_workflow_version:
         raise ConcurrentStateError("workflow version changed")
+    ensure_phase_creation_allowed(workflow)
     phase_run = await session.scalar(
         select(PhaseRunModel)
         .where(PhaseRunModel.phase_run_id == workflow.active_phase_run_id)

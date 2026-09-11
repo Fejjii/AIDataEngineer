@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from aide.domain.identity import canonical_json_bytes
 from aide.domain.states import AttemptOutcome, DispatchState, TaskState, WorkflowState
+from aide.orchestration.materialization import acquire_workflow_lock
 from aide.persistence.audit import append_audit_event
 from aide.persistence.models import MaterializedTaskModel, TaskAttemptModel, WorkflowModel
 
@@ -34,6 +35,7 @@ class RecoveryClaim:
     attempt_id: UUID
     owner: str
     claim_epoch: int
+    cancellation_epoch: int
     lease_expires_at: datetime
 
 
@@ -169,9 +171,11 @@ async def finalize_success(
     """Adopt output only when owner, epoch, attempt, and cancellation epoch still match."""
     locked = await _owned_task(session, claim)
     if locked is None:
+        await _audit_stale_result(session, claim=claim, result_kind="SUCCESS")
         return False
     task, attempt, _ = locked
     if task.outputs is not None:
+        await _audit_stale_result(session, claim=claim, result_kind="SUCCESS")
         return False
     digest = hashlib.sha256(canonical_json_bytes(output)).hexdigest()
     task.outputs = output
@@ -213,6 +217,7 @@ async def finalize_failure(
 ) -> bool:
     locked = await _owned_task(session, claim)
     if locked is None:
+        await _audit_stale_result(session, claim=claim, result_kind="FAILURE")
         return False
     task, attempt, _ = locked
     task.status = TaskState.FAILED.value
@@ -249,16 +254,37 @@ async def acquire_recovery(
     expected_owner: str | None = None,
     expected_epoch: int | None = None,
     expected_attempt_id: UUID | None = None,
+    expected_cancellation_epoch: int | None = None,
 ) -> RecoveryClaim | None:
     """Atomically fence a prior worker and claim reconciliation ownership."""
+    workflow = await _lock_workflow_for_task(session, task_id)
+    if workflow is None:
+        return None
+    if (
+        expected_cancellation_epoch is not None
+        and workflow.cancellation_epoch != expected_cancellation_epoch
+    ):
+        return None
     task = await session.scalar(
         select(MaterializedTaskModel)
-        .where(MaterializedTaskModel.task_id == task_id)
-        .with_for_update(skip_locked=True)
+        .where(
+            MaterializedTaskModel.task_id == task_id,
+            MaterializedTaskModel.workflow_id == workflow.workflow_id,
+        )
+        .with_for_update()
     )
     if task is None or task.active_attempt_id is None:
         return None
-    if expected_owner is not None and task.lease_owner != expected_owner:
+    if task.status not in {
+        TaskState.CLAIMED.value,
+        TaskState.RUNNING.value,
+        TaskState.RECONCILING.value,
+    }:
+        return None
+    current_owner = (
+        task.recovery_owner if task.status == TaskState.RECONCILING.value else task.lease_owner
+    )
+    if expected_owner is not None and current_owner != expected_owner:
         return None
     if expected_epoch is not None and task.claim_epoch != expected_epoch:
         return None
@@ -286,7 +312,11 @@ async def acquire_recovery(
         attempt_id=prior_attempt_id,
         operation_idempotency_key=task.operation_idempotency_key,
         event_type="RECOVERY_CLAIMED",
-        payload={"recovery_owner": recovery_owner, "claim_epoch": task.claim_epoch},
+        payload={
+            "recovery_owner": recovery_owner,
+            "claim_epoch": task.claim_epoch,
+            "cancellation_epoch": workflow.cancellation_epoch,
+        },
     )
     await session.flush()
     return RecoveryClaim(
@@ -294,6 +324,7 @@ async def acquire_recovery(
         attempt_id=prior_attempt_id,
         owner=recovery_owner,
         claim_epoch=task.claim_epoch,
+        cancellation_epoch=workflow.cancellation_epoch,
         lease_expires_at=now + lease_duration,
     )
 
@@ -306,16 +337,24 @@ async def acquire_expired_recovery(
     lease_duration: timedelta,
     reconcile_deadline: datetime,
 ) -> RecoveryClaim | None:
-    expired = await session.scalar(
-        select(MaterializedTaskModel)
-        .where(
-            MaterializedTaskModel.status.in_([TaskState.CLAIMED.value, TaskState.RUNNING.value]),
-            MaterializedTaskModel.lease_expires_at < now,
+    expired = (
+        await session.execute(
+            select(
+                MaterializedTaskModel.task_id,
+                MaterializedTaskModel.lease_owner,
+                MaterializedTaskModel.claim_epoch,
+                MaterializedTaskModel.active_attempt_id,
+            )
+            .where(
+                MaterializedTaskModel.status.in_(
+                    [TaskState.CLAIMED.value, TaskState.RUNNING.value]
+                ),
+                MaterializedTaskModel.lease_expires_at < now,
+            )
+            .order_by(MaterializedTaskModel.lease_expires_at)
+            .limit(1)
         )
-        .order_by(MaterializedTaskModel.lease_expires_at)
-        .with_for_update(skip_locked=True)
-        .limit(1)
-    )
+    ).first()
     if expired is None:
         return None
     return await acquire_recovery(
@@ -334,10 +373,29 @@ async def acquire_expired_recovery(
 async def _owned_task(
     session: AsyncSession, claim: TaskClaim
 ) -> tuple[MaterializedTaskModel, TaskAttemptModel, WorkflowModel] | None:
+    workflow_id = await session.scalar(
+        select(MaterializedTaskModel.workflow_id).where(
+            MaterializedTaskModel.task_id == claim.task_id
+        )
+    )
+    if workflow_id is None:
+        return None
+    await acquire_workflow_lock(session, workflow_id)
+    workflow = await session.scalar(
+        select(WorkflowModel)
+        .where(
+            WorkflowModel.workflow_id == workflow_id,
+            WorkflowModel.cancellation_epoch == claim.cancellation_epoch,
+        )
+        .with_for_update()
+    )
+    if workflow is None:
+        return None
     task = await session.scalar(
         select(MaterializedTaskModel)
         .where(
             MaterializedTaskModel.task_id == claim.task_id,
+            MaterializedTaskModel.workflow_id == workflow_id,
             MaterializedTaskModel.lease_owner == claim.owner,
             MaterializedTaskModel.claim_epoch == claim.claim_epoch,
             MaterializedTaskModel.active_attempt_id == claim.attempt_id,
@@ -345,16 +403,6 @@ async def _owned_task(
         .with_for_update()
     )
     if task is None:
-        return None
-    workflow = await session.scalar(
-        select(WorkflowModel)
-        .where(
-            WorkflowModel.workflow_id == task.workflow_id,
-            WorkflowModel.cancellation_epoch == claim.cancellation_epoch,
-        )
-        .with_for_update()
-    )
-    if workflow is None:
         return None
     attempt = await session.scalar(
         select(TaskAttemptModel)
@@ -369,3 +417,52 @@ async def _owned_task(
     if attempt is None:
         return None
     return task, attempt, workflow
+
+
+async def _lock_workflow_for_task(session: AsyncSession, task_id: UUID) -> WorkflowModel | None:
+    workflow_id = await session.scalar(
+        select(MaterializedTaskModel.workflow_id).where(MaterializedTaskModel.task_id == task_id)
+    )
+    if workflow_id is None:
+        return None
+    await acquire_workflow_lock(session, workflow_id)
+    return await session.scalar(
+        select(WorkflowModel).where(WorkflowModel.workflow_id == workflow_id).with_for_update()
+    )
+
+
+async def _audit_stale_result(
+    session: AsyncSession,
+    *,
+    claim: TaskClaim,
+    result_kind: str,
+) -> None:
+    """Best-effort evidence for a stale completion, isolated from business state."""
+    try:
+        async with session.begin_nested():
+            task = await session.get(MaterializedTaskModel, claim.task_id)
+            if task is None:
+                return
+            workflow = await session.get(WorkflowModel, task.workflow_id)
+            if workflow is None:
+                return
+            await append_audit_event(
+                session,
+                workflow_id=task.workflow_id,
+                phase_run_id=task.phase_run_id,
+                task_id=task.task_id,
+                attempt_id=claim.attempt_id,
+                operation_idempotency_key=task.operation_idempotency_key,
+                event_type="STALE_RESULT_REJECTED",
+                payload={
+                    "result_kind": result_kind,
+                    "supplied_owner": claim.owner,
+                    "supplied_claim_epoch": claim.claim_epoch,
+                    "supplied_cancellation_epoch": claim.cancellation_epoch,
+                    "authoritative_claim_epoch": task.claim_epoch,
+                    "authoritative_cancellation_epoch": workflow.cancellation_epoch,
+                },
+            )
+    except Exception:
+        # Stale output remains rejected even if best-effort evidence cannot be written.
+        return

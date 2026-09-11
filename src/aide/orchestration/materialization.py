@@ -28,6 +28,17 @@ class ConcurrentStateError(RuntimeError):
     """Raised when an expected workflow version or phase generation is stale."""
 
 
+PHASE_CREATION_FORBIDDEN_STATES = frozenset(
+    {
+        WorkflowState.CANCEL_REQUESTED.value,
+        WorkflowState.CANCELLING.value,
+        WorkflowState.CANCELLED.value,
+        WorkflowState.COMPLETED.value,
+        WorkflowState.FAILED.value,
+    }
+)
+
+
 def advisory_lock_key(workflow_id: UUID) -> int:
     """Produce a stable signed bigint for PostgreSQL advisory transaction locks."""
     digest = hashlib.blake2b(workflow_id.bytes, digest_size=8).digest()
@@ -76,6 +87,7 @@ async def create_phase_occurrence(
         raise LookupError(f"workflow {workflow_id} does not exist")
     if workflow.version != expected_workflow_version:
         raise ConcurrentStateError("workflow version changed")
+    ensure_phase_creation_allowed(workflow)
     latest_generation = await session.scalar(
         select(func.max(PhaseRunModel.generation)).where(PhaseRunModel.workflow_id == workflow_id)
     )
@@ -139,6 +151,12 @@ async def create_phase_occurrence(
     )
     await session.flush()
     return phase_run
+
+
+def ensure_phase_creation_allowed(workflow: WorkflowModel) -> None:
+    """Reject phase creation or advancement after cancellation or terminalization."""
+    if workflow.state in PHASE_CREATION_FORBIDDEN_STATES:
+        raise ValueError(f"workflow state {workflow.state} forbids phase creation")
 
 
 async def resume_existing_phase(
