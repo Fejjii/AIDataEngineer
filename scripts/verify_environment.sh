@@ -95,37 +95,98 @@ EOF
   if [[ ! -f "$HBA_FILE" ]]; then
     fail "pg_hba.conf is missing"
   fi
-  # First matching pg_hba row wins. Ubuntu defaults to scram on 127.0.0.1
-  # before any appended trust lines, so rewrite loopback host methods in place.
-  sudo python3 - "$HBA_FILE" "$HBA_MARKER" <<'PY'
+  # First matching pg_hba row wins. Insert narrow loopback trust for
+  # aide_dev/ubuntu before generic host-all-all rows. Never convert
+  # generic host all all methods to trust; restore them if a prior
+  # OPS003 revision did so.
+  sudo python3 - "$HBA_FILE" "$HBA_MARKER" "$DEV_DB" "$DEV_ROLE" <<'PY'
 from pathlib import Path
 import sys
 
 path = Path(sys.argv[1])
 marker = sys.argv[2]
-text = path.read_text()
-out = []
-for line in text.splitlines():
+dev_db = sys.argv[3]
+dev_role = sys.argv[4]
+loopbacks = ("127.0.0.1/32", "::1/128")
+desired = [
+    f"host    {dev_db}    {dev_role}    127.0.0.1/32          trust",
+    f"host    {dev_db}    {dev_role}    ::1/128                trust",
+]
+
+
+def is_blank_or_comment(line: str) -> bool:
     stripped = line.strip()
-    if stripped.startswith("#") or not stripped:
-        out.append(line)
+    return (not stripped) or stripped.startswith("#")
+
+
+def is_ops_managed(line: str) -> bool:
+    if marker in line:
+        return True
+    if is_blank_or_comment(line):
+        return False
+    parts = line.split()
+    if len(parts) < 3:
+        return False
+    if parts[0] == "local" and parts[1] == "all" and parts[2] == dev_role:
+        return True
+    if len(parts) < 5 or parts[0] != "host":
+        return False
+    if parts[3] not in loopbacks:
+        return False
+    if parts[1] == dev_db and parts[2] == dev_role:
+        return True
+    # Prior OPS003 revision granted trust to every database for ubuntu.
+    if parts[1] == "all" and parts[2] == dev_role:
+        return True
+    return False
+
+
+def restore_generic_host_all(line: str) -> str:
+    parts = line.split()
+    if (
+        len(parts) >= 5
+        and parts[0] == "host"
+        and parts[1] == "all"
+        and parts[2] == "all"
+        and parts[3] in loopbacks
+        and parts[4] == "trust"
+    ):
+        addr = parts[3]
+        pad = "            " if addr == "127.0.0.1/32" else "                 "
+        return (
+            f"host    all             all             {addr}{pad}scram-sha-256"
+        )
+    return line
+
+
+cleaned: list[str] = []
+for line in path.read_text().splitlines():
+    if is_ops_managed(line):
+        continue
+    cleaned.append(restore_generic_host_all(line))
+
+insert_at: int | None = None
+for index, line in enumerate(cleaned):
+    if is_blank_or_comment(line):
         continue
     parts = line.split()
     if (
         len(parts) >= 5
         and parts[0] == "host"
         and parts[1] == "all"
-        and parts[3] in {"127.0.0.1/32", "::1/128"}
-        and parts[4] != "reject"
+        and parts[2] == "all"
+        and parts[3] in loopbacks
     ):
-        parts[4] = "trust"
-        # Preserve original spacing style loosely by joining fields.
-        line = "\t".join(parts)
-    out.append(line)
-if marker not in "\n".join(out):
-    out.append("")
-    out.append(marker)
-path.write_text("\n".join(out) + "\n")
+        insert_at = index
+        break
+
+block = ["", marker, *desired]
+if insert_at is None:
+    cleaned.extend(block)
+else:
+    cleaned[insert_at:insert_at] = block
+
+path.write_text("\n".join(cleaned) + "\n")
 PY
 }
 
@@ -166,6 +227,8 @@ ensure_dev_role_and_db() {
   if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${DEV_ROLE}'" | grep -qx 1; then
     sudo -u postgres createuser --createdb --login "$DEV_ROLE"
   fi
+  sudo -u postgres psql -v ON_ERROR_STOP=1 -c \
+    "ALTER ROLE ${DEV_ROLE} WITH LOGIN CREATEDB NOSUPERUSER;" >/dev/null
   if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${DEV_DB}'" | grep -qx 1; then
     sudo -u postgres createdb -O "$DEV_ROLE" "$DEV_DB"
   fi
@@ -231,8 +294,62 @@ assert_no_vendor_secrets() {
 
 temp_db_probe() {
   need_cmd psql
-  psql -h 127.0.0.1 -p 5432 -U "$DEV_ROLE" -d "$DEV_DB" -v ON_ERROR_STOP=1 \
+  psql -w -h 127.0.0.1 -p 5432 -U "$DEV_ROLE" -d "$DEV_DB" -v ON_ERROR_STOP=1 \
     -c "SELECT 1 AS ok;" >/dev/null
+}
+
+assert_role_not_superuser() {
+  ensure_sudo
+  local super
+  super="$(sudo -u postgres psql -tAc "SELECT rolsuper FROM pg_roles WHERE rolname='${DEV_ROLE}'" | tr -d '[:space:]')"
+  [[ "$super" == "f" ]]
+}
+
+hba_host_fields() {
+  # Prints: database user address method  for non-comment host rows.
+  sudo python3 - "$HBA_FILE" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+for line in path.read_text().splitlines():
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        continue
+    parts = line.split()
+    if len(parts) >= 5 and parts[0] == "host":
+        print(" ".join(parts[1:5]))
+PY
+}
+
+assert_hba_narrow_trust() {
+  ensure_sudo
+  local rows
+  rows="$(hba_host_fields)"
+  printf '%s\n' "$rows" | grep -qx "${DEV_DB} ${DEV_ROLE} 127.0.0.1/32 trust" \
+    || return 1
+  printf '%s\n' "$rows" | grep -qx "${DEV_DB} ${DEV_ROLE} ::1/128 trust" \
+    || return 1
+}
+
+assert_generic_host_all_not_trust() {
+  ensure_sudo
+  local rows line db user addr method
+  rows="$(hba_host_fields)"
+  while read -r db user addr method; do
+    [[ -n "$db" ]] || continue
+    if [[ "$db" == "all" && "$user" == "all" && "$method" == "trust" ]]; then
+      return 1
+    fi
+  done <<<"$rows"
+}
+
+assert_other_db_tcp_not_trusted() {
+  need_cmd psql
+  # ubuntu@postgres over TCP must not succeed without a password.
+  if psql -w -h 127.0.0.1 -p 5432 -U "$DEV_ROLE" -d postgres -c "SELECT 1;" >/dev/null 2>&1; then
+    return 1
+  fi
 }
 
 verify() {
@@ -271,9 +388,37 @@ verify() {
   fi
 
   if temp_db_probe; then
-    log "PASS  temporary database connection succeeded"
+    log "PASS  aide_dev/ubuntu localhost connection succeeded without a password"
   else
-    log "FAIL  temporary database connection succeeded"
+    log "FAIL  aide_dev/ubuntu localhost connection succeeded without a password"
+    errors=1
+  fi
+
+  if assert_hba_narrow_trust; then
+    log "PASS  pg_hba trust is limited to aide_dev/ubuntu on loopback"
+  else
+    log "FAIL  pg_hba trust is limited to aide_dev/ubuntu on loopback"
+    errors=1
+  fi
+
+  if assert_generic_host_all_not_trust; then
+    log "PASS  generic host all all rules are not trust"
+  else
+    log "FAIL  generic host all all rules are not trust"
+    errors=1
+  fi
+
+  if assert_other_db_tcp_not_trusted; then
+    log "PASS  ubuntu TCP to other databases is not passwordless"
+  else
+    log "FAIL  ubuntu TCP to other databases is not passwordless"
+    errors=1
+  fi
+
+  if assert_role_not_superuser; then
+    log "PASS  ubuntu role is not a PostgreSQL superuser"
+  else
+    log "FAIL  ubuntu role is not a PostgreSQL superuser"
     errors=1
   fi
 

@@ -93,8 +93,9 @@ After this file is merged, a committed `.cursor/environment.json` becomes the **
       start PostgreSQL (so a snapshot can include a ready cluster)
 4. start    → scripts/verify_environment.sh --start
       listen_addresses = localhost
-      local/peer + loopback trust for the OS user role (no password in Git)
-      create role/database if missing
+      loopback trust only for database aide_dev and role ubuntu
+      (generic host all all remains scram-sha-256; no password in Git)
+      create role/database if missing; ubuntu is LOGIN+CREATEDB, not superuser
       wait until 127.0.0.1:5432 is ready
 5. Agent work
 6. Future agent: scripts/verify_environment.sh   # default --verify
@@ -111,9 +112,14 @@ With **environment builds**, `install` is snapshotted and may not rerun on later
 - Version: PostgreSQL 16 (Ubuntu package).
 - Bind: `listen_addresses = 'localhost'` via `/etc/postgresql/16/main/conf.d/aide-cloud.conf`.
 - Authentication (ephemeral Cloud only):
-  - Unix socket `peer` for the OS user `ubuntu`
-  - TCP `127.0.0.1/32` and `::1/128` `trust` for that role only
+  - Unix socket: Ubuntu default `local all all peer` (not `trust`)
+  - TCP loopback `trust` **only** for `database=aide_dev` and `role=ubuntu`:
+    - `host aide_dev ubuntu 127.0.0.1/32 trust`
+    - `host aide_dev ubuntu ::1/128 trust`
+  - These rows are inserted **before** generic `host all all` loopback rows so they match first
+  - Generic `host all all 127.0.0.1/32` and `::1/128` remain `scram-sha-256` (never rewritten to `trust`)
   - **no password** stored in the repository
+- Role `ubuntu`: `LOGIN` + `CREATEDB`, **not** superuser
 - Database: `aide_dev` owned by role `ubuntu`
 - Data: local cluster under `/var/lib/postgresql/` — **ephemeral**; never production data
 - Not used: hosted Postgres, RDS, Neon, Cloud SQL, Kubernetes, public `0.0.0.0` listen, published `ports`
