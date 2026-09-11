@@ -133,14 +133,14 @@ Common: Git authority = branch-only; commit/push + one PR only when the task pro
 Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
 
 ## DE 002A — Contract kernel and executable CI gate
-- `DE002A` · P0 · IN_PROGRESS · Env CLOUD · Branch `feat/DE002A_contract_kernel`
+- `DE002A` · P0 · DONE (merged to `main`, 2026-09-11) · Env CLOUD · Branch `feat/DE002A_contract_kernel`
 - Deps: DE 001 accepted (2026-09-11) · Risk H · Parallel none
 - Goal: pure domain/capability/connector/auth/grant/policy/approval/provenance/SQL/import
   contracts and minimal ruff/mypy/unit/property/import-linter CI. No persistence or slice.
 - Recommended model: GPT 5.6 Sol or Grok 4.6 · Reasoning High.
 
 ## DE 002B — Persistence and recovery primitives
-- `DE002B` · P0 · TODO · Env LOCAL · Branch `feat/DE002B_recovery_kernel`
+- `DE002B` · P0 · TODO · Env CLOUD · Cloud yes · Branch `feat/DE002B_recovery_kernel`
 - Deps: DE 002A merged · Risk H · Parallel none
 - Goal: PostgreSQL phase runs/materialization, serialized reducer, fencing/heartbeats,
   all-path reconciliation, cancellation, transactional audit and budget ledger with
@@ -148,7 +148,7 @@ Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
 - Recommended model: GPT 5.6 Sol · Reasoning High.
 
 ## DE 002C — First executable offline safe-SQL slice
-- `DE002C` · P0 · TODO · Env LOCAL · Branch `feat/DE002C_safe_sql_slice`
+- `DE002C` · P0 · TODO · Env CLOUD · Cloud yes · Branch `feat/DE002C_safe_sql_slice`
 - Deps: DE 002B merged · Risk M · Parallel none
 - Goal: compose kernels into authenticated request → discovery enumeration → planning
   boundary → explicit descriptions → safe SQL → fake DEV execution → validation.
@@ -235,7 +235,7 @@ Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
 ## Parallel waves and integration order
 
 ```text
-Wave 0  DE 002A [CLOUD] → DE 002B [LOCAL] → DE 002C [LOCAL] → DE 003 [CLOUD]
+Wave 0  DE 002A [CLOUD] → DE 002B [CLOUD] → DE 002C [CLOUD] → DE 003 [CLOUD]
 Wave 1  DE 004 [CLOUD] ∥ DE 005 [LOCAL]       (2 agents; merge DE 004 first)
 Wave 2  DE 006 [CLOUD] ∥ DE 008a [LOCAL]      (2 agents; merge DE 006 first)
 Wave 3  DE 007 ∥ DE 008b ∥ DE 011             (3 agents; merge 007 → 008b → 011)
