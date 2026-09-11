@@ -1,6 +1,6 @@
 # Permission Model, Policy, Approvals, Security, Failure & Repair
 
-**Task:** DE 001 (corrected by DE 001R1) · **Status:** PROPOSED · ADRs: DE-ADR-015, DE-ADR-016, DE-ADR-023
+**Task:** DE 001 (corrected by DE 001R1 and DE 001R2A) · **Status:** PROPOSED · ADRs: DE-ADR-015, DE-ADR-016, DE-ADR-023, DE-ADR-027
 
 This document is the single reference for *who may do what*, *how it is enforced*, *how
 humans approve*, *how secrets and untrusted inputs are contained*, and *how failures are
@@ -16,14 +16,53 @@ classified and bounded*.
    scope, missing environment binding → `DENY`.
 3. **Least privilege by construction.** Permissions are attached to *connector instances*
    (identity + environment) and to *capabilities*; a workflow receives an explicit grant
-   set at creation. All permission checks are **set membership**: a capability may run
+   set authorized by the server at creation. All permission checks are **set membership**: a capability may run
    only if its required permission is a member of the workflow grant set (or covered by an
    approval) *and* a member of the connector instance's allowed set. There is no ordering
    between permissions and no "higher/lower" comparison anywhere in the system.
-4. **Approvals are bound to content.** An approval references artifact hashes and a
-   specific capability/permission; any change invalidates it.
+4. **Approvals are typed subjects.** Operation permission, design acceptance and budget
+   increase are distinct facts. Design approval is never an execution grant.
 5. **Separate authority for Git and deployment.** `GIT_WRITE` never implies any deploy
    permission.
+
+### 1.1 Trusted principals and grant authorization
+
+```python
+class PrincipalRef(BaseModel, frozen=True):
+    principal_id: UUID
+    authentication_source: Literal["LOCAL_SESSION"]
+    roles: frozenset[Literal["operator", "approver"]]
+    session_id: UUID
+
+class GrantAuthorization(BaseModel, frozen=True):
+    principal: PrincipalRef
+    requested: frozenset[PermissionLevel]
+    effective: frozenset[PermissionLevel]
+    environment_policy_version: str
+    decided_at: datetime
+```
+
+The simplest credible MVP authentication is one operator-provisioned local account with an
+Argon2id password hash referenced by configuration. Login creates a random opaque,
+server-side PostgreSQL session; the browser receives only `HttpOnly`, `Secure` (outside
+localhost), `SameSite=Strict` cookie state. Mutating routes require a session-bound CSRF
+token. Same-origin SSE is read-only and uses the session cookie. The CLI authenticates
+through the same login/session API. Raw credentials and hashes never enter workflow state,
+audit payloads or prompts.
+
+Authentication middleware creates `PrincipalRef`; clients cannot submit `principal_id`,
+roles, or effective grants. They may request a subset. Server-side `GrantAuthorizer`
+intersects it with role grants, target environment, connector policy and globally disabled
+permissions, persists the decision, and supplies only `effective` grants to policy. V1's
+one human may hold both `operator` and `approver`, but the roles remain distinct checks;
+production self-approval remains disabled. Actor identity propagates through commands,
+workflow events, approvals, attempts and audit events.
+
+Role authorization is intentionally small: `operator` may create workflows, request grant
+subsets, answer clarifications, resume/cancel/abandon and submit validated manual result
+imports; `approver` may decide approval subjects. Neither role directly sets grants,
+mutates policy decisions or writes task success. Both roles may be held by the one V1
+principal; every action still records the checked role.
 
 ---
 
@@ -43,8 +82,8 @@ test asserts that ordering comparisons on `PermissionLevel` raise `TypeError`.
 | `DEVELOPMENT_EXECUTE` | Run transformations/tests in DEV target | compile, execute_transformation, run_pipeline, run_tests | granted | never |
 | `DEVELOPMENT_WRITE` | Create/replace objects in DEV workflow schemas; write project files | create_dataset, create_transformation, register_monitor | granted | policy-flagged cases only |
 | `GIT_WRITE` | Branch, commit, push to non-protected branches; open PR | prepare_git_change, prepare_pull_request | granted (configurable) | configurable (default: none for branch/PR; DENY on protected branches) |
-| `STAGING_DEPLOY` | Promote to staging target | deploy(STAGING) | not granted by default; grant via approval | **always** |
-| `PRODUCTION_WRITE` | Any write/deploy affecting production | deploy(PROD), create/alter in PROD | **disabled** in V1 (`DENY`) | always (when enabled) |
+| `STAGING_DEPLOY` | Promote to staging target | `deploy_staging` | not granted by default; authorize only through an operation approval | **always** |
+| `PRODUCTION_WRITE` | Any write/deploy affecting production | `deploy_production`, create/alter in PROD | **disabled** in V1 (`DENY`) | always (when enabled) |
 | `DESTRUCTIVE` | Drop/truncate/delete/overwrite non-owned objects; force-push; PR merge | drop_dataset | not granted; DEV only via approval | **always**; non-DEV disabled |
 | `INFRASTRUCTURE` | Warehouse sizing, resource creation, schedules | — (none in V1) | disabled | always (when enabled) |
 | `SECURITY` | Roles, grants, network, identity, secrets | — (none in V1) | **disabled** | strict approval or disabled — V1: disabled |
@@ -63,7 +102,7 @@ implied by another grant.
 | `snowflake_ro` | `{READ}` | profiling / discovery identity |
 | `postgres_source` | `{READ}` | |
 | `dbt_dev` | `{READ, DEVELOPMENT_EXECUTE, DEVELOPMENT_WRITE}` | `get_lineage` (READ), compile/run/test (DX), `create_transformation` (DW) |
-| `dbt_staging` | `{STAGING_DEPLOY}` | `deploy(STAGING)` only |
+| `dbt_staging` | `{STAGING_DEPLOY}` | `deploy_staging` only |
 | `github` | `{GIT_WRITE}` | `prepare_git_change`, `prepare_pull_request` |
 
 Approval-eligible permissions (the only permissions a workflow may obtain at runtime
@@ -79,25 +118,31 @@ approval-eligible.
 ```python
 class PolicyRequest(BaseModel):
     workflow_id: UUID
+    phase_run_id: UUID
     task_id: UUID
-    idempotency_key: str                    # operation identity (docs/STATE_MODEL.md §4.2); stable across attempts
+    operation_idempotency_key: str
+    resolved_input_digest: str
+    contract_snapshot_id: UUID
+    principal: PrincipalRef
+    grant_authorization: GrantAuthorization # trusted server-side result
     capability: CapabilitySpec
     connector: ConnectorSpec | None
-    connector_status: ConnectorStatus | None
+    connector_health: ConnectorHealthSnapshot | None
     target_environment: TargetEnv | None
-    workflow_grants: frozenset[PermissionLevel]
+    workflow_grants: frozenset[PermissionLevel] # copied from grant_authorization.effective
     payload_classification: SqlClassification | GitChangeClassification | None
     estimated_cost: CostEstimate | None
-    approvals: list[ApprovalRecord]         # existing, for this workflow
+    artifact_provenance: tuple[ArtifactProvenance, ...]
+    approvals: tuple[ApprovalRecord, ...]
 
 class PolicyDecision(BaseModel):
     decision: Literal["ALLOW", "REQUIRE_APPROVAL", "DENY"]
-    reasons: list[ReasonCode]               # stable codes, e.g. PERM_NOT_GRANTED, SQL_DESTRUCTIVE
+    reasons: tuple[ReasonCode, ...]         # every applicable denial reason, canonical RuleId/code order
     deny_class: Literal["ENVIRONMENTAL", "SCOPE", "SECURITY"] | None   # set iff decision == DENY; derived from reasons (§3.1)
     routing: Literal["EXECUTE", "APPROVAL", "PARK", "FAIL_CLOSED"]     # deterministic function of (decision, deny_class)
     required_permission: PermissionLevel
-    approval_kind: ApprovalKind | None
-    evaluated_rules: list[RuleId]
+    approval_requirements: tuple[ApprovalSubject, ...]
+    evaluated_rules: tuple[RuleId, ...]     # every applicable deterministic rule
     decided_at: datetime
 ```
 
@@ -107,8 +152,9 @@ permissions):
 ```python
 def granted(req) -> bool:          # workflow may exercise the permission
     return req.capability.required_permission in req.workflow_grants \
-        or any(a.status == "APPROVED" and a.requested_permission == req.capability.required_permission
-               and a.covers(req.idempotency_key) for a in req.approvals)
+        or any(a.status == "APPROVED" and a.subject.covers_operation(
+               req.operation_idempotency_key, req.resolved_input_digest,
+               req.capability.required_permission) for a in req.approvals)
 
 def connector_allows(req) -> bool: # connector instance may exercise the permission
     return req.connector is None or req.capability.required_permission in req.connector.allowed_permissions
@@ -118,22 +164,25 @@ def approval_eligible(req) -> bool:
     return p == "STAGING_DEPLOY" or (p == "DESTRUCTIVE" and req.target_environment == "DEV")
 ```
 
-Rule order (first `DENY` wins; then `REQUIRE_APPROVAL`; else `ALLOW`). R0 runs at startup,
-not per call:
+R0 runs at startup. At runtime **every applicable deterministic deny rule is evaluated**;
+no short circuit is permitted. All denial reason codes are persisted. Only when the denial
+set is empty are approval rules evaluated; all mandatory approval requirements are
+returned together. `ALLOW` is possible only when neither denials nor unmet approvals
+exist.
 
 | # | Rule | Outcome |
 |---|---|---|
 | R0 | *(startup)* connector advertises capability `c` ∧ `c.required_permission ∉ connector.allowed_permissions` | startup failure `CONNECTOR_PERMISSION_CONFIG` — misconfiguration, never reached at runtime |
 | R1 | capability not in registry ∨ connector not registered ∨ connector does not advertise capability | DENY `UNKNOWN_TARGET` |
-| R2 | capability requires connector ∧ `connector_status ∉ {AVAILABLE, DEGRADED, MOCK}` | DENY `CONNECTOR_UNAVAILABLE` |
-| R2b | `connector_status = DEGRADED` ∧ capability ∈ `connector_status.missing_permissions` ∨ `SECRET_UNRESOLVED` reported | DENY `CONNECTOR_PERMISSION_MISSING` / `SECRET_UNRESOLVED` |
+| R2 | capability requires connector ∧ health snapshot expired or `status ∉ {AVAILABLE, DEGRADED, MOCK}` | DENY `CONNECTOR_UNAVAILABLE` |
+| R2b | `status = DEGRADED` ∧ `required_permission ∈ connector_health.missing_permissions` ∨ `SECRET_UNRESOLVED` reported | DENY `CONNECTOR_PERMISSION_MISSING` / `SECRET_UNRESOLVED` |
 | R3 | ¬`granted(req)` | REQUIRE_APPROVAL (kind `DEPLOY` or `DESTRUCTIVE`) if `approval_eligible(req)`; else DENY `PERM_NOT_GRANTED` |
 | R4 | ¬`connector_allows(req)` | DENY `PERMISSION_NOT_ALLOWED_FOR_CONNECTOR` |
 | R5 | `target_environment ≠ connector.target_environment` | DENY `ENV_MISMATCH` |
 | R6 | `target_environment = PROD` | DENY `PROD_DISABLED_V1` |
 | R7 | SQL payload: `parse_ok = false` | DENY `SQL_UNPARSEABLE` |
 | R8 | SQL payload: `is_destructive` ∧ capability ≠ `drop_dataset` | DENY `SQL_DESTRUCTIVE` |
-| R9 | SQL payload: `has_dynamic_sql` ∨ security statements (GRANT/REVOKE/ROLE/USER) | DENY `SQL_SECURITY` |
+| R9 | SQL payload: dynamic/security statement, external or unapproved function/UDF/table function, stage/URL, unsafe session construct, or unknown AST node | DENY all applicable `SQL_SECURITY`, `SQL_UNSAFE_FUNCTION`, `SQL_UNSAFE_CONSTRUCT` |
 | R10 | SQL payload: `is_multi_statement` | DENY `SQL_MULTI` |
 | R11 | SQL payload: any object outside connector allow-list | DENY `SCOPE_VIOLATION` |
 | R12 | SQL payload: writes ∧ target schema ∉ DEV workflow namespace | DENY `WRITE_OUTSIDE_NAMESPACE` |
@@ -143,45 +192,48 @@ not per call:
 | R15 | Git payload: secret scan hit | DENY `SECRET_IN_DIFF` |
 | R16 | capability.approval = ALWAYS ∧ no APPROVED matching approval | REQUIRE_APPROVAL (kind from capability) |
 | R17 | `create_dataset.replace` on object not tagged with this workflow | REQUIRE_APPROVAL `DESTRUCTIVE` |
-| R18 | estimated warehouse cost > workflow cap ∨ LLM spend > cap | REQUIRE_APPROVAL `COST` |
+| R18 | atomic worst-case budget reservation would exceed current versioned cap | REQUIRE `BudgetIncreaseApproval` |
 | R19 | design `approval_required` | REQUIRE_APPROVAL `DESIGN` |
-| R20 | otherwise | ALLOW |
+| R20 | any transitive artifact is MOCK-derived ∧ target action is real Git/deploy | DENY `MOCK_PROVENANCE_TO_REAL_TARGET` |
+| R21 | otherwise | ALLOW |
 
-Rules are pure functions over `PolicyRequest`; each has unit tests including negative
-cases. `docs/TECHNICAL_RISKS.md` lists the property tests for the SQL classifier.
+Rules are pure functions over `PolicyRequest`; each has positive/negative tests. A policy
+test injects simultaneous permission, scope and SQL-security violations and requires every
+reason plus SECURITY routing independent of rule order.
 
 ### 3.1 Deterministic outcome routing (authoritative)
 
 A `DENY` is not one thing. Every reason code belongs to exactly one **deny class**, and the
-class determines what happens to the task and the workflow. The mapping is data
+class determines what happens to the task and workflow. Evaluation persists the complete
+reason set before deriving the maximum class. The mapping is data
 (`REASON_CLASS: dict[ReasonCode, DenyClass]`) with a test asserting every reason code is
 mapped. `routing` is derived as: `ALLOW → EXECUTE`; `REQUIRE_APPROVAL → APPROVAL`;
-`DENY ∧ ENVIRONMENTAL → PARK`; `DENY ∧ (SCOPE ∨ SECURITY) → FAIL_CLOSED`. When several
-reasons apply, the most severe class wins: `SECURITY > SCOPE > ENVIRONMENTAL`.
+`DENY ∧ ENVIRONMENTAL → PARK`; `DENY ∧ (SCOPE ∨ SECURITY) → FAIL_CLOSED`. Authoritative
+severity is `SECURITY > SCOPE > ENVIRONMENTAL`; routing uses the maximum while retaining
+and auditing lower-severity reasons. Rule declaration order never affects the result.
 
 | Deny class | Meaning | Reason codes | Task outcome | Workflow routing | Human action |
 |---|---|---|---|---|---|
-| `ENVIRONMENTAL` | Operator-resolvable condition; the operation itself is legitimate | `CONNECTOR_UNAVAILABLE`, `CONNECTOR_PERMISSION_MISSING`, `SECRET_UNRESOLVED` | `PARKED` (no execution; not counted as an attempt) | `BLOCKED` with `BlockReason(class=ENVIRONMENTAL, reason_code, connector_id, env var **name** if any)`; on resume the task returns to `READY` and policy is **re-evaluated** | fix credentials / grants / availability, then *Resume* |
-| `SCOPE` | Operation outside what this workflow, connector or environment is permitted to do | `UNKNOWN_TARGET`, `PERM_NOT_GRANTED`, `PERMISSION_NOT_ALLOWED_FOR_CONNECTOR`, `ENV_MISMATCH`, `PROD_DISABLED_V1`, `SCOPE_VIOLATION`, `WRITE_OUTSIDE_NAMESPACE`, `READ_ONLY_REQUIRED`, `PROVENANCE_MISMATCH` | `FAILED(POLICY_DENIED)`; never retried | **fail closed**: `FAILED` (execution-time) — see plan-time note below | none automatic; new workflow with corrected scope |
-| `SECURITY` | Payload is unsafe or a protection boundary would be crossed | `SQL_UNPARSEABLE`, `SQL_DESTRUCTIVE`, `SQL_SECURITY`, `SQL_MULTI`, `PROTECTED_BRANCH`, `SECRET_IN_DIFF` | `FAILED(POLICY_DENIED)` + failure classification `UNSAFE_OPERATION`; never retried | **fail closed**: `FAILED`; audit `POLICY_DENY_SECURITY` alert event | investigate the audit alert |
-| — (`REQUIRE_APPROVAL`) | Approval-eligible operation | rules R3 (eligible), R16, R17, R18, R19 | `AWAITING_APPROVAL` | `APPROVAL_REQUIRED` with `approval_kind`; approved → task `READY`; rejected → per `docs/STATE_MODEL.md` §2 | approve / reject |
+| `ENVIRONMENTAL` | Operator-resolvable condition; the operation itself is legitimate | `CONNECTOR_UNAVAILABLE`, `CONNECTOR_PERMISSION_MISSING`, `SECRET_UNRESOLVED`, `CONTRACT_VERSION_UNAVAILABLE` | `PARKED` (no new attempt) | `BLOCKED` with all reasons; resume re-evaluates | fix environment, then resume |
+| `SCOPE` | Operation outside authorized workflow/connector/environment scope | `UNKNOWN_TARGET`, `PERM_NOT_GRANTED`, `PERMISSION_NOT_ALLOWED_FOR_CONNECTOR`, `ENV_MISMATCH`, `PROD_DISABLED_V1`, `SCOPE_VIOLATION`, `WRITE_OUTSIDE_NAMESPACE`, `READ_ONLY_REQUIRED`, `PROVENANCE_MISMATCH`, `MOCK_PROVENANCE_TO_REAL_TARGET` | `FAILED(POLICY_DENIED)`; never retried | **fail closed** | create a correctly scoped operation |
+| `SECURITY` | Payload is unsafe or a protection boundary would be crossed | `SQL_UNPARSEABLE`, `SQL_DESTRUCTIVE`, `SQL_SECURITY`, `SQL_UNSAFE_FUNCTION`, `SQL_UNSAFE_CONSTRUCT`, `SQL_MULTI`, `PROTECTED_BRANCH`, `SECRET_IN_DIFF` | `FAILED(POLICY_DENIED)` + failure classification `UNSAFE_OPERATION`; never retried | **fail closed**: `FAILED`; audit `POLICY_DENY_SECURITY` alert event | investigate the audit alert |
+| — (`REQUIRE_APPROVAL`) | No denial exists and one or more typed approval subjects are unmet | rules R3, R16–R19 | `AWAITING_APPROVAL` | `APPROVAL_REQUIRED` with all mandatory subject ids | approve/reject each subject |
 
 Precedence when a phase-level evaluation (`POLICY_CHECK`) yields mixed results across
 tasks: any `FAIL_CLOSED` → workflow `FAILED`; else any `PARK` → `BLOCKED`; else any
 `APPROVAL` → `APPROVAL_REQUIRED`; else `EXECUTION`.
 
-**Plan-time pre-check vs execution-time enforcement.** The plan validator (`PLANNING`)
-runs the same rule set in *pre-check mode* on every planned task with its static inputs
-(`$from` placeholders unresolved ⇒ payload rules skipped). A pre-check `DENY` of class
-`SCOPE` or `SECURITY` makes the plan **invalid**, and the planner is re-invoked with the
-violations (max 2 replans, then `BLOCKED`). This is the only place where the system
-"routes around" a denial, and it happens before any task exists. A pre-check `DENY` of
-class `ENVIRONMENTAL` is not a planning error — re-planning cannot repair the environment —
-so the validated plan is retained and the workflow parks in `BLOCKED` (`blocked_from_phase
-= PLANNING`); on resume the plan is re-validated and, if clean, its tasks are created.
-Once a task exists, an execution-time `DENY` follows the table above without exception; a
-`SCOPE`/`SECURITY` denial at execution time means a validator or the plan pre-check was
-bypassed and is treated as an anomaly.
+**Plan validation vs operation policy.** Plan validation is structural: registered pinned
+capability/connector versions, connector kind, template schema, acyclic dependencies,
+bounded task count and statically known scope. Temporary connector health never makes a
+plan invalid. Static known inputs may receive advisory policy findings used for one bounded
+replan, but no approval or executable policy decision exists yet.
+
+After dependencies finish, each template resolves and validates immutable input, receives
+an operation identity, then runs the complete policy set. Connector health and every
+payload rule are now applicable. Environmental denial parks the materialized task and
+retains the plan; scope/security denial fails closed. This removes the old placeholder
+exception and ensures approvals never bind to unresolved input.
 
 Consistency: `docs/STATE_MODEL.md` §2 (`POLICY_CHECK`, `BLOCKED`), §3 (transition table)
 and §4.3 (task state `PARKED`), `docs/CAPABILITY_MODEL.md` §4, and §10 of this document
@@ -191,19 +243,77 @@ implement this table and must not define a different routing.
 
 ## 4. Approval system
 
-| Aspect | Design |
-|---|---|
-| Record | `approvals(approval_id, workflow_id, task_id?, kind, requested_permission, artifact_hashes[], summary_ref, requested_by=system, requested_at, expires_at, status, decided_by, decided_at, comment)` |
-| Kinds | `DESIGN`, `COST`, `GIT` (optional), `DEPLOY`, `DESTRUCTIVE` |
-| Binding | `artifact_hashes` are sha256 of every artifact the action would use. On resolution and again at execution, hashes are recompared; mismatch → approval `INVALIDATED`, workflow back to `APPROVAL_REQUIRED` with a new request. |
-| Expiry | default 7 days; configurable per kind |
-| Authorization | Approver must hold role `approver` (V1: single operator identity with roles `operator`, `approver`); production approvals (when enabled) require a distinct `release_approver` role — no self-approval by the requester identity if identities are separated later |
-| Scope | One approval authorizes exactly one **logical operation** (identified by the task `idempotency_key`, `docs/STATE_MODEL.md` §4.2) or one design. Every execution attempt of that same operation — retry after a transient failure, re-run after a crash, reconciliation — is covered by the same approval as long as the bound artifact hashes are unchanged. A different operation (new inputs, new artifact version, new task) needs a new approval. |
-| UI | Shows the exact action, target environment, artifacts, validation report, cost, and diff; approve/reject with comment |
-| Audit | `APPROVAL_REQUESTED`, `APPROVAL_GRANTED`, `APPROVAL_REJECTED`, `APPROVAL_INVALIDATED`, `APPROVAL_EXPIRED` |
+`ApprovalRecord` stores `approval_id`, workflow, typed `subject`, subject digest, requester
+principal, timestamps/expiry, `PENDING|APPROVED|REJECTED|INVALIDATED|EXPIRED`, deciding
+`PrincipalRef`, comment and audit refs. The subject is a discriminated union:
 
-Human gates required in V1: staging deploy (always), destructive in DEV (always), design
-when flagged, cost over cap, optionally PR creation.
+```python
+class OperationApproval(BaseModel, frozen=True):
+    kind: Literal["OPERATION"]
+    operation_idempotency_key: str
+    resolved_input_digest: str
+    artifact_hashes: tuple[str, ...]
+    capability_id: str
+    capability_contract_version: int
+    connector_id: str
+    connector_version: str
+    target_environment: TargetEnv
+    required_permission: PermissionLevel
+    external_state_digest: str | None
+    expires_at: datetime
+
+class DesignApproval(BaseModel, frozen=True):
+    kind: Literal["DESIGN"]
+    design_artifact_hash: str
+    validation_report_hash: str
+    invariant_hashes: tuple[str, ...]
+    expires_at: datetime
+
+class BudgetIncreaseApproval(BaseModel, frozen=True):
+    kind: Literal["BUDGET_INCREASE"]
+    budget_scope: Literal["WORKFLOW_LLM", "WORKFLOW_WAREHOUSE"]
+    ledger_version: int
+    unit: Literal["USD", "SNOWFLAKE_CREDITS_ESTIMATED"]
+    prior_cap: Decimal
+    authorized_new_cap: Decimal
+    authorized_delta: Decimal
+    expires_at: datetime
+```
+
+Operation approval is a permission authorization for exactly one fully materialized
+operation. All fields, current artifact/provenance closure and relevant external-state
+digest are rechecked at decision and before each attempt; mismatch invalidates it. Retry
+and reconciliation remain covered only while the subject is identical. Design approval
+accepts design evidence and returns to design/planning; it grants no `PermissionLevel`.
+Budget approval atomically advances the ledger cap to the explicit authorized value (the
+delta must equal new minus prior); it does not approve an operation.
+
+A policy decision may produce multiple mandatory subject requirements. They are stored as
+an unordered set with a canonical digest; execution resumes only when **all** are approved
+and valid. Any rejection prevents execution immediately and invalidates sibling pending
+requirements for that gate. Subject-specific routing is authoritative:
+
+- rejected design → `PLANNING` with human feedback;
+- rejected staging operation → task `CANCELLED(APPROVAL_REJECTED)` and delivery completes
+  as `DELIVERED_PR_ONLY` when that documented fallback exists, otherwise `BLOCKED`;
+- rejected destructive/Git operation → required task fails closed; optional task is
+  `SKIPPED(APPROVAL_REJECTED)`;
+- rejected budget increase → workflow remains `BLOCKED(BUDGET_NOT_AUTHORIZED)` until the
+  operator reduces scope or abandons.
+
+Only a trusted principal with role `approver` may decide. The V1 principal may also be the
+operator; production approval is disabled. Audit events cover request, decision,
+invalidation and expiry with subject digest, never secret values.
+
+### 4.1 Atomic budget authorization
+
+The LLM gateway and warehouse preflight use a versioned PostgreSQL budget ledger. Before a
+call, the same transaction locks the ledger row and reserves deterministic worst-case cost;
+completion settles actual cost and releases unused reservation. Concurrent calls therefore
+cannot each pass a stale total. If reservation exceeds cap, no call/attempt dispatches and
+the policy requests `BudgetIncreaseApproval`. Approval atomically changes the cap and
+re-evaluates the reservation. Snowflake credits remain estimates unless an isolated
+warehouse/resource monitor provides an external hard boundary.
 
 ---
 
@@ -222,9 +332,10 @@ when flagged, cost over cap, optionally PR creation.
 
 Secret handling:
 
-- Configuration contains only `SecretRef(name="SNOWFLAKE_DEV_PRIVATE_KEY")`; the
-  `SecretProvider` resolves at call time inside the connector; the value lives as a
-  `pydantic.SecretStr` and is never serialized.
+- Configuration contains only `SecretRef(name="SNOWFLAKE_DEV_PRIVATE_KEY")`. Connector
+  adapters and LLM provider adapters receive separate allow-listed resolver views; neither
+  can enumerate names or resolve the other's credential. Values live as
+  `pydantic.SecretStr` and are never serialized.
 - dbt subprocesses receive secrets as environment variables of the child only; the
   generated `profiles.yml` uses `env_var()`.
 - Logging and audit pass through a redaction filter (known secret names, high-entropy
@@ -239,7 +350,7 @@ Secret handling:
 | | DEV | STAGING | PROD |
 |---|---|---|---|
 | Connector instances | `snowflake_dev`, `snowflake_ro`, `dbt_dev`, `postgres_source`, `github` | `dbt_staging` | none in V1 |
-| Writes | DEV namespace only | via `deploy` after approval | disabled |
+| Writes | DEV namespace only | via `deploy_staging` after operation approval | disabled |
 | Data | synthetic RAW | synthetic | — |
 | Identities | RW/RO dev roles | deploy role | — |
 | Automation | full within policy | approval per deploy | — |
@@ -271,13 +382,22 @@ Det policy regardless of text.
 
 ## 8. Audit behaviour
 
-Consequential actions are written to `audit_events` (append-only) separately from debug
-logs: request received, clarification asked/answered, plan accepted, policy decision, tool
+Consequential actions are written to `audit_events` separately from debug logs: request
+received, authentication/grant authorization, clarification asked/answered, plan accepted,
+operation materialized, policy decision, tool
 call (capability, connector, redacted input/output excerpts, digests), model call summary
 (template id/version, tokens, cost; prompt and completion stored as redacted artifacts with
 retention), approval lifecycle, repair applied/rejected, delivery events, state transitions,
-suspected injection, secret-scan hits. Every event carries `workflow_id`, `task_id`, actor
-(system/human id), timestamp, and a monotonic sequence per workflow.
+suspected injection, secret-scan hits and stale-result rejection. Every event carries
+`workflow_id`, `phase_run_id`, `task_id`, `operation_idempotency_key`, `attempt_id`,
+trusted `PrincipalRef` or system actor, timestamp, and a monotonic sequence per workflow.
+
+Each consequential state mutation and its audit event commit in the same PostgreSQL
+transaction. Sequence allocation locks a per-workflow counter and has a unique
+`(workflow_id, sequence)` constraint. The application audit-writer database role may
+`INSERT`/`SELECT` but not `UPDATE`/`DELETE`; retention deletion uses a separate
+operator-only maintenance role and emits a deletion manifest. V1 claims transactional,
+append-only application audit—not cryptographic tamper evidence.
 
 ---
 
@@ -305,18 +425,18 @@ artifact leaves the system (PR body, docs):
 | `DBT_RUNTIME` | dbt run error (re-mapped through vendor mapper when possible) | no | yes if sub-class repairable, else BLOCKED | escalate |
 | `DBT_TEST` | test status fail | no | yes | escalate |
 | `DATA_QUALITY` | Quality Engine | no | yes | escalate |
-| `CONNECTOR_FAILURE` | driver/HTTP errors | yes (policy) | no | BLOCKED |
-| `TRANSIENT_PROVIDER` | rate limit, 5xx, network | yes (exp backoff) | no | BLOCKED |
-| `TIMEOUT` | wrapper/vendor | yes (profiling: reduced budget) | no | BLOCKED |
-| `RESOURCE_LIMIT` | credits, memory, quota | no | no | BLOCKED (COST approval) |
+| `CONNECTOR_FAILURE` | driver/HTTP errors | only if side-effect-free or definitely no dispatch/effect | no | ambiguous side effect → reconcile first |
+| `TRANSIENT_PROVIDER` | rate limit, 5xx, network | same evidence rule; exception class alone is insufficient | no | ambiguous side effect → reconcile first |
+| `TIMEOUT` | wrapper/vendor | side-effect-free may retry; side-effecting must reconcile unless proven pre-dispatch | no | bounded reconciliation or BLOCKED |
+| `RESOURCE_LIMIT` | credits, memory, quota | no | no | BLOCKED; scope reduction or explicit `BudgetIncreaseApproval` when a budget cap caused it |
 | `PERMISSION_FAILURE` | vendor auth errors at runtime | no | no | task PARKED; workflow BLOCKED (`ENVIRONMENTAL`; human fixes grants, then resumes) |
 | `POLICY_DENIED` | Policy Engine `DENY` | no | no | **routed by deny class (§3.1)**: `ENVIRONMENTAL` → task PARKED, workflow BLOCKED; `SCOPE`/`SECURITY` → task FAILED, workflow FAILED (fail closed). No automatic replanning once a task exists |
 | `BUSINESS_AMBIGUITY` | interpret/design | no | no | CLARIFICATION_REQUIRED |
 | `UNSAFE_OPERATION` | classifier/policy `SECURITY` class, path escape, unsafe `where` | no | no | FAILED + audit alert (`POLICY_DENY_SECURITY`) |
 | `OUTPUT_INVALID` | schema/validators on LLM output | yes (1, with violations) | — | BLOCKED |
-| `LLM_BUDGET_EXCEEDED` | gateway | no | no | BLOCKED (COST approval) |
-| `LEASE_EXPIRED` | scheduler (lease reaper) | see `docs/STATE_MODEL.md` §4.6: reconcile first; idempotent → new attempt | no | non-idempotent with `UNKNOWN` reconcile → `AMBIGUOUS_OUTCOME` |
-| `AMBIGUOUS_OUTCOME` | attempt of a non-idempotent operation ended without a persisted result and reconciliation cannot prove or disprove the side effect | **never** | no | task PARKED; workflow BLOCKED with `BlockReason(AMBIGUOUS_SIDE_EFFECT)`; human verifies the external system and either records the result (`resolve_ambiguous_attempt`) or abandons → FAILED. The operation is **never** re-executed automatically |
+| `LLM_BUDGET_EXCEEDED` | atomic reservation cannot fit current cap | no | no | request explicit `BudgetIncreaseApproval`; no provider dispatch |
+| `LEASE_EXPIRED` | scheduler | no direct retry | no | acquire recovery ownership and reconcile under `docs/STATE_MODEL.md` §4.7 |
+| `AMBIGUOUS_OUTCOME` | any side-effecting attempt without proof of outcome (timeout, response loss, fail-after-effect, crash, expired lease) and reconciliation cannot resolve it | **never** | no | PARKED/BLOCKED; only verified schema-valid recovery/import can succeed; otherwise confirm-result-unknown, compensate or abandon |
 | `UNKNOWN` | anything unmapped | no | **no** | BLOCKED; LLM may *suggest* a class for the human |
 
 Repairable set (auto-repair allowed): `SQL_SYNTAX`, `MISSING_OBJECT`, `SCHEMA_MISMATCH`,
@@ -360,8 +480,11 @@ by the workflow cap.
 
 Defence in depth, each independently sufficient for the common case:
 
-1. Identity: DEV role cannot write outside `AIDE_DEV`; no PROD role exists.
-2. Classifier: destructive/security/multi-statement SQL is `DENY` before any call.
+1. Identity: every read capability, including `execute_query`, uses the `snowflake_ro`
+   connector/`AIDE_DEV_RO`; write identity is never selected for a read contract.
+2. Classifier: Snowflake parse → normalized render → reparse must preserve the AST;
+   destructive/security/multi-statement, external functions, unapproved UDFs/table
+   functions, stages/URLs, dynamic/session constructs and unknown AST nodes are denied.
 3. Namespace: writes must target the workflow namespace (R12).
 4. dbt: materializations write only to the bound DEV target; `profiles.yml` generated by the system, not by the LLM; `dbt_project.yml` not writable by capabilities; `run_query`/`execute` Jinja forbidden.
 5. Approval: destructive DEV actions need explicit approval bound to the object.

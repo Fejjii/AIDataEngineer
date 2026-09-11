@@ -127,9 +127,9 @@ A taxonomy of the modern Data Engineering lifecycle as the platform sees it. Eac
 | Git workflow (branch, commit, push) | VH | Review | M | Det | `prepare_git_change` | Core | — |
 | Pull request preparation | VH | Review + merge | M | Det + LLM (description) | `prepare_pull_request` | Core | — |
 | CI / CD (pipeline definitions, checks) | H | Review | M | Det | GitHub Actions templates | Partial (dbt CI template in PR) | V2 |
-| Deployment (staging) | H | Approve | H | Det | `deploy` | Stub (gated, staging-like target) | V2 |
-| Deployment (production) | M | Approve | C | Det | `deploy` | No | V3 |
-| Rollback | M | Approve | C | Det | `deploy` (previous version) | No | V3 |
+| Deployment (staging) | H | Approve operation subject | H | Det | `deploy_staging` | Stub (gated, staging-like target) | V2 |
+| Deployment (production) | M | Approve operation subject | C | Det | `deploy_production` (disabled V1) | No | V3 |
+| Rollback | M | Approve operation subject | C | Det | platform-specific compensation/rollback capability | No | V3 |
 
 ## 10. Monitoring
 
@@ -145,7 +145,7 @@ A taxonomy of the modern Data Engineering lifecycle as the platform sees it. Eac
 
 | Capability | Automation | Human | Risk | Det/LLM | Required tools | MVP | Future |
 |---|---|---|---|---|---|---|---|
-| Expose data products to BI (grants, views) | H | Approve | M | Det | `create_dataset`, `deploy` | Partial (mart created in DEV) | V2 |
+| Expose data products to BI (grants, views) | H | Approve | M | Det | `create_dataset`, `deploy_staging` | Partial (mart created in DEV) | V2 |
 | Semantic layer (metrics definitions) | M | Decide (metric semantics) | M | Det+LLM | dbt semantic layer / BI connector | No | V2 |
 | BI integration (Power BI, Tableau, Looker) | M | Approve | M | Det | BI connectors | No | V3 |
 | Natural language analysis over trusted data | H | Review | M | Det+LLM | `execute_query` (READ) | No (product extension) | V3 |

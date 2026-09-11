@@ -1,7 +1,8 @@
 # DE 001 — Independent Architecture Review
 
 **Task ID:** DE 001 (Independent Architecture Review)  
-**Review model:** Composer 2.5 (Cloud Agent), with parallel specialist subagent analysis (correction verification, workflow reliability, security/policy, integration roadmap)  
+**Review model:** GPT 5.6 Sol High<br>
+**Artifact persistence:** Composer 2.5 was used only after the review to write the already-completed review into this repository. Composer did not perform, delegate, or alter the architecture analysis.<br>
 **Branch reviewed:** `docs/DE001_mvp_architecture`  
 **Commit reviewed:** `b12b61ddeada830597809b9e70d15feca1105625`  
 **Review date:** 2026-09-11  
@@ -606,6 +607,8 @@ Amend before DE 002 (non-exhaustive; corrections should be reflected in both ADR
 
 ## Reviewer attestation
 
+- Review analysis and findings: **GPT 5.6 Sol High**
+- Repository artifact persistence after the review: **Composer 2.5 only**
 - Architecture documents: **not modified**
 - Product code: **not modified**
 - Merge: **not performed**

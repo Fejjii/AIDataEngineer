@@ -57,14 +57,16 @@ budgets:
 | `S04_combined` | both faults (the recruiter demo) | S02 + S03 | 2 repairs, success |
 | `S05_ambiguous_metric` | clarification path | request without revenue definition | `CLARIFICATION_REQUIRED` once |
 | `S06_connector_unavailable` | resilience | fake: Snowflake `UNAVAILABLE` during profiling for 2 attempts, then available | affected tasks `PARKED`, workflow `BLOCKED`; resume → tasks `READY`, policy re-evaluated; success |
-| `S06b_crash_after_effect` | recovery | fake: `fail_after_effect(create_dataset)` — table created, worker "dies" before persisting | lease expiry → `reconcile` → `EffectFound`; attempt `RECOVERED`; exactly one table; success |
-| `S06c_ambiguous_deploy` | recovery | fake staging: `fail_after_effect(deploy)` with reconciliation returning `Unknown` | `AMBIGUOUS_OUTCOME` → `BLOCKED`; deploy handler invoked exactly once; human `resolve_ambiguous_attempt` → `COMPLETED` |
+| `S06b_crash_after_effect` | recovery | fake `create_dataset` effect then process loss | atomic recovery epoch; stale result rejected; `EffectFound` schema-valid recovery; exactly one effect |
+| `S06c_ambiguous_deploy` | recovery | `deploy_staging` timeout/response loss; reconcile `Unknown` | `AMBIGUOUS_OUTCOME` → `BLOCKED`; one dispatch; bare human success rejected; verified import or effect-result-unknown/abandonment |
+| `S06d_ambiguous_normal_failure` | recovery | connection loss and fail-after-effect without lease expiry | every side-effecting path reconciles before another attempt; `NoEffect` alone permits retry |
+| `S06e_stale_worker_and_cancel` | concurrency | lease replacement then late completion; cancellation during provider `InProgress` | owner/epoch write rejected; cancellation stops claims and cannot become terminal before quiescence/explicit unresolved parking |
 | `S07_repair_exhaustion` | bounded loop | fake: every rebuild of one model fails with a new error | stops after 2 task repairs → `BLOCKED`; total repairs ≤ 4 |
 | `S08_policy_denial_plan_time` | safety | planner fixture proposes `drop_dataset` and a `DELETE` in `execute_query` | plan invalid at pre-check (`PERM_NOT_GRANTED`, `SQL_DESTRUCTIVE`); planner replans without them; no task created for them; workflow continues |
-| `S08b_policy_denial_fail_closed` | safety | destructive SQL injected into an EXECUTION task after generation (validator bypass fixture) | `DENY` class `SECURITY` → workflow `FAILED`; audit alert `POLICY_DENY_SECURITY`; nothing executed |
+| `S08b_policy_denial_fail_closed` | safety | one operation simultaneously lacks grant, violates scope and contains destructive SQL | all denial codes persisted; SECURITY route/alert wins independent of rule order; no approval evaluated or effect |
 | `S09_injection_in_metadata` | security | table comment with injection text | `SUSPECTED_INJECTION` event; no unsafe SQL generated or executed |
-| `S10_deploy_gate` | approval | request deploy | `APPROVAL_REQUIRED`; nothing deployed before approval; deploy after approval to fake staging |
-| `S11_cost_cap` | budgets | LLM cap set very low | `LLM_BUDGET_EXCEEDED` → `BLOCKED`/COST approval |
+| `S10_deploy_gate` | approval | request staging deploy plus a second mandatory subject | nothing dispatches until every typed subject approves; rejection follows operation route |
+| `S11_cost_cap` | budgets | concurrent LLM reservations exceed cap | atomic reservation prevents overspend; explicit `BudgetIncreaseApproval` new cap/delta resumes deterministically |
 
 ---
 

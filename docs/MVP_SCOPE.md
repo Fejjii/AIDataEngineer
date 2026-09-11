@@ -28,7 +28,8 @@ request, and with the whole thing also runnable **offline** against deterministi
    deterministic deduplication rule in the intermediate layer, re-runs, tests pass.
 8. Documentation and a lineage graph appear. A GitHub branch and pull request are created
    with a generated summary.
-9. The system asks for approval to deploy. Nothing deploys until the human clicks approve.
+9. The system asks for a typed `deploy_staging` operation approval. Nothing deploys until
+   the complete subject is approved.
 10. The audit timeline shows every plan, policy decision, tool call, model call with cost,
     repair, and approval. A metrics panel shows first-attempt success, repairs, tokens,
     cost, and estimated engineering time saved.
@@ -50,8 +51,8 @@ request, and with the whole thing also runnable **offline** against deterministi
 | Quality | dbt tests + Quality Engine checks (uniqueness, not-null, referential integrity, accepted values, reconciliation of totals, row counts, freshness). |
 | Failure & repair | Deterministic classifier; bounded repair for `SQL_SYNTAX`, `MISSING_OBJECT`, `SCHEMA_MISMATCH`, `TYPE_MISMATCH`, `DBT_COMPILE`, `DBT_RUNTIME`, `DBT_TEST`, `DATA_QUALITY`; max 2 repairs per task, 4 per workflow. |
 | Documentation & lineage | Model + column docs; lineage graph from dbt manifest + SQL parsing; rendered in UI and stored as artifact. |
-| Delivery | Git branch + commit + push + PR on GitHub with generated description; `deploy` capability exists but V1 target is a "staging-like" dbt target and always approval-gated. |
-| Policy & approvals | Full permission model; approvals bound to artifact hashes; approvals for design (when flagged), PR creation (configurable), deploy (always). |
+| Delivery | Git branch + commit + push + PR; `deploy_staging` is operation-approval-gated; separate `deploy_production` is disabled and unadvertised in V1. |
+| Identity, policy & approvals | Local opaque server session → trusted principal; server-authorized workflow grants. Typed operation/design/budget subjects; operation approval binds operation key, resolved-input digest, artifact/provenance hashes, connector/version, target, expiry and relevant external state. |
 | Audit & observability | Audit timeline; model call accounting; tool call accounting; cost per workflow. |
 | Evaluation | Benchmark harness with ≥ 3 repeatable scenarios (happy path, schema drift failure, quality failure). |
 | Synthetic enterprise | `docs/DEMO_COMPANY.md` company generated into PostgreSQL and loaded to Snowflake RAW. |
@@ -70,7 +71,7 @@ request, and with the whole thing also runnable **offline** against deterministi
 | Semantic layer generation | Requires BI target | V2 |
 | Query and warehouse optimization *actions* | V1 collects execution metrics and cost, emits recommendations only | V2 |
 | Live monitoring loop | V1 registers monitor definitions (freshness/tests) as artifacts; no scheduler runs them | V2 |
-| Multi-tenant auth / RBAC UI | Single operator identity with approver role in V1 | Enterprise showcase |
+| Multi-tenant/federated IAM and RBAC administration UI | V1 uses one local account with distinct operator/approver role checks and server-side grants | Enterprise showcase |
 | Data Vault generation | Detection and recommendation only | V2 |
 | Python/Spark transformation generation | dbt SQL only in V1; Python hook reserved | V2 |
 | Vector search over enterprise docs | Not needed at catalogue scale | Only if asset counts demand |
@@ -88,7 +89,7 @@ request, and with the whole thing also runnable **offline** against deterministi
 5. Both planted failures are detected, classified into the expected classes, and repaired automatically; the repair history shows distinct hypotheses.
 6. All Quality Engine checks pass on the final data product; reconciliation of billed vs paid totals is reported.
 7. Lineage artifact contains the expected edges (`docs/DEMO_COMPANY.md` §9).
-8. GitHub PR is created with the artifact set; deploy remains `APPROVAL_REQUIRED` until a human approves.
+8. GitHub PR is created; `deploy_staging` remains `APPROVAL_REQUIRED` until its typed operation subject is approved.
 9. Audit timeline is complete: every tool call and model call linked to a task; no secret appears in any artifact, log or prompt record (verified by automated scan in tests).
 10. Same scenario completes in offline mode with fakes in CI in under 5 minutes.
 11. Evaluation report shows the metrics in `docs/EVALUATION_STRATEGY.md` §3 for all three scenarios.
@@ -106,5 +107,5 @@ request, and with the whole thing also runnable **offline** against deterministi
 | Max repair attempts per task / per workflow | 2 / 4 |
 | Default task timeout | 300 s; `dbt build` 900 s |
 | Query row cap for samples sent to LLM | 20 rows, masked columns |
-| Warehouse | Snowflake X-Small with auto-suspend; per-workflow credit cap enforced via statement timeout and query tagging |
-| LLM cost cap per workflow | Configurable; default USD 5; exceeding → `BLOCKED` |
+| Warehouse | Snowflake X-Small with auto-suspend; estimated preflight budget plus hard statement/query bounds and attribution tags. No hard credit cap without isolated warehouse/resource monitor |
+| LLM cost cap per workflow | Configurable; default USD 5; atomic reservation prevents dispatch above cap; continuation needs explicit new-cap/delta approval |

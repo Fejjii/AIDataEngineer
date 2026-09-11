@@ -1,10 +1,11 @@
 # Connector Architecture
 
-**Task:** DE 001 (corrected by DE 001R1) · **Status:** PROPOSED · ADR: DE-ADR-014
+**Task:** DE 001 (corrected by DE 001R1 and DE 001R2A) · **Status:** PROPOSED · ADR: DE-ADR-014
 
-Connectors are the only code that talks to external systems and the only code that resolves
-secrets. Everything above them sees typed capability results. Adding a connector must not
-touch `aide.orchestration`, `aide.policy`, `aide.capabilities` or `aide.domain`.
+Connectors are the only code that talks to data/Git/deployment systems. Connector adapters
+and LLM provider adapters are the only components that may resolve allow-listed
+`SecretRef`s; each receives a scoped resolver that cannot enumerate or resolve another
+adapter's secrets. Everything above them sees typed results.
 
 ---
 
@@ -29,11 +30,16 @@ touch `aide.orchestration`, `aide.policy`, `aide.capabilities` or `aide.domain`.
 
 ```python
 class Connector(Protocol):
-    spec: ConnectorSpec                       # id, kind, vendor, version, environment, capabilities
-    async def health(self) -> ConnectorHealth # cheap; used for status
-    async def reconcile(self, capability_id: CapabilityId, idempotency_key: str,
-                        ctx: CallContext) -> ReconcileResult   # crash recovery, docs/STATE_MODEL.md §4.6
+    spec: ConnectorSpec
+    async def health(self) -> ConnectorHealthSnapshot
+    async def reconcile(self, recovery: RecoveryContext) -> ReconcileResult
     async def close(self) -> None
+
+class CapabilityImplementation(BaseModel, frozen=True):
+    capability_id: CapabilityId
+    supported_contract_versions: frozenset[int]
+    input_schema_versions: frozenset[int]
+    output_schema_versions: frozenset[int]
 
 class ConnectorSpec(BaseModel, frozen=True):
     connector_id: str                         # e.g. "snowflake_dev"
@@ -41,7 +47,8 @@ class ConnectorSpec(BaseModel, frozen=True):
     vendor: str                               # "snowflake", "dbt", "github", "postgres", "fake"
     version: str                              # connector implementation version
     target_environment: TargetEnv             # exactly one of DEV | STAGING | PROD
-    capabilities: frozenset[CapabilityId]     # advertised implementations
+    implementations: frozenset[CapabilityImplementation]
+    # capability id + supported contract/input/output schema versions
     allowed_permissions: frozenset[PermissionLevel]  # every permission this instance may exercise; membership only, no ordering
     allow_list: ObjectAllowList               # databases/schemas/repos this instance may touch
     dialect: str | None                       # for SQL classification
@@ -49,15 +56,40 @@ class ConnectorSpec(BaseModel, frozen=True):
 
 class CallContext(BaseModel, frozen=True):
     workflow_id: UUID
+    phase_run_id: UUID
     task_id: UUID
-    idempotency_key: str                      # operation identity — stable across attempts; use for dedup/reconcile
-    attempt_id: UUID                          # execution attempt identity — use for tagging/diagnostics only
+    operation_idempotency_key: str
+    resolved_input_digest: str
+    contract_snapshot_id: UUID
+    attempt_id: UUID
     attempt_number: int
+    claim_epoch: int
+    cancellation_epoch: int
     deadline: datetime
-    query_tag: str                            # "aide:wf=<id>;task=<id>;op=<idempotency_key[:16]>;attempt=<n>"
+    external_correlation: str
     redaction: RedactionPolicy
 
-ReconcileResult = EffectFound(output: BaseModel, external_ref: str | None) | NoEffect() | Unknown(reason: str)
+class RecoveryContext(BaseModel, frozen=True):
+    workflow_id: UUID
+    phase_run_id: UUID
+    task_id: UUID
+    operation_idempotency_key: str
+    resolved_input_digest: str
+    resolved_input_schema_version: int
+    capability: CapabilityContractRef
+    connector_id: str
+    connector_version: str
+    target_environment: TargetEnv
+    attempts: tuple[AttemptRecoveryRef, ...]  # attempt ids, query/release/commit refs
+    operation_locator: dict[str, str]         # typed allow-listed fields, never secrets
+    reconcile_deadline: datetime
+
+ReconcileResult = (
+    EffectFound(output: BaseModel, external_ref: str | None)
+    | NoEffect(evidence: str)
+    | InProgress(external_ref: str, retry_after_seconds: int)
+    | Unknown(reason: str, evidence: str | None)
+)
 ```
 
 `allowed_permissions` replaces any notion of a permission "ceiling": `PermissionLevel` is a
@@ -69,22 +101,21 @@ instance are in `docs/PERMISSION_MODEL.md` §2.1.
 Capability implementations are registered per connector as handlers:
 
 ```python
-@implements("execute_query")
+@implements("execute_query", contract_versions={1}, input_schema_versions={1}, output_schema_versions={1})
 async def execute_query(self, req: ExecuteQueryInput, ctx: CallContext) -> ExecuteQueryOutput: ...
 ```
 
-The Tool Registry discovers handlers via `spec.capabilities`. A connector that advertises a
-capability it does not implement fails startup. A handler receives the **validated** input
-and a `CallContext` — never the raw task.
+The Tool Registry resolves handlers by the phase-pinned capability and schema versions. A
+connector that advertises an unsupported or absent handler fails startup. A handler
+receives immutable validated input and `CallContext`—never a template or raw task.
 
-**Idempotency and reconciliation duties.** A handler for a side-effecting capability must
-(a) propagate `ctx.idempotency_key` into the external system (query tag, provenance
-comment, commit trailer, PR head branch, release id) and (b) implement `reconcile` for
-that capability so that, after a crash, the Tool Registry can determine whether the effect
-exists **before** any re-execution. Handlers for read-only capabilities return `NoEffect`.
-A connector that cannot reconcile a capability must return `Unknown`; for non-idempotent
-capabilities this parks the task for human resolution rather than re-executing
-(`docs/STATE_MODEL.md` §4.6). Handlers must never build dedup logic on `attempt_id`.
+**Identity and reconciliation duties.** A side-effecting handler propagates both operation
+and attempt identity, persists any provider handle, and implements reconciliation from the
+complete `RecoveryContext`. Reconciliation runs before retry for every ambiguous outcome,
+including timeout, response loss, fail-after-effect, crash and lease expiry—not only lease
+reaping. `InProgress` is bounded by the scheduler; exhausted checks park and never imply
+absence. `EffectFound` output must validate against the pinned output contract. Handlers
+must never derive operation identity from an attempt.
 
 Every connector package provides:
 
@@ -102,17 +133,46 @@ Every connector package provides:
 
 ## 3. Connector status
 
-`ConnectorStatus` is a product-visible enum, exposed by `GET /connectors` and shown in the UI:
+Health is represented by an immutable, TTL-bound value:
+
+```python
+class ConnectorHealthSnapshot(BaseModel, frozen=True):
+    connector_id: str
+    status: Literal["AVAILABLE", "DEGRADED", "UNAVAILABLE", "MOCK"]
+    checked_at: datetime
+    expires_at: datetime
+    missing_permissions: frozenset[PermissionLevel]
+    reason_codes: tuple[str, ...]
+```
+
+An expired snapshot is environmental unavailability until refreshed. The product-visible
+status has these execution-readiness semantics:
 
 | Status | Meaning | Planner behaviour |
 |---|---|---|
 | `AVAILABLE` | Health check passed within TTL | Eligible |
 | `DEGRADED` | Health passed but with warnings (latency, partial permissions, rate limited) | Eligible; tasks get extended timeouts; UI badge |
-| `UNAVAILABLE` | Health failed or credentials unresolved | Not eligible at plan time; existing tasks needing it are `PARKED` (policy deny class `ENVIRONMENTAL`) and the workflow is `BLOCKED` until the operator resolves it |
+| `UNAVAILABLE` | Health failed or credentials unresolved | Structurally valid plans remain accepted; policy/execution readiness parks materialized tasks (`ENVIRONMENTAL`) until health recovers |
 | `MOCK` | Fake implementation active | Eligible; every artifact and UI element is watermarked "mock connector" |
 
-Health is checked at startup and every `health_ttl_seconds`; results cached in
-`connector_status`. Never pretend a real integration is active when it is not.
+Plan validation checks that the connector id, kind and pinned capability version exist; it
+does not reject a plan for temporary health. Health is checked at startup and every
+`health_ttl_seconds`; snapshots are cached in `connector_status`. Policy evaluates a fresh
+snapshot and tests `required_permission ∈ missing_permissions`.
+
+### 3.1 Contract snapshots, upgrades and provenance
+
+- Connector advertisements include capability contract and payload schema compatibility;
+  each phase run pins selected implementations in `contract_snapshot_id`.
+- New phase runs may select upgraded implementations. In-flight runs continue on pinned
+  versions. If one is unavailable, work parks as `CONTRACT_VERSION_UNAVAILABLE`; no JSONB
+  payload is silently reinterpreted.
+- Every connector-produced artifact carries immutable `REAL|MOCK` execution mode,
+  connector id/version, capability version, operation identity, resolved-input digest and
+  transitive parent artifact ids.
+- Policy denies real Git or deployment when any transitive input is MOCK-derived. An
+  explicit promotion flow must recreate and validate it through real connectors; approval
+  cannot waive this provenance boundary.
 
 ---
 
@@ -137,12 +197,14 @@ Health is checked at startup and every `health_ttl_seconds`; results cached in
 | Aspect | Specification |
 |---|---|
 | Library | `snowflake-connector-python` (async via thread pool) |
-| Identity | Key-pair or password auth via `SecretRef`; **one role per environment**: `AIDE_DEV_RW` (DEV RW, RAW read), `AIDE_DEV_RO` (read-only profiling), `AIDE_STAGING_DEPLOY` (future). The DEV instance uses `AIDE_DEV_RW` but `execute_query` always runs with a session-level `USE SECONDARY ROLES NONE` and the classifier guarantees read-only. |
-| Session defaults | `STATEMENT_TIMEOUT_IN_SECONDS` from task deadline, `QUERY_TAG = aide:wf=<id>;task=<id>`, `AUTOCOMMIT = TRUE`, warehouse from config (X-Small, auto-suspend 60 s) |
+| Identity | Separate instances and credentials: `snowflake_ro` uses `AIDE_DEV_RO` for every read capability, including `execute_query`, metadata, profiling, metrics and validation; `snowflake_dev` uses `AIDE_DEV_RW` only for DEV writes. Classifier checks are defence in depth, never a substitute for RO grants. `AIDE_STAGING_DEPLOY` is separate. |
+| Session defaults | `STATEMENT_TIMEOUT_IN_SECONDS` from task deadline; `AUTOCOMMIT = TRUE`; warehouse from config. Every statement sets canonical `QUERY_TAG = aide:v1;wf=<uuid>;phase_run=<uuid>;task=<uuid>;op=<64-hex>;attempt=<uuid>;n=<int>`. The serializer/parser round-trips exact fields, rejects duplicate/unknown mandatory keys, and never truncates the operation key. |
 | Capabilities | `discover_assets`, `describe_asset`, `detect_schema_drift`, `profile_dataset`, `sample_dataset`, `infer_relationships`, `validate_query` (EXPLAIN), `execute_query`, `create_dataset`, `drop_dataset` (DEV), `get_execution_metrics`, `get_cost_metrics` |
 | Allow-list | Configured databases/schemas; DEV write schema pattern `AIDE_DEV.<WORKFLOW_SHORT_ID>_*` |
 | Error mapping | Snowflake error codes: 001003 → `SQL_SYNTAX`; 002003 → `MISSING_OBJECT`; 000904 → `SCHEMA_MISMATCH` (invalid identifier); 100038/100040 → `TYPE_MISMATCH`; 003001/001011 → `PERMISSION_FAILURE`; 000630/604 → `TIMEOUT`/cancelled; 390114/network → `TRANSIENT_PROVIDER`; credit quota → `RESOURCE_LIMIT` |
-| Reconcile | `create_dataset`/`drop_dataset`: look up the object and its provenance comment (`idempotency_key`) and, as fallback, `QUERY_HISTORY` by `QUERY_TAG`; `execute_query`/read-only: `NoEffect` |
+| SQL safety | Parse and re-render with the Snowflake dialect, then reparse and require an equivalent normalized AST. Classify statement type, canonical scoped identifiers, functions, table functions, stages/URLs, UDFs, external functions and session constructs. Read paths use an explicit safe-function allow-list; external/unknown functions, stages/URLs, dynamic SQL, unknown AST nodes and role/session mutation are denied. Quoted identifiers are normalized with Snowflake case rules before allow-list checks. |
+| Reconcile | Prefer the persisted Snowflake `query_id`; otherwise parse canonical `QUERY_TAG` and query exact operation identity. For object writes, verify provenance comment plus expected object shape. `RUNNING` query → `InProgress`; completed query with schema-valid result/effect → `EffectFound`; authoritative absence/rejection → `NoEffect`; history lag or unreachable service → `Unknown`. |
+| Cost boundary | Query estimates, statement timeout, row/byte limits and tags bound/attribute work. They do **not** enforce a hard per-workflow credit cap. A true credit boundary requires an isolated warehouse/resource monitor outside the default MVP. |
 | Fake | Backed by an in-process DuckDB database loaded from the synthetic fixtures with Snowflake→DuckDB transpilation via sqlglot; supports fault injection (`fail_next(capability, failure_class)`, `fail_after_effect(capability)`, latency, rename column to simulate drift) |
 
 ### 5.2 dbt (`transformation`)
@@ -151,10 +213,11 @@ Health is checked at startup and every `health_ttl_seconds`; results cached in
 |---|---|
 | Library | `dbt-core` + `dbt-snowflake`, invoked through `dbtRunner` **in a subprocess** per call (isolation from the API process, clean environment, hard timeout via process kill) |
 | Project | A dbt project repository checked out per workflow into an isolated working copy (`.aide/work/<workflow_id>/project`); `profiles.yml` generated from connector config with `SecretRef` resolved into the subprocess environment only |
-| Capabilities | `create_transformation`, `compile_transformation`, `execute_transformation`, `run_pipeline`, `run_tests`, `get_lineage`, `deploy` (strategy `DBT_RUN_TARGET`, STAGING only) |
+| Capabilities | `create_transformation`, `compile_transformation`, `execute_transformation`, `run_pipeline`, `run_tests`, `get_lineage`, `deploy_staging` (strategy `DBT_RUN_TARGET`) |
 | Artifacts | `manifest.json`, `run_results.json`, compiled SQL captured as artifacts |
 | Error mapping | dbt `CompilationError` → `DBT_COMPILE`; `DatabaseError` → re-mapped through the Snowflake mapper (so a renamed column yields `SCHEMA_MISMATCH`, not generic `DBT_RUNTIME`); test `fail` → `DBT_TEST`; `RuntimeError` unknown → `DBT_RUNTIME` |
-| Reconcile | `execute_transformation`/`run_pipeline`/`run_tests`: read `run_results.json` from the per-workflow working copy for the invocation tagged with `idempotency_key`, else `QUERY_HISTORY` by query tag; `create_transformation`: compare written file hashes; `deploy`: look up `release_id` in the staging target's release marker (`AIDE_STAGING.__AIDE_RELEASES`) — `Unknown` if absent and the warehouse is unreachable |
+| Effect safety and journal | Each invocation gets an immutable directory keyed by operation and attempt plus an append-only journal of selected nodes, compiled SQL/config/hooks/macros, dispatch, adapter response and artifact hashes. Side-effecting dbt execution defaults to `NON_IDEMPOTENT`; a materialization may be marked `PROVEN_CONVERGENT` only after validated unique keys, deterministic SQL, no unsafe hooks/macros/snapshots, and an invocation-specific convergence validator. Partial DAG completion is never adopted as whole-run success. |
+| Reconcile | Read the invocation journal and unique `run_results.json`, then query provider history by canonical operation tag. Return `EffectFound` only when every required node has schema-valid results; running nodes return `InProgress`; incomplete/indeterminate work returns `Unknown`. `create_transformation` compares file hashes. `deploy_staging` verifies `release_id` in `AIDE_STAGING.__AIDE_RELEASES`. |
 | Fake (unit tests) | Lightweight deterministic fake: executes generated SQL against the fake warehouse's DuckDB, emulating `ref`/`source` resolution and dbt's generic tests; produces real `manifest.json`-shaped output; fast enough for the unit suite and CI scenarios. Retained regardless of the note below |
 | Integration target (DE 008 evaluation) | **DE 008 must evaluate running real dbt Core (`dbtRunner` subprocess) against an offline DuckDB-compatible target (`dbt-duckdb` adapter over the synthetic fixtures) for the integration and connector-contract layers**, so that dbt parsing, Jinja, materializations and generic tests are exercised without Snowflake credentials. Decision criteria: adapter maturity vs the pinned `dbt-core`, Snowflake→DuckDB SQL portability of the generated models, run time in CI. **Do not adopt this path if compatibility evidence rejects it**; keep the lightweight fake for unit tests either way. Outcome recorded in DE 008's handoff and, if adopted, as an additive change here |
 
@@ -164,7 +227,7 @@ Health is checked at startup and every `health_ttl_seconds`; results cached in
 |---|---|
 | Library | `git` CLI via subprocess wrapper for local operations; GitHub REST v3 via `httpx` for PRs (no heavy SDK) |
 | Identity | Fine-grained PAT or GitHub App installation token via `SecretRef`, scoped to the target repository, **no admin scopes** |
-| Capabilities | `prepare_git_change`, `prepare_pull_request`, `deploy` (strategy `MERGE_PR` — **disabled in V1**) |
+| Capabilities | `prepare_git_change`, `prepare_pull_request`; `deploy_production(strategy=MERGE_PR)` is not advertised in V1 |
 | Guarantees | Never touches protected branches; never force-pushes; runs `gitleaks`-style secret scan on the diff before commit; bot author identity fixed |
 | Reconcile | `prepare_git_change`: branch exists on remote with a commit whose trailer `Aide-Idempotency-Key` equals the key → `EffectFound(commit_sha)`; `prepare_pull_request`: open PR with the same head branch → `EffectFound(pr_number)` |
 | Fake | Bare local repository in a temp dir + in-memory PR store; supports `fail_after_effect` |
@@ -184,16 +247,17 @@ Health is checked at startup and every `health_ttl_seconds`; results cached in
 ## 6. Adding a connector — checklist (no core changes)
 
 1. Create `src/aide/connectors/<vendor>/` with `real.py`, `fake.py`, `errors.py`, `config.py`, (`dialect.py`).
-2. Declare `ConnectorSpec` with advertised capabilities and the `allowed_permissions` set (every advertised capability's required permission must be a member — checked at startup).
-3. Implement handlers for each advertised capability using the existing input/output schemas, and `reconcile` for every side-effecting one (propagate `ctx.idempotency_key` into the external system).
+2. Declare `ConnectorSpec.implementations` with supported contract/schema versions and the `allowed_permissions` set.
+3. Implement each advertised version and `reconcile` for every side-effecting capability; propagate `ctx.operation_idempotency_key` and `ctx.attempt_id`.
 4. Map vendor errors to failure classes.
 5. Add configuration entry (`connectors.yaml` + env var names) and permission mapping in `config/permissions/<connector_id>.yaml`.
 6. Run the **connector contract test suite** (`tests/connectors/contract/`) against the fake; against the real system when credentials exist.
 7. Write `README.md`.
 8. Register the module in `connectors/registry_entries.py` (one line).
 
-If a new connector needs a capability that does not exist, that is a **capability
-addition** (ADR + Capability Registry change), not a connector change.
+If a new connector needs a capability that does not exist, that is an additive Capability
+Registry change with synchronized contracts and normal review under DE-ADR-026. An ADR is
+required only when existing semantics or an architecture boundary changes.
 
 ---
 

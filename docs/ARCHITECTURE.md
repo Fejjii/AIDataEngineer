@@ -1,6 +1,6 @@
 # AI Data Engineer — Architecture V1
 
-**Task:** DE 001 (corrected by DE 001R1) · **Status:** PROPOSED (awaiting independent frontier review) · **Date:** 2026-09-11
+**Task:** DE 001 (corrected by DE 001R1 and DE 001R2A) · **Status:** PROPOSED (awaiting independent review acceptance) · **Date:** 2026-09-11
 **Owner of changes after acceptance:** ADR + higher-tier review (see `.ai/MASTER_WORKFLOW.md` §20)
 
 This is the buildable architecture for the AI Data Engineer control plane. It is the
@@ -41,7 +41,7 @@ decides, validates, and enforces.
 
 ```mermaid
 flowchart LR
-    Human[Human: Data Engineer / Approver] -->|request, clarifications, approvals| UI[Frontend SPA]
+    Human[Authenticated operator / approver] -->|request, clarifications, approvals| UI[Frontend SPA]
     UI --> API[API]
     API --> APP[Application Services]
     APP --> ORCH[Workflow Orchestrator]
@@ -60,9 +60,12 @@ flowchart LR
 
 Trust boundaries (details in `docs/PERMISSION_MODEL.md` §8):
 
-- **Human ↔ System**: authenticated API; approvals bound to artifact hashes.
+- **Human ↔ System**: local opaque server-side session creates trusted `PrincipalRef`;
+  roles and effective workflow grants are derived server-side. Clients may request grants
+  but cannot set actor, roles or grants. Typed approvals bind to their complete subject.
 - **System ↔ LLM provider**: outbound only; secrets, raw credentials and full source rows never enter prompts; all outputs are untrusted until parsed and validated.
-- **System ↔ data platforms**: least-privilege per-environment identities; the system only ever holds *references* to secrets, resolved at connector call time.
+- **System ↔ data platforms**: least-privilege per-environment identities; connector and
+  LLM provider adapters resolve only scoped allow-listed secret references.
 - **Metadata and source data → System**: untrusted input. Table names, comments, column values can carry prompt injection; they are treated as data, quoted and delimited in prompts, and never executed.
 
 ---
@@ -94,7 +97,7 @@ output always validated by Det code before use.
 
 | | |
 |---|---|
-| Responsibility | Thin, typed HTTP surface. Authentication, request validation, DTO mapping, SSE stream. No business logic. |
+| Responsibility | Thin, typed HTTP surface. Local account login and opaque PostgreSQL-backed session, CSRF enforcement, trusted `PrincipalRef` propagation, request validation, DTO mapping, same-origin read-only SSE. No business logic. |
 | Inputs | HTTP requests with Pydantic DTOs. |
 | Outputs | Typed responses; errors mapped from domain exceptions to safe messages. |
 | Dependencies | Application Services. |
@@ -106,7 +109,7 @@ output always validated by Det code before use.
 
 | | |
 |---|---|
-| Responsibility | Use cases: `submit_request`, `answer_clarification`, `resolve_approval`, `resume_workflow` (from `BLOCKED`), `resolve_ambiguous_attempt` (human-verified outcome of a parked non-idempotent attempt), `cancel_workflow`, `get_workflow`, `list_events`, `get_artifact`, `get_connector_status`, `run_evaluation`. Transaction boundaries. |
+| Responsibility | Use cases: `submit_request` (server-authorized grants), `answer_clarification`, `resolve_approval`, `resume_workflow`, `verify_or_import_ambiguous_result`, `confirm_effect_result_unknown`, `cancel_workflow`, `park_unresolved_and_cancel`, queries and evaluation. Transaction boundaries. A human assertion alone cannot mark an ambiguous task successful. |
 | Inputs | Commands from API/CLI/evaluation harness. |
 | Outputs | Domain results; emits domain events. |
 | Dependencies | Workflow State Manager, Orchestrator (to enqueue), Approval Engine, Artifact Manager, repositories. |
@@ -118,7 +121,7 @@ output always validated by Det code before use.
 
 | | |
 |---|---|
-| Responsibility | Drives a workflow through the state machine (`docs/STATE_MODEL.md`). At each phase it asks the Planner for the phase task graph (or uses a deterministic template for phases that need no reasoning), submits tasks to the Scheduler, evaluates phase exit criteria, decides next state, invokes Repair Engine on validation failures, routes to Approval Engine when policy demands. |
+| Responsibility | Drives the state machine through explicit `phase_runs`. Accepts one immutable task-template DAG per occurrence, invokes the exhaustive phase reducer, and advances under a transaction-scoped PostgreSQL advisory lock keyed by workflow. Phase completion, next-plan acceptance, template creation and transition serialize exactly once. |
 | Inputs | Workflow record, phase results, policy decisions, approval outcomes. |
 | Outputs | State transitions, task graphs, workflow events. |
 | Dependencies | Planner, Workflow State Manager, Task Scheduler, Policy Engine, Approval Engine, Repair Engine. |
@@ -132,7 +135,7 @@ output always validated by Det code before use.
 |---|---|
 | Responsibility | Reasoning capability `plan_workflow` / `plan_phase`: turn requirement + discovered context into a typed `Plan` (goal, assumptions, clarification questions, phase task graph with capability ids and inputs). |
 | Inputs | `RequirementSpec`, `WorkflowContext` summary (metadata, profiles, prior results), Capability Registry catalogue (ids + purposes + permissions). |
-| Outputs | `Plan` (Pydantic). Rejected if it references unknown capabilities, requests a permission that is not a member of the workflow's grant set (or approval-eligible) or of the chosen connector's `allowed_permissions`, fails the policy pre-check on static inputs, or violates DAG rules. |
+| Outputs | `Plan` (Pydantic). Structural validation uses the phase contract snapshot, connector kind/version compatibility, effective server-authorized grants, template schemas and DAG bounds. Temporary connector health never invalidates a plan; it is evaluated after operation materialization and can park work. |
 | Dependencies | LLM Gateway, Capability Registry (read-only). |
 | State ownership | None; the Plan becomes an artifact owned by Artifact Manager. |
 | Security boundary | Receives redacted, delimited context only. |
@@ -142,7 +145,7 @@ output always validated by Det code before use.
 
 | | |
 |---|---|
-| Responsibility | Single writer for workflow rows. Applies transitions only if allowed by the state table; optimistic locking (`version`); records every transition as an event. |
+| Responsibility | Applies transitions only through the state table; stores optimistic version, cancellation intent/epoch and active phase run. Every mutation and audit event share a transaction. Advisory transaction locking serializes phase advancement; optimistic versioning detects stale commands. |
 | Inputs | Transition requests `(workflow_id, from, to, reason, actor)`. |
 | Outputs | Persisted workflow; `WorkflowTransitioned` event. |
 | Dependencies | Persistence. |
@@ -154,11 +157,11 @@ output always validated by Det code before use.
 
 | | |
 |---|---|
-| Responsibility | Persist task DAGs; mark tasks READY when dependencies succeed; workers claim READY tasks (`FOR UPDATE SKIP LOCKED`); write the attempt intent row before execution; enforce timeouts, retries, leases; run the reconciliation protocol on lease expiry (`docs/STATE_MODEL.md` §4.6); park tasks on environmental conditions; write task results. |
+| Responsibility | Persist phase runs and immutable task templates; materialize only fully resolved/validated input; compute resolved-input digest and operation key; cascade every required dependency failure; claim with `SKIP LOCKED`, renewable leases and monotonic claim epochs; condition every heartbeat/finalization on owner+epoch+attempt+cancellation epoch; reconcile every ambiguous side-effecting result before retry; reject stale worker results. |
 | Inputs | Task graph from Orchestrator; task results from Execution Engine. |
 | Outputs | Task lifecycle events; phase completion signal. |
 | Dependencies | Persistence, Execution Engine. |
-| State ownership | **Owns** `tasks`, `task_attempts`. |
+| State ownership | **Owns** `phase_runs`, `task_templates`, `tasks`, `task_attempts`, recovery claims and unresolved effects. |
 | Security boundary | Internal. |
 | Det / LLM | Det. |
 
@@ -166,7 +169,7 @@ output always validated by Det code before use.
 
 | | |
 |---|---|
-| Responsibility | Catalogue of typed capability contracts (`docs/CAPABILITY_MODEL.md`): id, purpose, input/output schema, permission, risk, approval, timeout, retry, failure categories, validation, audit metadata, connector requirement. |
+| Responsibility | Catalogue of versioned typed capability contracts: input/output schema versions, permission, risk, typed approval rule, `max_attempts`, effect semantics, validators, audit and connector requirement. Creates immutable phase contract snapshots. |
 | Inputs | Declarative registrations at import time. |
 | Outputs | Lookup + catalogue for Planner (names/purposes only) and Policy Engine. |
 | Dependencies | None. |
@@ -177,7 +180,7 @@ output always validated by Det code before use.
 
 | | |
 |---|---|
-| Responsibility | Binds a capability to a concrete implementation: a connector handler (deterministic) or a reasoner (LLM). Resolves `(capability_id, connector_id?)` → callable. Wraps every call with input validation, policy check, timeout, retry policy, output validation, audit and telemetry. |
+| Responsibility | Resolves a phase-pinned `(capability_id@version, connector_id@version?)`. Only materialized immutable input may enter. Wraps policy, typed approvals, attempt intent/fencing, dispatch classification, mandatory ambiguous-outcome reconciliation, output validation, transactional audit and telemetry. |
 | Inputs | Task (capability, connector, inputs). |
 | Outputs | Validated `CapabilityResult`. |
 | Dependencies | Capability Registry, Connector Registry, Policy Engine, Audit, Observability. |
@@ -189,12 +192,12 @@ output always validated by Det code before use.
 
 | | |
 |---|---|
-| Responsibility | Stable connector protocol (`docs/CONNECTOR_ARCHITECTURE.md`); registry of configured connector instances; status (`AVAILABLE / DEGRADED / UNAVAILABLE / MOCK`); health checks. V1: Snowflake, dbt, GitHub, PostgreSQL (synthetic source), each with real + fake. |
+| Responsibility | Stable connector protocol with advertised supported capability/schema versions, immutable TTL-bound health snapshots, complete recovery context and bounded `IN_PROGRESS` reconciliation. V1: Snowflake, dbt, GitHub, PostgreSQL, each real + fake. |
 | Inputs | Configuration with secret references; capability calls. |
 | Outputs | Typed capability results; connector status. |
 | Dependencies | Secrets boundary, vendor SDKs. |
-| State ownership | Connector status cache only. |
-| Security boundary | **Credential boundary.** Only connectors resolve secrets, and only at call time. |
+| State ownership | Immutable connector health snapshots. |
+| Security boundary | **Data-platform credential boundary.** Connector adapters receive scoped allow-listed secret resolvers. LLM provider adapters have a separate scoped resolver. |
 | Det / LLM | Det. |
 
 ### 3.11 Metadata Discovery
@@ -290,7 +293,7 @@ output always validated by Det code before use.
 
 | | |
 |---|---|
-| Responsibility | Deterministic evaluation of `(capability, connector, connector status, target_environment, workflow grants, payload classification)` → `ALLOW | REQUIRE_APPROVAL | DENY` with reason codes, and a deterministic **routing** derived from the reason codes (`EXECUTE | APPROVAL | PARK | FAIL_CLOSED`, `docs/PERMISSION_MODEL.md` §3.1): environmental denials park, scope/security denials fail closed. All permission checks are set membership over `PermissionLevel` (no ordering). Includes the SQL Safety Classifier (statement type, object scope, destructive detection, multi-statement detection). Fail closed. |
+| Responsibility | Evaluate every applicable deterministic denial rule over the materialized operation, trusted principal/grant authorization, fresh connector health, provenance and SQL classification. Persist all reasons; derive route from `SECURITY > SCOPE > ENVIRONMENTAL`; evaluate all approval requirements only when no denial exists. SQL classification covers normalized scope, functions, stages/URLs, dynamic/session constructs and unknown AST nodes. |
 | Inputs | `PolicyRequest`. |
 | Outputs | `PolicyDecision` (persisted). |
 | Dependencies | Capability Registry, permission model config. |
@@ -302,19 +305,19 @@ output always validated by Det code before use.
 
 | | |
 |---|---|
-| Responsibility | Create approval requests bound to `(workflow, task, artifact hashes, requested permission)`; wait; accept human decision; invalidate if artifacts change; record approver identity. |
+| Responsibility | Manage discriminated `OperationApproval`, `DesignApproval` and `BudgetIncreaseApproval` subjects. Operation subjects bind operation key, resolved-input digest, artifact/provenance closure, capability/connector versions, target, permission, external-state digest and expiry. All simultaneous mandatory subjects must approve; any rejection follows subject-specific routing. |
 | Inputs | `REQUIRE_APPROVAL` decisions; human decisions from API. |
 | Outputs | `ApprovalRecord`; resumes or blocks the workflow. |
 | Dependencies | Persistence, Workflow State Manager. |
 | State ownership | `approvals`. |
-| Security boundary | Only authenticated approvers; approval is not transferable to different artifact content. |
+| Security boundary | Only trusted principals holding `approver`; design acceptance is not a grant and budget approval only changes an explicit cap. |
 | Det / LLM | Det. |
 
 ### 3.21 Artifact Manager
 
 | | |
 |---|---|
-| Responsibility | Content-addressed, immutable, versioned storage of plans, SQL, dbt files, YAML, docs, lineage graphs, profiles, reports. Metadata in PostgreSQL; bodies in PostgreSQL (`bytea`/`jsonb`) for V1 with a pluggable blob store interface. |
+| Responsibility | Content-addressed immutable storage with payload schema version and transitive provenance (`REAL|MOCK`, connector/capability versions, operation key and resolved-input digest). Real Git/deploy rejects MOCK ancestry; promotion recreates and validates through real connectors. |
 | Inputs | Bytes + type + producer task. |
 | Outputs | `ArtifactRef` (id, sha256, version, type). |
 | Dependencies | Persistence. |
@@ -328,7 +331,7 @@ output always validated by Det code before use.
 | Responsibility | Materialize an artifact set into a Git working tree of the dbt project, create branch, commit, push, open PR with generated summary (via GitHub connector). Deploy = merge/promote through platform-specific capability, gated by approval. |
 | Inputs | Approved artifact set, repository config. |
 | Outputs | Branch, commit sha, PR url as artifacts. |
-| Dependencies | Tool Registry (`prepare_git_change`, `prepare_pull_request`, `deploy`). |
+| Dependencies | Tool Registry (`prepare_git_change`, `prepare_pull_request`, `deploy_staging`; `deploy_production` disabled in V1). |
 | State ownership | None. |
 | Det / LLM | Det (PR description text is LLM-generated but stored as an artifact and human-reviewed). |
 
@@ -336,7 +339,7 @@ output always validated by Det code before use.
 
 | | |
 |---|---|
-| Responsibility | Append-only record of consequential actions: requests, clarifications, plans, policy decisions, tool calls with redacted inputs/outputs, approvals, deliveries, state transitions. Separate from debug logs. |
+| Responsibility | Transactional append-only application record of consequential actions. State mutation and audit event commit together; per-workflow sequence allocation is locked and unique. Writer role lacks UPDATE/DELETE; V1 does not claim cryptographic tamper evidence. |
 | Inputs | Events from every component through one interface. |
 | Outputs | Queryable audit timeline per workflow. |
 | Dependencies | Persistence. |
@@ -370,7 +373,7 @@ output always validated by Det code before use.
 
 | | |
 |---|---|
-| Responsibility | Single point for model calls: provider adapters, prompt template loading (versioned files), structured output enforcement (JSON schema from Pydantic), retries with backoff for transient failures, timeouts, token/cost accounting, redaction of inputs, replayable fake for tests. |
+| Responsibility | Single point for model calls: provider adapters, versioned prompts, structured output, bounded retries, redaction, replay fake and an atomic budget reservation/settlement ledger. Provider adapters resolve only their scoped `SecretRef`s. |
 | Inputs | `LLMRequest` (template id + version, variables, output schema, model config). |
 | Outputs | Parsed, schema-validated Pydantic object or `LLMOutputInvalid` error. |
 | Dependencies | Provider SDK, Observability, Secrets boundary (API key ref). |
@@ -393,7 +396,7 @@ output always validated by Det code before use.
 | | |
 |---|---|
 | Responsibility | `SecretProvider` protocol: `resolve(SecretRef) -> SecretStr`. V1: environment variables. Future: cloud secret managers. Secret values never persist, never log, never enter LLM context. |
-| Inputs | `SecretRef` (name only) from connector configuration. |
+| Inputs | `SecretRef` name plus adapter-scoped allow-list from connector or LLM provider configuration. |
 | Outputs | In-memory `SecretStr` with a short lifetime. |
 | Dependencies | Environment / secret manager. |
 | Security boundary | Yes — see `docs/PERMISSION_MODEL.md` §8. |
@@ -405,45 +408,48 @@ output always validated by Det code before use.
 
 Two levels (ADR DE-ADR-011):
 
-1. **Workflow state machine** (deterministic, coarse): `RECEIVED → … → COMPLETED` with `BLOCKED`, `FAILED`, `CANCELLED` terminal/parking states. Defined in `docs/STATE_MODEL.md`.
-2. **Phase-scoped task DAG** (dynamic at phase boundaries, static inside a phase): the Planner or a deterministic phase template produces the DAG for the *next* phase only, using everything learned so far. Inside a phase the DAG is immutable; independent tasks may run concurrently.
+1. **Workflow state machine**: explicit cancellation intent/shutdown states, parking,
+   failure and terminal outcomes (`docs/STATE_MODEL.md`).
+2. **Phase run**: each executable phase occurrence has `phase_run_id`, monotonic
+   generation, pinned contract snapshot, immutable accepted plan and templates.
+3. **Materialized operation**: dependency references resolve and validate before immutable
+   input digest, operation identity, policy or approval exists.
 
-This hybrid is chosen because a full DAG cannot be known before discovery, while a fully
-dynamic graph is hard to audit and easy to loop. The state machine gives auditability and
-resumability; the per-phase DAG gives parallelism and adaptivity.
+Adaptivity occurs only at phase boundaries. Discovery enumeration therefore completes
+before a new planning boundary creates an explicit sorted description task per asset;
+there is no runtime insertion into an active DAG.
 
 ### 4.1 Executable task
 
 ```text
 Task
-  task_id, workflow_id, phase, capability_id, connector_id?, target_environment
+  task_id, template_id, workflow_id, phase_run_id, phase
+  capability_id@contract_version, input/output_schema_version
+  connector_id@version?, target_environment, contract_snapshot_id
   depends_on: [task_id]
-  inputs: typed JSON (validated against capability input schema)
+  resolved_inputs: immutable validated JSON; resolved_input_digest
   outputs: typed JSON (validated against output schema) | null
-  required_permission, risk, approval_required (resolved by policy)
-  timeout_seconds, max_retries, retry_policy
+  required_permission, risk, typed approval requirements
+  timeout_seconds, max_attempts, retry_policy, effect_semantics
   validation: [validator ids]
-  artifacts: [ArtifactRef]
+  artifacts: [ArtifactRef with transitive REAL|MOCK provenance]
   execution_result, failure_classification
-  idempotency_key   # operation identity: sha256(workflow_id, phase, local_id, capability@version, inputs_digest) — stable across attempts
-  attempt_count, status, version
-  audit: created_by (planner|template|repair), created_at, claimed_by, claimed_at, finished_at
+  operation_idempotency_key
+  attempt_count, status, version, claim_epoch
+  lease_owner, lease_expires_at, last_heartbeat_at
 
 TaskAttempt (append-only, one per execution try)
-  attempt_id, task_id, attempt_number, idempotency_key (copy), lease_owner,
-  outcome: STARTED|SUCCEEDED|FAILED|EXPIRED|RECOVERED|AMBIGUOUS, external_ref, result
+  attempt_id, task_id, attempt_number, operation key/input digest copies
+  lease_owner, claim_epoch, cancellation_epoch, dispatch_state
+  outcome: STARTED|SUCCEEDED|FAILED|EXPIRED|RECOVERED|AMBIGUOUS|CANCELLED
 ```
 
-Concurrency safety: tasks are claimed with `SELECT … FOR UPDATE SKIP LOCKED`; workflow
-rows use optimistic `version`; the **operation identity** (`idempotency_key`) is fixed at
-task creation and shared by every attempt, while each try has its own **attempt identity**
-(`attempt_id`); the attempt intent is persisted before the handler runs and propagated into
-the external system, so after a crash the connector's `reconcile` can find a completed
-effect and adopt it instead of repeating it. Non-idempotent operations (`deploy`) whose
-outcome cannot be reconciled are parked for a human and never re-executed automatically
-(`docs/STATE_MODEL.md` §4.6). Artifacts are immutable so concurrent producers cannot
-corrupt each other. Workflow-level decisions (transitions) are only made by the
-Orchestrator after *all* tasks of a phase are terminal.
+`operation_idempotency_key` includes `phase_run_id`, pinned implementation versions and
+resolved-input digest, so it is stable across attempts but distinct across legitimate phase
+re-entry. Renewable heartbeats and epoch predicates fence stale workers. Atomic recovery
+ownership advances the epoch; late completion cannot overwrite replacement/recovery state.
+Every ambiguous side effect reconciles before retry. Phase reduction/advance is one
+serialized PostgreSQL transaction with exhaustive required-dependency propagation.
 
 ---
 
@@ -479,7 +485,7 @@ Rationale, rejected alternatives and the evaluation of each candidate specialist
 | Documentation and lineage | Reviews | Generates |
 | Git branch, commit, PR | Reviews and merges | Prepares |
 | Staging deploy | Approves | Executes after approval |
-| Production write / deploy | Approves | Executes after approval, never initiates writes autonomously |
+| Production write / deploy | Owns future enablement | `deploy_production` is disabled and has no connector in V1 |
 | Destructive actions (drop, delete, truncate, overwrite history) | Approves each | Never automatic; V1 denies except in sandbox with approval |
 | Security / identity / network changes | Owns; platform disabled in V1 | Denied |
 | Infrastructure expenditure (warehouse size, new resources) | Approves | Requests with estimated cost |
@@ -505,8 +511,8 @@ Human request
  → VALIDATION: run_tests + Quality Engine → ValidationReport
      fail → REPAIR (bounded) → GENERATION/EXECUTION/VALIDATION
  → DELIVERY: lineage, docs, prepare_git_change, prepare_pull_request
- → APPROVAL_REQUIRED: human approves PR/deploy
- → DELIVERY: deploy (staging/prod capability, gated) 
+ → APPROVAL_REQUIRED: human approves typed staging operation subject
+ → DELIVERY: deploy_staging (gated; deploy_production disabled)
  → MONITORING: register freshness/quality/cost monitors (V1: register only)
  → COMPLETED
 ```
@@ -517,30 +523,31 @@ Human request
 
 | Table group | Owner component | Mutability |
 |---|---|---|
-| `workflows`, `workflow_events` | Workflow State Manager | Append events; workflow row versioned |
-| `tasks`, `task_attempts` | Scheduler | Task row versioned (operation identity fixed at creation); attempts append-only (attempt identity per try) |
-| `releases` | Delivery | Intent row before `deploy`; outcome updated once |
+| `workflows`, `workflow_events` | Workflow State Manager | Versioned; cancellation intent/epoch |
+| `phase_runs`, `task_templates`, `tasks`, `task_attempts`, `unresolved_effects` | Scheduler / coordinator | Phase occurrence and templates immutable; materialized identity write-once; attempts append-only and fenced |
+| `releases` | Delivery | Intent row before `deploy_staging`; outcome updated once |
 | `artifacts` | Artifact Manager | Immutable |
 | `metadata_snapshots`, `profiles`, `validation_reports` | Discovery / Profiling / Quality | Immutable |
 | `policy_decisions`, `approvals` | Policy / Approval | Append-only; approval status transitions |
 | `repair_attempts` | Repair Engine | Append-only |
-| `audit_events` | Audit | Append-only |
+| `audit_events`, `audit_sequences` | Audit | Same transaction as consequential state; insert-only writer role |
 | `model_calls`, `tool_calls`, `workflow_metrics` | Observability | Append-only |
-| `connector_status` | Connector Registry | Overwrite (cache) |
+| `connector_health_snapshots` | Connector Registry | Immutable TTL snapshots; latest selected by time |
 | `evaluation_runs`, `evaluation_results` | Evaluation | Append-only |
 
 ---
 
 ## 9. Resumability and concurrency
 
-- Every phase is re-entrant: on restart the Orchestrator loads the workflow, finds the
-  current state, finds non-terminal tasks, and resumes. Tasks that were `RUNNING` at crash
-  time have a lease; on expiry the Scheduler first **reconciles** the attempt through the
-  connector (`docs/STATE_MODEL.md` §4.6): a completed effect is adopted (`RECOVERED`), a
-  proven-absent effect leads to a new attempt with the same operation identity, and an
-  unknown outcome of a non-idempotent operation (e.g., `deploy`) parks the task
-  (`AMBIGUOUS_OUTCOME` → workflow `BLOCKED`) for human resolution — never an automatic
-  re-run.
+- Every phase occurrence is re-entrant through persisted `phase_runs`. Startup atomically
+  claims expired work for recovery, advances the fencing epoch and reconciles all ambiguous
+  side-effecting outcomes. `EffectFound` is adopted only with validated output;
+  `NoEffect` may retry within `max_attempts`; bounded `InProgress` waits; `Unknown` parks.
+  This protocol applies to normal timeout/connection/response loss and fail-after-effect,
+  not only lease expiry.
+- Cancellation persists intent, stops claims, fences workers, attempts cooperative cancel
+  and reconciles effects. `CANCELLED` is terminal only after quiescence or explicit durable
+  parking of unresolved effects.
 - Multiple workflows run concurrently by construction: all state is keyed by
   `workflow_id`; the worker pool claims tasks across workflows.
 - Connector instances are shared, environment-bound, and stateless per call; rate limits

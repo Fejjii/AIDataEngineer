@@ -1,29 +1,34 @@
-# DE-ADR-016 — Approvals bound to artifact hashes
+# DE-ADR-016 — Typed approval subjects with complete binding
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1)
+- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1, DE 001R2A)
 
 ## Context
 Production/staging deploys, destructive actions, flagged designs and cost overruns require
 human approval. An approval must not be reusable for different content.
 
 ## Decision
-`Approval` records reference workflow, task, kind (`DESIGN | COST | GIT | DEPLOY |
-DESTRUCTIVE`), requested permission, and the sha256 of every artifact the action would
-use. Hashes are re-verified at decision time and at execution time; any change invalidates
-the approval. Approvals expire (default 7 days). Approver roles are distinct from
-requesters; production approvals (when enabled) require a distinct role. The workflow
-parks in `APPROVAL_REQUIRED` and resumes to a kind-specific state.
+Approval subjects are a discriminated union:
 
-An approval is bound to one **logical operation** (the task's `idempotency_key`), not to
-one execution attempt (DE 001R1): retries and crash reconciliation of the same operation
-with unchanged artifact hashes are covered; a new operation needs a new approval. Approval
-eligibility is by permission membership (`STAGING_DEPLOY`; `DESTRUCTIVE` in DEV), never by
-rank.
+- `OperationApproval`: operation key, resolved-input digest, artifact/provenance closure,
+  capability/connector identity and versions, target, permission, relevant external-state
+  digest and expiry;
+- `DesignApproval`: design/validation/invariant hashes and expiry, with no permission;
+- `BudgetIncreaseApproval`: ledger scope/version, unit, prior cap, explicit authorized new
+  cap and delta, and expiry.
+
+Operation approval covers attempts/reconciliation only while every bound field remains
+identical. All fields are rechecked at decision and before an attempt. Design approval is
+acceptance evidence, never a grant. Budget approval only updates the cap atomically.
+
+One policy gate may require multiple subjects. Execution waits for all mandatory approvals.
+Any rejection immediately prevents execution, invalidates sibling pending requirements and
+follows subject-specific routing in `docs/PERMISSION_MODEL.md` §4. Decisions require a
+trusted principal with approver role; production remains disabled in V1.
 
 ## Alternatives
 - Approve "the workflow" once: rejected — content can change after approval.
 - Approve via chat message to the agent: rejected — not an authenticated, auditable action.
 
 ## Consequences
-- Repairs after an approval request invalidate the approval automatically.
-- UI must show exactly what is approved (action, target, artifacts, validation, cost).
+- Repairs or relevant external-state changes invalidate operation approval automatically.
+- UI must render each subject and aggregate status independently.

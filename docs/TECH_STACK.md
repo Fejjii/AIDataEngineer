@@ -25,10 +25,10 @@ compatibility (notably dbt adapter ↔ Python version); this document fixes the 
 | Agent framework | **None** | See `docs/AGENT_MODEL.md` | LangChain, CrewAI, AutoGen, Semantic Kernel (autonomy and abstraction not wanted) |
 | LLM abstraction | **Own thin gateway**: `LLMProvider` protocol + adapters using official provider SDKs; structured output via JSON schema; versioned prompt files rendered with **Jinja2 sandboxed** templates; replay fake | Minimal surface; provider swap = one adapter; prompts inspectable and versioned | LangChain (unneeded abstraction), LiteLLM (useful multi-provider proxy; may be adopted later as an adapter if >2 providers), Instructor (nice, but Pydantic + provider JSON-schema modes already cover it) |
 | Structured output enforcement | Provider JSON-schema/tool-call mode where available; fallback: JSON extraction + Pydantic validation + one repair retry | Correctness | Free-text parsing |
-| Background execution | **In-process asyncio worker loop** claiming tasks from PostgreSQL (`FOR UPDATE SKIP LOCKED`), leases, idempotency keys; `aide worker` can run as a separate process of the same image | No extra broker; durable; enough for ≤ 5 concurrent workflows | Celery + Redis/RabbitMQ (two more services, at-least-once semantics need the same idempotency work anyway), RQ, Dramatiq, arq (need Redis) |
+| Background execution | In-process asyncio worker with PostgreSQL phase runs, advisory transaction serialization, `SKIP LOCKED`, renewable leases/fencing epochs and all-path reconciliation; separable `aide worker` | Explicit durable safety at MVP scale without broker | Celery/Redis, Temporal (deferred) |
 | Queueing | **PostgreSQL tables** (see above) | Same | Redis, Kafka, SQS |
 | Blocking vendor SDK calls | `asyncio.to_thread` / bounded thread pool per connector | Snowflake connector is sync | Rewriting drivers |
-| SQL parsing / dialects | **sqlglot** | Parse, classify, transpile (Snowflake → DuckDB for fakes), column lineage | sqlparse (no AST), vendor parsers |
+| SQL parsing / dialects | **sqlglot** plus dialect-versioned safe function/construct tables and parse/render/reparse checks | AST, canonical scope, fail-closed Snowflake safety, fake transpilation | sqlparse (no AST), regex |
 | Warehouse fake | **DuckDB** in-process, loaded from synthetic fixtures; Snowflake SQL transpiled | Offline demo and CI; fast | Dockerized Postgres as "fake Snowflake" (dialect gap larger) |
 | Snowflake client | `snowflake-connector-python` | Official | Snowpark (heavier; not needed for SQL execution) |
 | dbt | `dbt-core` + `dbt-snowflake` via `dbtRunner` in a subprocess | Programmatic invocation with artifacts; process isolation | dbt Cloud API (external dependency; V2 option), SQLMesh (alternative transformation platform — connector candidate, not V1) |
@@ -44,7 +44,8 @@ compatibility (notably dbt adapter ↔ Python version); this document fixes the 
 | Static analysis | **ruff** (lint + format), **mypy --strict**, `import-linter`, `gitleaks` (secret scan), `bandit` (optional) | Fast, comprehensive | black+isort+flake8 (three tools) |
 | Docker | `Dockerfile` (multi-stage, uv) for the app; `docker-compose.yml` for PostgreSQL (+ optional Jaeger); frontend built into the image or served separately in dev | Reproducible local and CI | Kubernetes manifests (not now) |
 | CI | **GitHub Actions**: lint, typecheck, unit + integration (PostgreSQL service), offline evaluation scenarios, secret scan, Docker build, frontend lint/typecheck/build; live connector tests opt-in via environment secrets on `workflow_dispatch` | Required checks for `main` | Others |
-| Secrets handling | env vars via pydantic-settings `SecretStr` + `SecretRef` indirection; `.env` ignored, `.env.example` tracked; GitHub Actions secrets for CI; cloud secret manager adapter later | Simple, safe | Vault now (overkill) |
+| Authentication | Local account (Argon2id hash ref) + opaque PostgreSQL session, HttpOnly same-site cookie, CSRF; `PrincipalRef` and server-derived grants | Credible single-operator MVP without enterprise IAM | Caller-supplied grants; browser API token; OIDC now |
+| Secrets handling | `SecretRef`/`SecretStr`; separate non-enumerable resolver scopes for connector and LLM provider adapters; `.env` ignored | Simple least-privilege boundary | Vault now (overkill) |
 | Connector SDK | Internal `aide.connectors.base` (Protocol, `ConnectorSpec`, `@implements`, contract test kit, fake base classes) | Adding a connector = implement protocol + tests | External plugin frameworks (pluggy) — may adopt when out-of-repo connectors appear |
 | Synthetic data | Python generator with **Faker** + seeded RNG → CSV/Parquet + PostgreSQL load + Snowflake `COPY` loader | Deterministic fixtures | Hand-written CSVs (too small), dbt seeds only (volume) |
 | Task/CLI | **Typer** CLI (`aide api`, `aide worker`, `aide eval`, `aide connectors check`, `aide demo load`) | Typed CLI | argparse |
@@ -74,6 +75,8 @@ Configuration switches: `AIDE_MODE=offline|live` (fakes vs real connectors),
 - `uv.lock` committed; dependabot/renovate for updates; adapter compatibility checked in CI
   by running `dbt --version` and the fake dbt connector contract tests.
 - Frontend: Node LTS pinned in `.nvmrc`; `pnpm` with lockfile.
+- Capability/input/output and connector implementation versions are pinned per phase run;
+  unsupported in-flight versions park rather than silently upgrade.
 
 ---
 

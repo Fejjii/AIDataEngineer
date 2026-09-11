@@ -1,14 +1,15 @@
 # DE-ADR-021 — Parallel development lanes and unlock milestones
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001
+- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R2A)
 
 ## Context
 DE-ADR-006 caps parallel agents at 2 (3 when clearly independent). The architecture must
 say *when* that is safe for product work and *what* may never overlap.
 
 ## Decision
-Waves defined in `docs/IMPLEMENTATION_PLAN.md` §4. Two agents become safe after DE 002 and
-DE 003 merge (skeleton, contracts, fakes, CI, import-linter). Three agents become safe after
+Wave 0 is sequential: DE 002A contract kernel + minimal CI → DE 002B durable
+phase-run/fencing/recovery kernel → DE 002C offline safe-SQL slice → DE 003 Docker and CI
+expansion. Two agents become safe only after all four merge. Three agents become safe after
 Wave 2 merges (connector protocol proven by Snowflake + dbt, phase templates stable).
 High-conflict areas (`orchestration/`, `domain/`, `capabilities/`, `tools/`, `policy/`,
 `approvals/`, `secrets/`, migrations, CI, architecture docs) always have one writer.
@@ -20,5 +21,6 @@ Integration order within a wave is recorded in `.ai/TASKS.md`; later lanes refre
 - No parallelism: rejected — MVP timeline.
 
 ## Consequences
-- The first two tasks are deliberately sequential and foundational.
+- The complete foundational sequence is single-writer; CI protects pure contracts before
+  persistence or slice implementation begins.
 - Security lane (DE 011) runs concurrently with feature lanes but owns its directories exclusively.

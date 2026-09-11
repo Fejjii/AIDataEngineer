@@ -1,6 +1,6 @@
 # DE-ADR-022 — In-process worker with PostgreSQL task queue
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1)
+- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1, DE 001R2A)
 
 ## Context
 Tasks (LLM calls, dbt runs up to 15 min, Snowflake queries) must run asynchronously,
@@ -12,13 +12,23 @@ LOCKED`, sets a lease, executes with timeout, writes results. Blocking vendor SD
 in bounded thread pools; dbt runs as subprocesses. The worker runs in the API process by
 default (`AIDE_WORKER_INPROCESS=true`) and can run as `aide worker` separately.
 
-Retry safety (DE 001R1): the operation identity (`idempotency_key`) is fixed at task
-creation and shared by all attempts; the attempt intent row is committed before the handler
-runs and the identity is propagated into the external system. On lease expiry the worker
-**reconciles before re-executing** (`docs/STATE_MODEL.md` §4.6): a found effect is adopted,
-a proven-absent effect is retried with the same key, and an unknown outcome of a
-non-idempotent capability (`deploy`) parks the task for a human — it is never repeated
-automatically. Immutable artifacts complete the picture.
+Operation identity exists only after full input materialization/validation and is shared by
+all attempts. Claim increments a monotonic fencing epoch; workers renew heartbeats and may
+finalize only under matching owner, epoch, attempt and workflow cancellation epoch.
+Recovery ownership is acquired atomically by advancing the epoch, so late expired workers
+cannot overwrite replacement state.
+
+Retry safety is evidence-based on every failure path. Definite pre-dispatch or authoritative
+no-effect rejection may retry within `max_attempts`. Timeout after dispatch, connection or
+response loss, fail-after-effect, crash and lease expiry are ambiguous for side effects and
+must reconcile first. `EffectFound` requires schema-valid output; `NoEffect` permits a new
+attempt; `InProgress` renews bounded recovery; `Unknown` or exhausted `InProgress` parks.
+No ambiguous side effect is blindly repeated.
+
+Cancellation persists intent, stops claims, advances fencing, attempts cooperative cancel
+and reconciles. Terminal cancellation requires quiescence or explicit durable parking of
+unresolved effects. A human cannot mark success without verified or imported schema-valid
+output.
 
 ## Alternatives
 - Celery/RQ/arq + Redis: rejected — an extra broker for ≤ 5 workflows; at-least-once

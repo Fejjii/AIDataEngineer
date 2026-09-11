@@ -16,7 +16,7 @@ Status values: PROPOSED (awaiting independent review) · ACCEPTED · SUPERSEDED 
 | [DE-ADR-013](DE-ADR-013-capability-abstraction.md) | Capability / tool / connector abstraction | PROPOSED |
 | [DE-ADR-014](DE-ADR-014-connector-architecture.md) | Connector protocol with real + fake implementations and status | PROPOSED |
 | [DE-ADR-015](DE-ADR-015-deterministic-policy.md) | Deterministic policy engine and SQL safety classifier | PROPOSED |
-| [DE-ADR-016](DE-ADR-016-approval-system.md) | Approvals bound to artifact hashes | PROPOSED |
+| [DE-ADR-016](DE-ADR-016-approval-system.md) | Typed approval subjects with complete binding | PROPOSED |
 | [DE-ADR-017](DE-ADR-017-llm-abstraction.md) | Thin LLM gateway, structured outputs, versioned prompts | PROPOSED |
 | [DE-ADR-018](DE-ADR-018-observability.md) | Observability: audit, telemetry tables, OpenTelemetry, structlog | PROPOSED |
 | [DE-ADR-019](DE-ADR-019-evaluation.md) | In-repo evaluation harness; no LLM judge for pass/fail | PROPOSED |
@@ -27,8 +27,14 @@ Status values: PROPOSED (awaiting independent review) · ACCEPTED · SUPERSEDED 
 | [DE-ADR-024](DE-ADR-024-frontend.md) | Minimal Vite + React + TypeScript SPA | PROPOSED |
 | [DE-ADR-025](DE-ADR-025-python-toolchain.md) | Python 3.12, uv, ruff, mypy strict, pytest | PROPOSED |
 | [DE-ADR-026](DE-ADR-026-contract-stability.md) | Contract stability: baseline in DE 002, compatible evolution afterwards | PROPOSED |
+| [DE-ADR-027](DE-ADR-027-trusted-principal-and-grants.md) | Trusted local principal and server-authorized workflow grants | PROPOSED |
 
 Amended by DE 001R1 (2026-09-11): DE-ADR-011 (operation vs attempt identity, `PARKED`),
 DE-ADR-014 (`allowed_permissions`, `reconcile`), DE-ADR-015 (permission sets, denial
 routing), DE-ADR-016 (approval bound to operation identity), DE-ADR-022
 (reconcile-before-retry), DE-ADR-024 (wording).
+
+Amended by DE 001R2A (2026-09-11): DE-ADR-011, 013–018, 021, 022 and 026; added
+DE-ADR-027. Changes harden materialization identity, phase serialization, fencing,
+ambiguous reconciliation, policy aggregation, typed approvals, trusted grants, versioning
+and DE 002 sequencing without changing the modular-monolith thesis.

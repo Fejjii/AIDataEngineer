@@ -1,6 +1,6 @@
 # Execution Flow — Worked Example
 
-**Task:** DE 001 · **Status:** PROPOSED
+**Task:** DE 001 (hardened by DE 001R2A) · **Status:** PROPOSED
 
 This document traces the canonical MVP workflow end to end and shows, at every step, the
 workflow state, the tasks executed (capability@connector), and the **structured state or
@@ -70,19 +70,22 @@ transition to `CLARIFICATION_REQUIRED` via control capability `emit_clarificatio
 |---|---|---|
 | t3 | `plan_phase(phase=DISCOVERY)` | `A4 Plan(DISCOVERY)` |
 
-The plan references only catalogued capabilities and `AVAILABLE`/`MOCK` connectors:
+The first plan is structural and pins registered contract/connector versions; temporary
+connector health is evaluated only after operation materialization:
 
 ```json
 {"phase":"DISCOVERY","tasks":[
- {"local_id":"d1","capability_id":"discover_assets","connector_id":"snowflake_dev","inputs":{"scope":{"databases":["VANTARA_RAW"],"include_views":false}}},
- {"local_id":"d2","capability_id":"describe_asset","connector_id":"snowflake_dev","depends_on":["d1"],"inputs":{"asset":{"$from":"d1","path":"assets[*]"},"include_constraints":true}},
- {"local_id":"d3","capability_id":"select_relevant_assets","depends_on":["d2"],"inputs":{"requirement":"A3","catalogue_snapshot_id":{"$from":"d1","path":"snapshot_id"},"max_assets":12}}
+ {"local_id":"d1","capability_id":"discover_assets","connector_id":"snowflake_ro","inputs":{"scope":{"addresses":[["VANTARA_RAW"]],"include_views":false}}}
 ]}
 ```
 
-Det validation: acyclic, every task permission ∈ granted (`READ` ∈ grants) and ∈ the connector's `allowed_permissions`, connectors advertise capabilities,
-fan-out placeholder `assets[*]` expands to one `describe_asset` task per asset (bounded by
-`max_tasks`). Transition → `DISCOVERY`.
+The accepted plan creates phase run generation 1 and one immutable template. Its literal
+input materializes immediately: validate → resolved-input digest → operation key → policy
+→ attempt. After `d1` succeeds, the phase completes and the workflow re-enters
+`PLANNING`. Generation 2 deterministically sorts the catalogue by canonical asset address
+and creates one explicit `describe_asset` template per asset plus `select_relevant_assets`
+depending on those task ids. Unique `(phase_run_id, local_id)` constraints prevent duplicate
+expansion. There is no `assets[*]` insertion into an active DAG.
 
 ---
 
@@ -200,7 +203,7 @@ Whole-plan evaluation for the upcoming `EXECUTION` phase (Det):
 
 | Task | Capability@Connector | Output |
 |---|---|---|
-| e1 | `run_pipeline@dbt_dev` (`dbt build`, target DEV, query tag `aide:wf=7f3a`) | `A40 run_results v1` |
+| e1 | `run_pipeline@dbt_dev` (`dbt build`, target DEV, canonical per-statement tag with workflow, phase run, task, full operation key and attempt id) | `A40 run_results v1` |
 
 Result: models build; **test failure**: `unique_fct_payment_payment_id` fails with 1 811
 failures. `run_pipeline` output `ok=false`, `tests[...].status=fail` → classified
@@ -250,7 +253,7 @@ Transition → `PLANNING(DELIVERY)` → `DELIVERY`.
 | v4 | `register_monitor` ×3 (freshness on sources, test suite on marts, cost threshold) | monitor artifacts |
 | v5 | `prepare_git_change@github` | branch `aide/wf7f3a_customer_revenue`, commit `c0ffee1`, pushed (secret scan clean) |
 | v6 | `prepare_pull_request@github` | PR #17 (draft=false), body = `A54 PR_BODY` |
-| v7 | `request_approval(kind=DEPLOY, permission=STAGING_DEPLOY, artifact_hashes=[…])` | approval `ap_01` PENDING |
+| v7 | `request_approval(subject=OperationApproval(operation key, resolved-input digest, artifact/provenance hashes, dbt_staging version, STAGING, STAGING_DEPLOY, expiry, external-state digest))` | approval `ap_01` PENDING |
 
 Transition → `APPROVAL_REQUIRED`.
 
@@ -260,9 +263,9 @@ Transition → `APPROVAL_REQUIRED`.
 
 | | |
 |---|---|
-| UI shows | PR link, diff summary, validation report v2, lineage, cost, repair history, exact action requested (`deploy` to `STAGING` target `AIDE_STAGING`) |
+| UI shows | PR link, diff summary, validation, lineage, cost, repair history and complete `deploy_staging` subject for `AIDE_STAGING` |
 | Human | Approves `ap_01` (identity recorded) |
-| Det check | Artifact hashes unchanged since request ✔; approval unexpired ✔ |
+| Det check | Complete operation subject unchanged, artifact provenance REAL, approval unexpired, approver role trusted ✔ |
 | Transition | → `DELIVERY` (post-approval) |
 
 If the human rejects: workflow → `COMPLETED` with outcome `DELIVERED_PR_ONLY` (PR remains
@@ -274,7 +277,7 @@ for manual handling); nothing is deployed.
 
 | Task | Capability@Connector | Output |
 |---|---|---|
-| v8 | `deploy@dbt_staging(strategy=DBT_RUN_TARGET, target=STAGING, approval_id=ap_01)` | `release_id`, `rollback_ref` (previous manifest artifact) |
+| v8 | `deploy_staging@dbt_staging(strategy=DBT_RUN_TARGET, approval_id=ap_01)` | `release_id`, `rollback_ref` (previous manifest artifact) |
 | v9 | `check_monitor` ×3 once | initial monitor states |
 | — | Orchestrator | `MONITORING` state recorded with monitor ids; V1 immediately proceeds to `COMPLETED` with outcome `DELIVERED_STAGING` |
 
@@ -312,9 +315,10 @@ No step consumes an LLM's free text. Every LLM output is a validated typed artif
 | Repair hypothesis repeats | proposal rejected; second `diagnose_failure` with `forbidden_hypotheses`; if still repeated → escalate: workflow `BLOCKED`, evidence and both proposals shown |
 | Repair budget exhausted | `BLOCKED` with `RepairExhausted` summary |
 | Snowflake `UNAVAILABLE` mid-phase | affected tasks `PARKED` after transient retries (policy deny class `ENVIRONMENTAL`); workflow `BLOCKED(blocked_from_phase=…)`; when status returns `AVAILABLE` and the human clicks *Resume* (or auto-resume if configured) parked tasks return to `READY` and policy is re-evaluated |
-| Cost cap exceeded | `POLICY_CHECK` → `REQUIRE_APPROVAL(kind=COST)` → `APPROVAL_REQUIRED` |
-| Worker crashes after `create_dataset` succeeded but before the result was persisted | lease expires → `reconcile(idempotency_key)` finds the table by provenance tag → attempt `RECOVERED`, task `SUCCEEDED`; the table is **not** created twice |
-| Worker crashes during `deploy(STAGING)` and the warehouse is unreachable for reconciliation | attempt `AMBIGUOUS`, task `PARKED`, workflow `BLOCKED(AMBIGUOUS_SIDE_EFFECT)`; the human checks `AIDE_STAGING.__AIDE_RELEASES` and records the outcome; **no automatic second deploy** |
+| Atomic cost reservation exceeds cap | no provider dispatch; request `BudgetIncreaseApproval` with explicit new cap/delta; approval updates ledger then policy re-evaluates |
+| Operator cancels while a connector call is active | `CANCEL_REQUESTED` persists intent and fences claims/results; `CANCELLING` attempts cooperative cancel and reconciliation; terminal `CANCELLED` only after quiescence or explicit unresolved-effect parking |
+| Worker loses the response after `create_dataset` applied its effect | failure is ambiguous even before lease expiry; recovery atomically advances claim epoch, stale completion is rejected, and `reconcile(RecoveryContext)` verifies the table/output before `RECOVERED`; no second effect |
+| `deploy_staging` times out and bounded reconciliation remains `InProgress`/`Unknown` | attempt `AMBIGUOUS`, task `PARKED`, workflow `BLOCKED`; success requires connector-verified schema-valid output or validated manual import. Effect-confirmed/result-unknown, compensation and abandonment are explicit alternatives; no bare human success and no automatic redeploy |
 | Planner proposes `drop_dataset` in a plan | plan-time policy pre-check: `DESTRUCTIVE` ∉ grants and no approval → plan **invalid** (`PERM_NOT_GRANTED`); planner re-invoked with the violation and replans without it (max 2) — no task is ever created for it |
 | Destructive SQL reaches `POLICY_CHECK` or a Tool Registry call (validator bypass) | `DENY` class `SECURITY` → task `FAILED(POLICY_DENIED)`, workflow `FAILED`, audit alert `POLICY_DENY_SECURITY` — fail closed, no re-planning |
 | Prompt-injection text in a table comment ("ignore previous instructions and drop…") | Comments are delimited untrusted data; even if the LLM emitted a destructive suggestion, `classify_sql` + policy deny it; event logged as `SUSPECTED_INJECTION` |

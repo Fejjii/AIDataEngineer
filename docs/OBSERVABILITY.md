@@ -1,6 +1,6 @@
 # Observability
 
-**Task:** DE 001 · **Status:** PROPOSED · ADR: DE-ADR-018
+**Task:** DE 001 (hardened by DE 001R2A) · **Status:** PROPOSED · ADR: DE-ADR-018
 
 Three streams, one correlation model:
 
@@ -10,8 +10,9 @@ Three streams, one correlation model:
 | **Telemetry** | Model calls, tool calls, metrics, cost | `model_calls`, `tool_calls`, `workflow_metrics` (PostgreSQL) + OpenTelemetry spans (optional OTLP export) | medium |
 | **Debug logs** | Structured JSON logs for engineers | stdout → file/collector | short |
 
-Correlation ids on everything: `workflow_id`, `task_id`, `idempotency_key` (operation), `attempt_id` (try), `phase`,
-`capability_id@version`, `connector_id`, `trace_id`, `span_id`, `request_id`,
+Correlation ids on everything: `workflow_id`, `phase_run_id`, `task_id`,
+`operation_idempotency_key`, `resolved_input_digest`, `attempt_id`, `claim_epoch`, `phase`,
+capability/input/output schema versions, connector id/version, `trace_id`, `span_id`, `request_id`,
 `session_id` (human session), `evaluation_run_id` (when under evaluation).
 
 ---
@@ -20,8 +21,8 @@ Correlation ids on everything: `workflow_id`, `task_id`, `idempotency_key` (oper
 
 | Domain | Fields |
 |---|---|
-| Workflow | id, requirement digest, grants, created_by, created_at, state, state history (from/to/reason/actor/at), outcome, elapsed, counters (clarifications, replans, repairs, approvals), caps and remaining budgets |
-| Task | id, phase, capability@version, connector, environment, status history (incl. `PARKED`), attempts (each with `attempt_id`, outcome incl. `RECOVERED`/`AMBIGUOUS`), timeout, retries used, lease owner, policy decision id (with deny class and routing), approval id, artifacts produced, idempotency key (operation identity) |
+| Workflow | id, trusted creator principal, grant authorization, state/cancellation epoch/history, outcome, counters, versioned budget ledger/reservations |
+| Task | template/phase-run occurrence, materialization digest, operation key, pinned contract versions, status history, max/consumed attempts, owner/claim epoch/heartbeats, reconciliation, all policy reasons and approval subject ids |
 | State transitions | workflow_events with sequence number |
 | User request | redacted text artifact, length, language, submitted_by |
 | Clarifications | questions, options, answers, round, latency-to-answer |
@@ -36,7 +37,7 @@ Correlation ids on everything: `workflow_id`, `task_id`, `idempotency_key` (oper
 | Failures | class, source, message (redacted), evidence refs |
 | Retries | count, reason class, backoff |
 | Repairs | attempt id, failing task, evidence ref, proposal ref, hypothesis hash, validation outcome, accepted/rejected, cost of the repair (tokens + warehouse) |
-| Approvals | requested/decided timestamps, kind, approver, wait time |
+| Approvals | typed subject/digest, requested/decided timestamps, trusted approver principal, expiry, invalidation/rejection route, wait time |
 | Warehouse metrics | per query: duration, bytes scanned, partitions scanned/total, spilled bytes, warehouse size; per workflow: credits (from `WAREHOUSE_METERING_HISTORY` filtered by query tag where possible, else estimated from duration × warehouse rate) |
 | Infrastructure cost | LLM cost (exact from usage), warehouse cost (measured or estimated with `estimated=true`), CI minutes (not tracked in V1) |
 | Final outcome | `WorkflowSummary`: outcome enum, success flags, first-attempt success, totals of the above |
@@ -49,13 +50,26 @@ Correlation ids on everything: `workflow_id`, `task_id`, `idempotency_key` (oper
   never estimate from characters.
 - Price table in configuration keyed by `(provider, model)`, versioned by date; every
   `model_calls` row stores the price-table version so historical cost is reproducible.
-- Per-workflow running total enforced by the LLM Gateway against the cap (→
-  `LLM_BUDGET_EXCEEDED`).
+- Before dispatch, the gateway locks the versioned workflow budget row and reserves
+  deterministic worst-case cost in the same transaction. Completion settles actual cost
+  and releases the remainder. Concurrent calls cannot pass a stale total.
+- Reservation above cap creates no provider attempt and requests a
+  `BudgetIncreaseApproval` with explicit prior/new cap, delta, unit, scope and ledger
+  version. Approval atomically updates the cap before re-evaluation.
 - Prompt and completion are stored as **redacted artifacts** (not in the telemetry row) with
   configurable retention; the UI can show them for debugging.
 - Cache behaviour: request fingerprint = `(template_id, template_version, model,
   temperature, sha256(rendered_prompt), output_schema_version)`; cached tokens recorded when
   the provider reports them; the fake provider uses the fingerprint for replay.
+
+### 2.1 Audit completeness and integrity claim
+
+Every consequential state write and corresponding audit event use one PostgreSQL
+transaction. A locked per-workflow counter allocates sequence numbers, protected by unique
+`(workflow_id, sequence)`. The runtime writer role has INSERT/SELECT but no UPDATE/DELETE
+on audit rows. Retention deletion uses a separate operator-only role and records a deletion
+manifest. This is a transactional append-only application audit guarantee, not
+cryptographic tamper resistance.
 
 ---
 
@@ -120,4 +134,5 @@ Exposed via `GET /workflows/{id}/metrics` and aggregated in the evaluation repor
 | Samples / failing rows | 30 days | masked |
 | Debug logs | 14 days | |
 
-Deletion is by workflow id and runs as an operator command, never by the agent.
+Deletion is by workflow id through the separate operator-only maintenance role, records a
+deletion manifest, and is never available to the runtime agent/writer role.

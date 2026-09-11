@@ -1,6 +1,6 @@
 # Capability Model
 
-**Task:** DE 001 · **Status:** PROPOSED · ADR: DE-ADR-013
+**Task:** DE 001 (hardened by DE 001R2A) · **Status:** PROPOSED · ADR: DE-ADR-013
 
 The orchestrator reasons about **capabilities**, never about vendors. A capability is a
 typed, versioned contract. A **tool** is the binding of a capability to an implementation
@@ -36,7 +36,7 @@ class CapabilitySpec(BaseModel, frozen=True):
     validators: tuple[ValidatorId, ...]  # deterministic output validators
     audit: AuditSpec                     # which input/output fields are recorded, redaction
     connector_requirement: ConnectorRequirement  # NONE | REQUIRED(kind) | OPTIONAL(kind)
-    idempotent: bool                     # True: re-execution converges, safe after crash; False: never auto-repeated after an ambiguous attempt (docs/STATE_MODEL.md §4.6)
+    effect_semantics: EffectSemantics    # SIDE_EFFECT_FREE | EXTERNALLY_DEDUPLICATED | PROVEN_CONVERGENT | NON_IDEMPOTENT
     cost_class: Literal["free", "warehouse", "llm", "external_api"]
 ```
 
@@ -48,8 +48,13 @@ Rules:
   and `required_permission = READ` — they can never cause an external effect by themselves.
 - `kind = control` capabilities (`request_approval`, `emit_clarification`) act on
   workflow state only.
-- Versioning: `id@version` is recorded on every task and audit event. Two versions may
-  coexist during migration; the planner only sees the latest.
+- Versioning: `id@version` plus input/output schema versions are recorded on each phase
+  contract snapshot, materialized task and audit event. The planner sees the snapshot
+  selected for its phase, not an unpinned "latest" view. Connector handlers register the
+  exact contract versions or bounded compatible ranges they implement.
+- `effect_semantics` is invocation safety metadata, not permission to blind-retry. Every
+  ambiguous side-effecting failure reconciles first. `PROVEN_CONVERGENT` requires a
+  validator over the materialized input; dbt runs default to `NON_IDEMPOTENT`.
 
 ---
 
@@ -120,7 +125,8 @@ Full per-capability contracts: `docs/TOOL_CONTRACTS.md`.
 |---|---|---|---|---|---|
 | `prepare_git_change` | Branch, commit artifact set, push to remote | GW | M | IF_POLICY_FLAGS | REQUIRED(vcs) |
 | `prepare_pull_request` | Open/update PR with generated body | GW | M | IF_POLICY_FLAGS (default: NEVER) | REQUIRED(vcs) |
-| `deploy` | Promote artifact set to a named target environment | SD / PW | H / C | ALWAYS | REQUIRED(transformation\|orchestration) |
+| `deploy_staging` | Promote an artifact set to STAGING | SD | H | ALWAYS | REQUIRED(transformation\|orchestration) |
+| `deploy_production` | Promote an artifact set to PROD; registered but disabled in V1 | PW | C | DISABLED | REQUIRED(transformation\|orchestration) |
 | `register_monitor` | Persist monitor definitions (freshness, tests, cost thresholds) as artifacts | DW | L | NEVER | OPTIONAL |
 | `check_monitor` | Evaluate a registered monitor once | R | L | NEVER | REQUIRED |
 
@@ -133,7 +139,7 @@ Full per-capability contracts: `docs/TOOL_CONTRACTS.md`.
 | `propose_model_design` *(reasoning)* | Entity mapping and design details inside a Det-selected architecture class | R | M | NEVER | NONE |
 | `summarize_for_human` *(reasoning)* | Explain state, decisions, failures in plain language | R | L | NEVER | NONE |
 | `emit_clarification` *(control)* | Park workflow in `CLARIFICATION_REQUIRED` with typed questions | R | L | NEVER | NONE |
-| `request_approval` *(control)* | Create approval request bound to artifact hashes | R | L | — | NONE |
+| `request_approval` *(control)* | Create typed operation/design/budget approval subjects after policy aggregation | R | L | — | NONE |
 
 ---
 
@@ -156,36 +162,53 @@ Full per-capability contracts: `docs/TOOL_CONTRACTS.md`.
 ## 4. Lifecycle of a capability call
 
 ```text
-Task claimed
- → Tool Registry resolves (capability_id@version, connector_id)
- → input validated against input_schema                      (Det)
+Task template accepted inside a phase contract snapshot
+ → dependency outputs become immutable
+ → references resolved; input validated and canonicalized    (Det)
+ → resolved input digest + materialized operation identity persisted atomically
+ → Tool Registry resolves the pinned (capability@version, connector@version)
  → Policy Engine evaluates → ALLOW | REQUIRE_APPROVAL | DENY   (Det, persisted with deny_class + routing)
      REQUIRE_APPROVAL → task AWAITING_APPROVAL, workflow APPROVAL_REQUIRED
      DENY, class ENVIRONMENTAL → task PARKED, workflow BLOCKED (operator resolves, then resume re-evaluates)
      DENY, class SCOPE | SECURITY → task FAILED(POLICY_DENIED), workflow FAILED (fail closed; SECURITY raises audit alert)
      (routing table: docs/PERMISSION_MODEL.md §3.1; never retried, never re-planned around at execution time)
  → pre-validators (e.g. classify_sql for any SQL-bearing input)
- → execute with timeout, cancellation, resource caps           (connector or reasoner)
+ → typed approvals, if required, bind to the materialized operation
+ → attempt id + lease fencing epoch persisted before dispatch
+ → execute with timeout, heartbeat, cancellation, resource caps (connector or reasoner)
  → output validated against output_schema + validators          (Det)
  → failure classified if any                                   (Det)
  → audit event + telemetry written (redacted)
  → result persisted on task
 ```
 
+For a side-effecting call, timeout, connection loss, response loss, crash, lease expiry
+and fail-after-effect are `OUTCOME_AMBIGUOUS` unless authoritative evidence proves no
+dispatch/effect. Reconciliation is mandatory before another attempt
+(`docs/STATE_MODEL.md` §4.7).
+
 ---
 
 ## 5. Registry behaviour
 
-- **Registration** is declarative at import time (`@capability(spec)`); duplicate ids fail startup.
+- **Registration** is declarative at import time (`@capability(spec)`); duplicate
+  `(id, version)` pairs fail startup.
 - **Catalogue for the planner** contains only: id, purpose, kind, permission, risk, input
   field names. It never contains connector details or secrets.
-- **Compatibility check** at startup: every connector's advertised capability handler
-  must accept the capability's input schema version, and the capability's
+- **Compatibility check** at startup: every connector advertises
+  `CapabilityImplementation(capability_id, supported_contract_versions,
+  input_schema_versions, output_schema_versions)` and its handler must accept the pinned
+  versions. The capability's
   `required_permission` must be a member of the connector's `allowed_permissions`
   (`docs/PERMISSION_MODEL.md` §3 rule R0); side-effecting capabilities must have a
   `reconcile` implementation.
 - **Introspection endpoint** (`GET /capabilities`) exposes the catalogue for the UI and
   evaluation harness.
+- **Upgrade behaviour:** new phase runs select a new immutable contract snapshot. In-flight
+  runs continue on their pinned versions. A deployment must keep those handlers available
+  or park affected work as `CONTRACT_VERSION_UNAVAILABLE`; it must never silently upcast,
+  reinterpret, or rewrite an in-flight task. Explicit schema adapters may be added later
+  as versioned implementations, not migration machinery in DE 002.
 
 ---
 

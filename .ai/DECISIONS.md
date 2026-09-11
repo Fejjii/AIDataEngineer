@@ -79,8 +79,9 @@ DE 000 records operating-system decisions only.
 # Product architecture decisions (DE 001)
 
 Full records: `docs/adr/DE-ADR-0NN-*.md`. Status **PROPOSED** until the operator accepts
-DE 001 (after independent frontier review). Date for all: 2026-09-11. DE 001R1 (same day)
-amended DE-ADR-011, 014, 015, 016, 022, 024 and added DE-ADR-026; amendments are marked below.
+DE 001. DE 001R1 amended DE-ADR-011, 014, 015, 016, 022, 024 and added DE-ADR-026.
+DE 001R2A amended DE-ADR-011, 013–018, 021, 022, 026 and added DE-ADR-027 after
+independent GPT 5.6 Sol High review.
 
 ## DE-ADR-008 — Modular monolith application architecture
 - **Decision:** One Python package `aide`, one image, one PostgreSQL; API + worker in-process (separable). No microservices/Kubernetes.
@@ -95,7 +96,11 @@ amended DE-ADR-011, 014, 015, 016, 022, 024 and added DE-ADR-026; amendments are
 - **Rejected:** orchestrator + autonomous specialist agents; single monolithic prompt.
 
 ## DE-ADR-011 — Workflow = state machine + phase-scoped task DAG
-- **Decision:** Deterministic workflow states with authoritative transition table; per-phase DAG (planner or template), immutable within phase; `SKIP LOCKED` claims, leases. *(Amended DE 001R1)* Each task has a stable operation identity (`idempotency_key`, never including the attempt number) and per-try `TaskAttempt` records; task state `PARKED` for legitimate work that cannot run now; `BLOCKED` resumes into the phase it left; `POLICY_CHECK` routes by deny class.
+- **Decision:** Persist phase occurrence/generation and pinned contract snapshot. Templates
+  have no operation identity; fully resolved validated input precedes digest/key, policy,
+  approval and attempts. Fan-out uses a new planning boundary. PostgreSQL advisory
+  transaction lock serializes phase reduction/advance; dependency outcomes are exhaustive.
+  Cancellation is intent and controlled shutdown before terminal state.
 - **Rejected:** ordered list; whole-workflow static DAG; fully dynamic LLM-driven DAG.
 
 ## DE-ADR-012 — PostgreSQL + SQLAlchemy 2 + Alembic for all state
@@ -103,27 +108,42 @@ amended DE-ADR-011, 014, 015, 016, 022, 024 and added DE-ADR-026; amendments are
 - **Rejected:** SQLite (no SKIP LOCKED), Redis, document store, object storage now.
 
 ## DE-ADR-013 — Capability / tool / connector abstraction
-- **Decision:** Immutable typed `CapabilitySpec`; Tool Registry wrapper enforces validate → policy → execute → validate → audit; connectors advertise capabilities; reasoning capabilities catalogued with same discipline and no external effects.
+- **Decision:** Versioned capability/schema contracts and connector compatibility are
+  pinned per phase. Invocation effect semantics replace `idempotent: bool`. Generic
+  asset/transformation contracts are separated from platform extensions.
 - **Rejected:** vendor-specific tools exposed to planner; free-form function calling over SDKs.
 
 ## DE-ADR-014 — Connector protocol with real + fake and product-visible status
-- **Decision:** Stable protocol; every connector ships real, deterministic fake with fault injection, error mapper, `SecretRef` config, contract tests, README; environment-bound instances with an explicit `allowed_permissions` set (membership, no ordering — *amended DE 001R1*, replaces "permission ceiling") and allow-list; status `AVAILABLE|DEGRADED|UNAVAILABLE|MOCK` (`UNAVAILABLE` parks dependent tasks). *(Amended DE 001R1)* Every connector implements `reconcile(capability, idempotency_key)` for side-effecting capabilities and propagates the operation identity into the external system; fakes support `fail_after_effect`. Fakes on DuckDB via sqlglot.
+- **Decision:** Connectors advertise supported versions and typed health; side effects
+  reconcile from complete immutable context with bounded
+  `EffectFound|NoEffect|InProgress|Unknown`. Artifacts carry REAL/MOCK provenance. Read SQL
+  uses RO identity; canonical query tags carry full operation and attempt identity.
 - **Rejected:** per-test mocks only; replay-only.
 
 ## DE-ADR-015 — Deterministic policy engine and SQL safety classifier
-- **Decision:** Pure-function rule set R0 (startup) + R1–R20 on every call, persisted, fail-closed; sqlglot classifier (unparseable ⇒ destructive); defence in depth with identities and namespaces; property/adversarial tests mandatory. *(Amended DE 001R1)* `PermissionLevel` is one canonical, **unordered** set of nine distinct grants; all checks are set membership (workflow grants ∪ approval; connector `allowed_permissions`); ceilings and rank comparisons are forbidden and tested against. Every deny reason code maps to a deny class with deterministic routing: `ENVIRONMENTAL` → `PARKED`/`BLOCKED`; `SCOPE`/`SECURITY` → fail closed (`FAILED`, audit alert); approval-eligible → `APPROVAL_REQUIRED`. Plan validation runs the rules as a pre-check; no routing around denials once tasks exist.
+- **Decision:** Every applicable denial rule runs; all reasons persist; authoritative
+  severity `SECURITY > SCOPE > ENVIRONMENTAL` drives routing independent of order.
+  Approvals evaluate only with no denial. Policy uses trusted principal/server-derived
+  grants, typed health, transitive provenance, RO read identity and safe
+  function/construct/scope classification. Plan validity is independent of temporary health.
 - **Rejected:** prompt-only guardrails; LLM safety judge; regex-only filtering; ordered permission hierarchy; uniform DENY → FAILED.
 
-## DE-ADR-016 — Approvals bound to artifact hashes
-- **Decision:** Approval kinds `DESIGN|COST|GIT|DEPLOY|DESTRUCTIVE`; bound to artifact sha256; re-verified at decision and execution; expiry; distinct approver roles. *(Amended DE 001R1)* Bound to the logical operation (`idempotency_key`), so retries/reconciliation of the same operation are covered; eligibility by permission membership.
+## DE-ADR-016 — Typed approval subjects with complete binding
+- **Decision:** `OperationApproval`, `DesignApproval`, `BudgetIncreaseApproval` are distinct.
+  Operation binding covers operation/input/artifacts/provenance/capability/connector/target/
+  external state/expiry. Design grants no permission; budget authorizes explicit cap/delta.
+  All simultaneous mandatory subjects approve; rejection has subject-specific routing.
 - **Rejected:** workflow-level approval; chat-based approval.
 
 ## DE-ADR-017 — Thin LLM gateway, structured outputs, versioned prompts
-- **Decision:** Own `LLMProvider` protocol + official SDK adapters; JSON-schema structured output + one repair retry; sandboxed Jinja2 prompt files versioned; redaction; provider-reported usage × versioned price table; replay fake.
+- **Decision:** Thin versioned gateway plus atomic worst-case budget reservation/settlement.
+  Provider adapters use separate scoped, non-enumerable secret resolver views.
 - **Rejected:** LangChain/LlamaIndex; LiteLLM (deferred as adapter); Instructor (unneeded).
 
 ## DE-ADR-018 — Observability: audit, telemetry tables, OpenTelemetry, structlog
-- **Decision:** Append-only `audit_events`; `model_calls`/`tool_calls`/`workflow_metrics`; structlog JSON with redaction; OTel spans with optional OTLP exporter; redacted prompt/completion artifacts with retention.
+- **Decision:** State mutation and audit event commit in one PostgreSQL transaction;
+  locked unique per-workflow sequence; runtime writer cannot update/delete. Claim is
+  transactional application audit, not cryptographic tamper evidence. Telemetry/OTel remain.
 - **Rejected:** Langfuse/LangSmith as primary store; logs only.
 
 ## DE-ADR-019 — In-repo evaluation harness; no LLM judge for pass/fail
@@ -134,10 +154,14 @@ amended DE-ADR-011, 014, 015, 016, 022, 024 and added DE-ADR-026; amendments are
 - **Decision:** Cloud-eligible iff tracked state + fakes/fixtures suffice + no credentials + declared files + isolated branch. LOCAL: DE 002, 005, 008, 012-live, 017, 018, 019. Architecture fully in tracked `docs/`.
 
 ## DE-ADR-021 — Parallel development lanes and unlock milestones
-- **Decision:** Waves per `docs/IMPLEMENTATION_PLAN.md` §4; 2 agents after DE 002 + DE 003 merge; 3 after Wave 2 merges; high-conflict areas single-writer; workstream manifest before multi-agent waves.
+- **Decision:** Sequential foundation is DE 002A kernel+CI → DE 002B recovery persistence
+  → DE 002C slice → DE 003 CI expansion. Two agents only after all merge.
 
 ## DE-ADR-022 — In-process worker with PostgreSQL task queue
-- **Decision:** asyncio worker claims task rows (`SKIP LOCKED`), leases, thread pools for blocking SDKs, subprocess dbt; `aide worker` separable. *(Amended DE 001R1)* Attempt intent is persisted before the handler runs; on lease expiry the worker reconciles through the connector before any re-execution; found effect → adopted (`RECOVERED`); absent → retry with the same operation identity; unknown outcome of a non-idempotent capability (`deploy`) → `AMBIGUOUS_OUTCOME`, parked for a human, never auto-repeated.
+- **Decision:** `SKIP LOCKED` plus renewable lease/claim epoch; owner+epoch finalization;
+  atomic recovery ownership fences stale workers. Every ambiguous side effect reconciles
+  before retry; bounded `InProgress` cannot become absence. Cancellation stops claims,
+  fences results, cancels cooperatively and reconciles before terminal state.
 - **Rejected:** Celery/RQ/arq + Redis; Temporal (deferred); blind re-run after lease expiry.
 
 ## DE-ADR-023 — Bounded self-repair loop
@@ -152,6 +176,17 @@ amended DE-ADR-011, 014, 015, 016, 022, 024 and added DE-ADR-026; amendments are
 - **Decision:** Python 3.12 pinned (re-verify adapter support at DE 002); uv + committed lock; ruff; mypy --strict; import-linter; pytest/asyncio/hypothesis/testcontainers; gitleaks; Node LTS + pnpm pinned.
 - **Rejected:** Poetry/pip-tools; latest Python; black+isort+flake8.
 
-## DE-ADR-026 — Contract stability: baseline in DE 002, compatible evolution afterwards *(DE 001R1)*
-- **Decision:** DE 002 establishes the architecture **baseline** for core contracts (`docs/IMPLEMENTATION_PLAN.md` §5.2), not a permanent freeze. Breaking changes (remove/rename/retype fields, semantic or transition changes, removed enum members) require an ADR + `.ai/DECISIONS.md` entry + higher-tier architecture review. Additive, backward-compatible changes are allowed inside the implementing task when all existing tests remain valid and pass unchanged, and are mirrored into `docs/` in the same PR. Contracts count as exercised after DE 005 and DE 008 merge.
+## DE-ADR-026 — Contract stability: sequenced DE 002 baseline, compatible evolution afterwards
+- **Decision:** DE 002A/B/C baseline pure, recovery and composition contracts only after
+  their respective tests. Breaking changes require ADR + decision entry + architecture
+  review. Additive capability changes need normal review/docs unless semantics or a
+  boundary change. In-flight phase runs remain pinned.
 - **Rejected:** freeze every field at DE 002; no explicit policy.
+
+## DE-ADR-027 — Trusted local principal and server-authorized workflow grants
+- **Decision:** Operator-provisioned local account, opaque PostgreSQL session, HttpOnly
+  same-site cookie, CSRF on mutations, same-origin read-only SSE. Middleware creates
+  `PrincipalRef`; clients cannot set actor/roles/effective grants. Server derives grants
+  from trusted principal, role and environment policy. One V1 human may hold distinct
+  operator+approver roles; production stays disabled.
+- **Rejected:** caller-supplied grants; browser token storage; enterprise IAM in MVP.

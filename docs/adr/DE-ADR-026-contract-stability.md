@@ -1,6 +1,6 @@
 # DE-ADR-026 — Contract stability: baseline in DE 002, compatible evolution afterwards
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001R1
+- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001R1 · **Amended:** 2026-09-11 (DE 001R2A)
 
 ## Context
 The first architecture draft "froze" every core interface at DE 002. That would fix field
@@ -10,10 +10,12 @@ telemetry column. At the same time, cheaper implementation models must not silen
 contracts other tasks depend on.
 
 ## Decision
-DE 002 establishes the **architecture baseline** for the core contracts listed in
-`docs/IMPLEMENTATION_PLAN.md` §5.2 (`PermissionLevel`, `CapabilitySpec`, connector
-protocol, policy request/decision, task and attempt records, transition table, artifact
-refs, LLM gateway types, audit and telemetry rows, settings, CLI names).
+DE 002 is sequenced. DE 002A baselines pure contracts after unit/property/static CI;
+DE 002B baselines persistence, serialization, fencing, recovery and cancellation only
+after concurrency/failure integration tests; DE 002C baselines composition after the
+offline slice. The baseline includes principal/grants, phase runs/materialization,
+operation/attempt identity, typed approvals, policy aggregation, version snapshots,
+connector health/recovery, provenance, audit and budget ledger.
 
 - **Breaking changes** — removing or renaming fields, changing types or semantics, making
   optional fields required, removing enum members or reason codes, changing existing
@@ -27,6 +29,10 @@ refs, LLM gateway types, audit and telemetry rows, settings, CLI names).
   passes unchanged**; they are described in the PR and mirrored into `docs/` in the same PR.
 - **Internal changes** behind the contract need only normal review.
 
+An additive capability follows normal review and synchronized docs; it needs an ADR only
+when it changes existing semantics or an architectural boundary. In-flight phase runs are
+pinned to contract/schema/connector versions and are never silently upgraded.
+
 Contracts are considered *exercised* once DE 005 and DE 008 have merged (Wave 2); additive
 adjustments discovered there are expected and do not require an ADR.
 
@@ -39,7 +45,7 @@ adjustments discovered there are expected and do not require an ADR.
 ## Consequences
 - The compatibility rule is enforced socially (PR template, review) and mechanically (the
   existing test suite must not be edited to accommodate a change).
-- `CapabilitySpec.version` remains the mechanism for incompatible capability changes.
+- Capability contract plus input/output schema versions are the compatibility mechanism.
 - `.ai/ARCHITECTURE.md` and `.ai/MASTER_WORKFLOW.md` §20 ("architecture freeze") are read
   as: the *architecture* is baselined and deviations need an ADR; *contracts* evolve under
   this policy.

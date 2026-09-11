@@ -1,6 +1,6 @@
 # DE-ADR-014 — Connector protocol with real + fake implementations and status
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1)
+- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1, DE 001R2A)
 
 ## Context
 The system must be testable and demonstrable without production credentials, simulate
@@ -16,11 +16,19 @@ replaced the earlier "permission ceiling") and an object allow-list. Product-vis
 `AVAILABLE | DEGRADED | UNAVAILABLE | MOCK`; `UNAVAILABLE` parks dependent tasks rather
 than failing them.
 
-Every connector implements `reconcile(capability_id, idempotency_key, ctx)` for its
-side-effecting capabilities and propagates the operation identity into the external system
-(query tag, provenance comment, commit trailer, PR head branch, release id), so the
-scheduler can recover a crashed attempt without repeating the effect
-(`docs/STATE_MODEL.md` §4.6). Fakes implement `reconcile` and `fail_after_effect`.
+Every connector advertises supported contract/schema versions and receives materialized
+immutable input. Side-effecting handlers propagate operation and attempt identities.
+`reconcile(RecoveryContext)` receives resolved-input digest/schema, pinned
+capability/connector versions, target, attempt/provider refs and operation locators.
+Results are `EffectFound | NoEffect | InProgress | Unknown`; `InProgress` is bounded and
+never treated as absence. This applies to every ambiguous failure, not only lease expiry.
+
+Health is a typed TTL-bound snapshot with missing permission values. Temporary
+unavailability parks execution but does not invalidate a structurally valid plan.
+Connector artifacts carry transitive REAL/MOCK provenance; real Git/deploy denies MOCK
+ancestry. Snowflake read capabilities use a separate RO identity and canonical round-trip
+query tags with full operation and attempt ids. dbt writes use invocation journals and
+default to non-idempotent unless convergence is proven per materialized input.
 
 Warehouse fakes use DuckDB with sqlglot transpilation; dbt fake executes generated SQL
 against the fake warehouse; GitHub fake uses a local bare repository.

@@ -1,13 +1,13 @@
 # DE-ADR-015 — Deterministic policy engine and SQL safety classifier
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1)
+- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1, DE 001R2A)
 
 ## Context
 Critical policy must not live only in prompts. Generated SQL must not cause unsafe
 mutations. The LLM must not be able to grant itself authority.
 
 ## Decision
-A pure-function `PolicyEngine` with an ordered rule set (R0 at startup, R1–R20 in
+A pure-function `PolicyEngine` with deterministic rules (R0 at startup, runtime rules in
 `docs/PERMISSION_MODEL.md` §3) evaluated for every capability call inside the Tool
 Registry, persisted before execution, fail-closed. A sqlglot-based `classify_sql`
 capability provides statement types, object scope, destructive/dynamic/multi-statement
@@ -31,6 +31,19 @@ approval capabilities, cost, design flags) → `APPROVAL_REQUIRED`. The mapping 
 an exhaustiveness test (`docs/PERMISSION_MODEL.md` §3.1). The plan validator runs the same
 rules as a pre-check so that the planner can re-plan *before* tasks exist; once a task
 exists there is no routing around a denial.
+
+**Aggregate every denial (DE 001R2A).** Runtime evaluation executes every applicable deny
+rule and persists all reason codes. Rule order cannot change the result.
+`SECURITY > SCOPE > ENVIRONMENTAL` is the authoritative routing severity, so security
+alerts cannot be masked. Approval requirements are evaluated only when no denial exists
+and are returned as a complete set.
+
+Policy accepts only trusted `PrincipalRef` and server-derived `GrantAuthorization`; clients
+may request but cannot set effective grants. Connector health is a typed fresh snapshot.
+Plan validation is structural and independent of temporary health. SQL safety uses RO
+identities for reads, dialect round-trip parsing, canonical scope, safe function/construct
+classification, and denial of external/unknown functions, stages/URLs and unknown nodes.
+MOCK provenance cannot enter real Git/deploy.
 
 ## Alternatives
 - Prompt-level guardrails only: rejected — bypassable, untestable.

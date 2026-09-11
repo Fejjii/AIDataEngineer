@@ -37,7 +37,7 @@ Each has: prompt template (versioned file), context assembler (Det), output sche
 | Capability | Role prompt | Context received (all redacted, delimited) | Output contract | Validation | Fallback |
 |---|---|---|---|---|---|
 | `interpret_requirement` | Senior analytics engineer clarifying requirements | request text, prior Q&A, glossary | `RequirementSpec` | schema; Det ambiguity rules | clarification / BLOCKED |
-| `plan_phase` | Data platform lead sequencing work | requirement, phase, prior phase summaries (not raw artifacts), capability catalogue, connector list, constraints | `Plan` | DAG rules, catalogue membership, permission membership (grants ∪ approval-eligible; connector `allowed_permissions`), policy pre-check | replan ×2 → BLOCKED |
+| `plan_phase` | Data platform lead sequencing work | requirement, phase, prior summaries, phase contract snapshot, registered connector versions, server-authorized grants | `Plan` | structural DAG/version/schema/permission bounds; temporary connector health excluded | replan ×2 → BLOCKED |
 | `select_relevant_assets` | Data discovery specialist | requirement, catalogue (names, comments, columns, row counts) | `AssetSelection` | subset check | retry → BLOCKED with question |
 | `propose_model_design` | Data architect constrained by `ArchitectureDecision` | requirement, decision, selected assets metadata, profiles, relationships, masked samples | `ModelDesign` | grain provability, column existence, SCD tracking | clarification / BLOCKED |
 | `generate_transformation` | Analytics engineer writing dbt for Snowflake | one design unit, upstream metadata, conventions, dialect notes, prior validation feedback | file set | `classify_sql`, ref/source resolution, YAML-column existence, compile, EXPLAIN | regenerate with feedback ×2 → REPAIR/BLOCKED |
@@ -57,7 +57,7 @@ For each candidate from the brief: is a capability alone insufficient?
 
 | Candidate | Verdict | Reasoning |
 |---|---|---|
-| **Discovery Agent** | **Not retained** | Discovery is deterministic enumeration + one selection reasoning step. No multi-step judgment needed; fan-out is handled by the DAG. |
+| **Discovery Agent** | **Not retained** | Enumeration is deterministic. It completes a phase run, then a new planning boundary creates explicit sorted description tasks and one selection reasoning step; no runtime DAG insertion. |
 | **Data Architect Agent** | **Not retained as agent; retained as capability + Det engine** | The material decision (architecture class) must be a rule table for auditability. The LLM contributes entity mapping and design detail inside the class. That is one capability with a strong validator, not an autonomous agent. |
 | **SQL Agent** | **Not retained** | SQL generation is per-unit; validation is deterministic (classify, compile, explain). Iteration is owned by the orchestrator's regenerate/repair loops. |
 | **Pipeline Engineering Agent** | **Not retained** | dbt project assembly is templated; ordering comes from the design. No autonomy needed. |

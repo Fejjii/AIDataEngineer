@@ -2,14 +2,15 @@
 
 ## Current status
 
-**DESIGNED — PROPOSED, awaiting independent frontier review (DE 001 review gate)**
+**DESIGNED — PROPOSED, hardened after independent review; awaiting acceptance**
 
-Designed by DE 001 on 2026-09-11 (Claude Fable 5.1, high reasoning); corrected by DE 001R1
-the same day and recovered after a quota interruption (permission sets, idempotency
-identity, denial routing, contract baseline, `tiny`/`demo`/`full` profiles, DE 008
-dbt-duckdb evaluation). Not yet accepted.
+Designed by DE 001; corrected by DE 001R1; independently reviewed by GPT 5.6 Sol High;
+blocking contract findings hardened by DE 001R2A (materialized operation identity,
+phase-run serialization, fencing/recovery/cancellation, denial aggregation, typed
+approvals, trusted grants, versioning, SQL/connector safety and DE 002 sequencing).
+Composer 2.5 only persisted the review artifact. Not yet accepted.
 Implementation (DE 002+) must not start until the operator accepts this architecture,
-preferably after an independent GPT 6 Astra review. After acceptance, status becomes
+after a focused independent verification of DE 001R2A. After acceptance, status becomes
 `ACCEPTED` and the architecture freeze in `.ai/MASTER_WORKFLOW.md` §20 applies — read per
 DE-ADR-026: the *architecture* is baselined and breaking deviations need an ADR; *contracts*
 may evolve additively when existing tests stay valid.
@@ -32,7 +33,7 @@ Full architecture lives in tracked `docs/` (readable by Cloud agents):
 | `docs/TECH_STACK.md`, `docs/TECHNICAL_RISKS.md` | Technology decisions; risk register |
 | `docs/IMPLEMENTATION_PLAN.md` | Repository layout, module boundaries, roadmap DE 002–DE 019, parallel lanes, DE 002 definition |
 | `docs/DEMO_COMPANY.md` | Synthetic enterprise *Vantara Systems* |
-| `docs/adr/` | DE-ADR-008 … DE-ADR-026 |
+| `docs/adr/` | DE-ADR-008 … DE-ADR-027 |
 
 ## Compact implementation contract (for implementation models)
 
@@ -41,26 +42,26 @@ worker (separable), PostgreSQL 16 for all state (SQLAlchemy 2 + Alembic), Vite/R
 SPA built last, Typer CLI. No microservices, Kubernetes, Kafka, Redis, vector DB,
 LangGraph/LangChain, or multi-agent framework in V1.
 
-**Control.** Deterministic orchestrator drives an explicit workflow state machine
-(`RECEIVED, CLARIFICATION_REQUIRED, PLANNING, DISCOVERY, PROFILING, DESIGN, GENERATION,
-POLICY_CHECK, EXECUTION, VALIDATION, REPAIR, APPROVAL_REQUIRED, DELIVERY, MONITORING,
-COMPLETED, BLOCKED, FAILED, CANCELLED`) with an authoritative transition table. Each phase
-runs a task DAG (planner-generated or deterministic template), immutable within the phase;
-tasks are claimed with `FOR UPDATE SKIP LOCKED` and leased. Each task has a **stable
-operation identity** (`idempotency_key` = hash of workflow, phase, local id, capability
-version, input digest — never the attempt number); each try is a separate `TaskAttempt`.
-On lease expiry the scheduler **reconciles through the connector before re-executing**;
-a non-idempotent operation (`deploy`) with an unknown outcome is parked
-(`AMBIGUOUS_OUTCOME` → `BLOCKED`) and never repeated automatically. Task state `PARKED`
-holds legitimate work that cannot run now; `BLOCKED` resumes into the phase it left.
+**Control.** Deterministic state machine includes cancellation intent/shutdown before
+terminal cancellation. Each phase occurrence has `phase_run_id`, monotonic generation,
+pinned contract snapshot and immutable task templates. Templates may contain `$from` but
+cannot have operation identity, policy, approval or attempts. After dependencies finish,
+inputs resolve and validate; canonical `resolved_input_digest` and an operation key
+including phase run and pinned versions persist atomically. A new planning boundary after
+discovery enumeration creates explicit sorted fan-out tasks. Phase reduction/advance is
+serialized by PostgreSQL transaction advisory lock and exhaustive dependency propagation.
+Claims use renewable leases and monotonic fencing epochs; stale results are rejected.
+Every ambiguous side effect (timeout, response loss, crash, lease expiry, fail-after-effect)
+reconciles before retry with bounded `EffectFound|NoEffect|InProgress|Unknown`.
 
 **Capabilities.** The orchestrator reasons about typed capabilities, never vendors.
 `CapabilitySpec` = id@version, kind (deterministic | reasoning | control), input/output
-Pydantic schemas, permission, risk, approval rule, timeout, retry, failure classes,
-validators, audit spec, connector requirement. Tool Registry wrapper enforces
+Pydantic schemas and schema versions, permission, risk, typed approval rule, timeout,
+`max_attempts`, effect semantics, failure classes, validators, audit and connector
+requirement. Tool Registry wrapper enforces
 validate → policy → execute → validate → audit on every call. Connectors advertise
-capabilities; each ships real + fake + error mapper + contract tests; status
-`AVAILABLE | DEGRADED | UNAVAILABLE | MOCK`.
+supported contract versions; each ships real + fake + error mapper + contract tests,
+typed health and complete reconciliation context.
 
 **AI.** One planner (`plan_phase`) plus reasoning capabilities (`interpret_requirement`,
 `select_relevant_assets`, `propose_model_design`, `generate_transformation`,
@@ -69,15 +70,19 @@ Gateway (own provider protocol, structured outputs, versioned Jinja2 prompt file
 redaction, cost accounting, replay fake). LLM output is a proposal; deterministic code
 validates and enforces. Modelling architecture class is chosen by a rule table, not the LLM.
 
-**Policy.** `PermissionLevel` is a **set of distinct grants with no ordering** — one
+**Identity and policy.** A local opaque server session produces trusted `PrincipalRef`;
+clients request but never set effective grants, which the server derives from actor,
+roles and environment policy. `PermissionLevel` is a **set of distinct grants with no ordering** — one
 canonical definition in `aide.domain.permissions`: `READ, DEVELOPMENT_EXECUTE,
 DEVELOPMENT_WRITE, GIT_WRITE, STAGING_DEPLOY, PRODUCTION_WRITE, DESTRUCTIVE,
 INFRASTRUCTURE, SECURITY`. Every check is set membership: required permission ∈ workflow
 grant set (or covered by an approval) and ∈ the connector instance's
-`allowed_permissions`; no ceilings, ranks or `<`/`>` comparisons. Pure-function rule set
-R0 (startup) + R1–R20; sqlglot SQL classifier (unparseable ⇒ destructive); environment-
-bound connector instances with allowed-permission sets and allow-lists; approvals bound to
-artifact hashes and to the operation identity. **Denials are routed by class**
+`allowed_permissions`; no ceilings/ranks. Every applicable denial rule runs; all reasons
+persist; routing severity is `SECURITY > SCOPE > ENVIRONMENTAL`; approval requirements
+are evaluated only with no denial. SQL read capabilities use RO identities and classify
+functions/constructs/scope with dialect round-trip parsing. Typed
+`OperationApproval|DesignApproval|BudgetIncreaseApproval` subjects have kind-specific
+binding and rejection semantics. **Denials are routed by class**
 (`docs/PERMISSION_MODEL.md` §3.1): `ENVIRONMENTAL` (connector unavailable, secret
 unresolved, connector permission missing) → task `PARKED`, workflow `BLOCKED`;
 `SCOPE`/`SECURITY` → fail closed (`FAILED`, audit alert for security); approval-eligible →
@@ -88,15 +93,15 @@ re-plans before tasks exist. PROD, INFRASTRUCTURE, SECURITY disabled in V1.
 deterministic validation → rebuild → re-validate; 2 per task, 4 per workflow; never
 weaken tests; escalate to `BLOCKED`.
 
-**Security.** `SecretRef` indirection; secrets resolved only inside connectors/LLM
-providers; redaction before logs, audit, prompts, artifacts; untrusted metadata delimited;
-reasoning capabilities have no tools.
+**Security.** `SecretRef` indirection with separate non-enumerable resolver scopes for
+connector and LLM provider adapters; transitive REAL/MOCK artifact provenance blocks mock
+evidence from real Git/deploy; redaction before logs/audit/prompts/artifacts.
 
-**Contract baseline established in DE 002** (DE-ADR-026; detail in
-`docs/IMPLEMENTATION_PLAN.md` §5.2): `PermissionLevel`, `CapabilitySpec`, `Connector` /
-`ConnectorSpec` / `CallContext` / `ReconcileResult` / `@implements`, `PolicyRequest` /
-`PolicyDecision`, `Task` / `TaskAttempt` fields, transition table, `ArtifactRef`,
-`LLMRequest` / `LLMProvider`, `AuditEvent`, telemetry rows, `Settings`, CLI names.
+**Contract baseline is sequenced:** DE 002A pure kernel + minimal CI; DE 002B PostgreSQL
+phase-run/fencing/recovery/cancellation primitives; DE 002C first offline safe-SQL slice;
+DE 003 expands Docker/integration CI. No phase baselines semantics before its deterministic
+tests pass. Baseline includes principal/grants, materialization identity, versions, typed
+health/reconciliation, approvals, policy aggregation, provenance, audit and budget ledger.
 **Breaking** changes (remove/rename/retype fields, change semantics or transitions, remove
 enum members) require an ADR + architecture review. **Additive, backward-compatible**
 changes (optional fields with defaults, new enum members/reason codes, new capabilities,

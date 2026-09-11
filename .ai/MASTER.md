@@ -23,7 +23,7 @@ The repository, Git history, and verified execution evidence have higher authori
 | Compact task IDs | DE000, DE001, DE002 |
 | Canonical branch | `main` |
 | Local checkout | `~/Developer/AIDataEngineer` |
-| Current phase | DE 001 architecture DESIGNED — PROPOSED; awaiting independent review and acceptance |
+| Current phase | DE 001 architecture DESIGNED — PROPOSED; independent review completed, DE 001R2A hardening pending focused verification and acceptance |
 
 ## How to use this layer
 

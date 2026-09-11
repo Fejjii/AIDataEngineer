@@ -444,6 +444,10 @@ After DE 001 architecture is accepted:
 
 Until the operator accepts DE 001, architecture status is `DESIGNED — PROPOSED` (`.ai/ARCHITECTURE.md`). Implementation (DE 002+) must not start. After acceptance, status becomes `ACCEPTED`.
 
+Acceptance baselines the architecture; contracts evolve additively under DE-ADR-026 when
+existing tests remain valid and pass unchanged. Breaking semantic changes still require an
+ADR and architecture review.
+
 ---
 
 ## 21. Security boundaries and secret handling

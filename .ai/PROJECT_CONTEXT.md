@@ -17,7 +17,12 @@ test, observe, correct, and escalate.
 
 ## Current phase
 
-Development operating system installed (DE 000). Product architecture is **DESIGNED — PROPOSED** (DE 001 + DE 001R1 on `docs/DE001_mvp_architecture`). Independent frontier review and operator acceptance are required before DE 002. Compact contract: `.ai/ARCHITECTURE.md`. Full set: `docs/ARCHITECTURE.md` and companions.
+Development operating system installed (DE 000). Product architecture is **DESIGNED —
+PROPOSED** (DE 001 + DE 001R1 + DE 001R2A on
+`docs/DE001_mvp_architecture`). Independent GPT 5.6 Sol High review required blocking
+contract hardening; Composer 2.5 only persisted that review artifact. Focused verification
+and operator acceptance remain required before DE 002A. Compact contract:
+`.ai/ARCHITECTURE.md`; full set: `docs/ARCHITECTURE.md` and companions.
 
 ## Initial intended stack (direction only, not a freeze)
 
