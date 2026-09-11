@@ -20,6 +20,9 @@ docs/agent/runs/
   directories.
 - Private handoffs (`HANDOFF.md`, `CHANGELOG_SESSION.md`) stay gitignored at repo root.
 - Never commit secrets or sensitive environment values.
+- Reports store **Base commit** and **Implementation commit**, not the SHA of the commit that
+  contains the report. Use Git history for the authoritative report commit and branch tip:
+  `git log -1 --format=%H -- docs/agent/runs/<TASK_ID>/<SESSION_ID>.md`
 
 ## Index (newest first)
 

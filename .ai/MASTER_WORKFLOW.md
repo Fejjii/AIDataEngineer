@@ -413,7 +413,8 @@ Parallel tasks require:
 - explicit owner;
 - explicit expected files (declared file ownership);
 - explicit forbidden files when needed;
-- recorded base commit and final commit in each run report;
+- recorded base commit and implementation commit in each run report (not the report-containing
+  commit SHA — obtain report commit and branch tip from Git history);
 - declared dependencies;
 - defined integration order when branches must merge in sequence;
 - no conflicting migrations;

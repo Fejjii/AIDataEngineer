@@ -1,6 +1,6 @@
 # Unified agent handoff — tracked run reports
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Project:** AI Data Engineer  
 **Task prefix:** DE (product) · OPS (operations)  
 **Authority:** `.ai/MASTER_WORKFLOW.md` (operating system); this document defines the tracked
@@ -101,8 +101,9 @@ Each report **must** include all sections below. Write `None` rather than omitti
 5. **Reasoning level**
 6. **Branch**
 7. **Base commit** (SHA at branch creation or task start)
-8. **Final commit** (SHA after last push, or `UNCOMMITTED` if not yet pushed)
-9. **Status** (from §3)
+8. **Implementation commit** (SHA of the commit that contains the substantive scoped work —
+   not the SHA of a commit that only updates the run report)
+9. **Report status** (from §3)
 10. **Goal**
 11. **Scope completed**
 12. **Files changed** (created, modified, removed — paths only)
@@ -117,6 +118,18 @@ Each report **must** include all sections below. Write `None` rather than omitti
 21. **Human action required**
 22. **Recommended next task**
 23. **PR number** (when applicable; otherwise `None`)
+
+**Do not** record the SHA of the commit that contains the run report itself. That creates a
+self-reference loop: updating the report to store the branch tip adds another commit and changes
+the tip again.
+
+Obtain these from Git history instead:
+
+- **Authoritative report commit:** `git log -1 --format=%H -- docs/agent/runs/<TASK_ID>/<SESSION_ID>.md`
+- **Current branch tip:** `git rev-parse <branch>` on the task branch
+
+The report stores stable task identifiers (`Base commit`, `Implementation commit`, `Report
+status`, `PR number`). Ephemeral tip SHAs belong in Git metadata, not in the report body.
 
 ### Parallel-agent extensions (required when launching or coordinating parallel work)
 
@@ -145,8 +158,8 @@ Copy into `docs/agent/runs/<TASK_ID>/<SESSION_ID>.md`:
 | Reasoning level | <low\|medium\|high\|max> |
 | Branch | <branch> |
 | Base commit | <sha> |
-| Final commit | <sha or UNCOMMITTED> |
-| Status | <SUCCESS\|PARTIAL\|BLOCKED\|FAILED\|REVIEW_REQUIRED> |
+| Implementation commit | <sha of substantive work commit> |
+| Report status | <SUCCESS\|PARTIAL\|BLOCKED\|FAILED\|REVIEW_REQUIRED> |
 | PR number | <number or None> |
 
 ## Goal
@@ -194,16 +207,19 @@ sensitive environment values. Reference environment-variable **names** only.
 
 1. Regenerate `HANDOFF.md` and `CHANGELOG_SESSION.md`.
 2. Run `~/.local/bin/sync-aidataengineer-handoff.sh` and verify SHA256 + `cmp`.
-3. Create or update the run report on the task branch.
+3. Create the run report on the task branch; record `Implementation commit` (substantive work
+   SHA) and `Base commit`. Do not record the report-containing commit SHA.
 4. Commit and push the task branch (when Git writes are authorized).
-5. Open or update PR; record PR number in the run report on a follow-up commit if needed.
+5. Open or update PR; record PR number in the run report if not known at first commit.
+   Do not add commits solely to update a branch-tip SHA inside the report.
 
 ### Cloud agent finish checklist
 
 1. Create the run report on the task branch (mandatory before push).
 2. Optionally regenerate private handoffs locally in the worktree (never stage them).
 3. Commit and push only task-scoped tracked changes.
-4. Open PR targeting `main`; add PR number to the run report when known.
+4. Open PR targeting `main`; add PR number to the run report when known (one content update
+   is acceptable; never chase branch-tip SHAs in the report).
 5. Do not merge `main`; do not write iCloud.
 
 ### Human review

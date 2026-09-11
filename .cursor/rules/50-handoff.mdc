@@ -25,6 +25,8 @@ Authoritative standard: `.ai/MASTER_WORKFLOW.md`, `.ai/HANDOFF_TEMPLATE.md`, and
   `docs/agent/runs/<TASK_ID>/<SESSION_ID>.md` (never overwrite).
 - Run-report statuses only: `SUCCESS`, `PARTIAL`, `BLOCKED`, `FAILED`, `REVIEW_REQUIRED`.
 - Cloud agents: run report is mandatory before push; private handoffs must not be staged.
-- Parallel agents: distinct task ID, branch, session ID, run report, file ownership, base/final
-  commit, dependencies, and integration order when relevant.
+- Parallel agents: distinct task ID, branch, session ID, run report, file ownership, base and
+  implementation commit, dependencies, and integration order when relevant.
+- Do not store the report-containing commit SHA in the report; use Git history for report commit
+  and branch tip.
 - Never include secrets, tokens, passwords, private keys, or sensitive environment values.

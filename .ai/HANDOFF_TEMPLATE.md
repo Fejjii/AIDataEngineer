@@ -6,7 +6,8 @@ Use the host IANA timezone. Write None rather than deleting a section.
 Never include secrets or bootstrap source contents.
 
 Tracked run reports (committed on task branches): docs/agent/runs/<TASK_ID>/<SESSION_ID>.md
-Spec: docs/agent/CLOUD_HANDOFF.md — statuses SUCCESS | PARTIAL | BLOCKED | FAILED | REVIEW_REQUIRED
+Spec: docs/agent/CLOUD_HANDOFF.md — report statuses SUCCESS | PARTIAL | BLOCKED | FAILED | REVIEW_REQUIRED
+Reports store Base commit + Implementation commit (not the report-containing SHA; use Git for tip).
 Local: regenerate this file AND commit a run report when Git writes are authorized.
 Cloud: run report is mandatory; this file is optional and must never be staged.
 -->
