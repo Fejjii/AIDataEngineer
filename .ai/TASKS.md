@@ -133,7 +133,7 @@ Common: Git authority = branch-only; commit/push + one PR only when the task pro
 Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
 
 ## DE 002A — Contract kernel and executable CI gate
-- `DE002A` · P0 · TODO · Env CLOUD · Branch `feat/DE002A_contract_kernel`
+- `DE002A` · P0 · IN_PROGRESS · Env CLOUD · Branch `feat/DE002A_contract_kernel`
 - Deps: DE 001 accepted (2026-09-11) · Risk H · Parallel none
 - Goal: pure domain/capability/connector/auth/grant/policy/approval/provenance/SQL/import
   contracts and minimal ruff/mypy/unit/property/import-linter CI. No persistence or slice.
