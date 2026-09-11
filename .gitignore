@@ -23,10 +23,13 @@ Icon?
 *.sublime-project
 *.sublime-workspace
 
-# Track shared Cursor rules only. Ignore other Cursor local state.
+# Track shared Cursor rules and the Cloud environment contract only.
+# Ignore other Cursor local state (MCP, plans, private agent files).
 .cursor/*
 !.cursor/rules/
 !.cursor/rules/**
+!.cursor/environment.json
+!.cursor/Dockerfile
 
 # --- Environment and secrets ---
 .env
