@@ -23,7 +23,7 @@ The repository, Git history, and verified execution evidence have higher authori
 | Compact task IDs | DE000, DE001, DE002 |
 | Canonical branch | `main` |
 | Local checkout | `~/Developer/AIDataEngineer` |
-| Current phase | DE 001 architecture DESIGNED — PROPOSED; R2V residuals U-01–U-10 closed by DE 001R2B; awaiting operator acceptance |
+| Current phase | DE 001 architecture ACCEPTED (2026-09-11); DE 002A Cloud-eligible |
 
 ## How to use this layer
 
@@ -40,7 +40,7 @@ The repository, Git history, and verified execution evidence have higher authori
    - `RELEASE.md` — release / deploy validation
 6. Read `MODEL_ROUTING.md` before selecting or escalating a model.
 7. Read `ENVIRONMENTS.md` before choosing Local vs Cloud vs CI.
-8. Read `ARCHITECTURE.md`. Status is `DESIGNED — PROPOSED` until operator acceptance, then `ACCEPTED`. Do not start DE 002A before acceptance. DE 002A is Cloud-eligible; DE 002B and DE 002C are LOCAL.
+8. Read `ARCHITECTURE.md`. Status is `ACCEPTED`. DE 002A is Cloud-eligible; DE 002B and DE 002C are LOCAL.
 
 ## Non-negotiable rules (summary)
 

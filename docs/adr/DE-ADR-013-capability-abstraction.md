@@ -1,6 +1,6 @@
 # DE-ADR-013 — Capability / tool / connector abstraction
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R2A)
+- **Date:** 2026-09-11 · **Status:** ACCEPTED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R2A)
 
 ## Context
 The orchestrator must reason about *what* to do, not *which vendor*; new platforms must

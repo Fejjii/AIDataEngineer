@@ -1,6 +1,6 @@
 # DE-ADR-019 — In-repo evaluation harness; no LLM judge for pass/fail
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001
+- **Date:** 2026-09-11 · **Status:** ACCEPTED · **Task:** DE 001
 
 ## Context
 The product claim is measurable: safely produce, execute, test, repair, deliver, at a

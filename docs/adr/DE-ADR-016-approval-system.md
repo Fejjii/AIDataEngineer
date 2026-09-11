@@ -1,6 +1,6 @@
 # DE-ADR-016 — Typed approval subjects with complete binding
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1, DE 001R2A, DE 001R2B)
+- **Date:** 2026-09-11 · **Status:** ACCEPTED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1, DE 001R2A, DE 001R2B)
 
 ## Context
 Production/staging deploys, destructive actions, flagged designs and cost overruns require

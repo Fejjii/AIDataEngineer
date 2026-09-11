@@ -1,6 +1,6 @@
 # DE-ADR-010 — Single orchestrator with reasoning capabilities; no specialist agents
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001
+- **Date:** 2026-09-11 · **Status:** ACCEPTED · **Task:** DE 001
 
 ## Context
 The vision brief lists ten candidate agents. The task brief asks to avoid theatrical

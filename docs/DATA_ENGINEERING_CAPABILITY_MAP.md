@@ -1,6 +1,6 @@
 # Data Engineering Capability Map
 
-**Task:** DE 001 · **Status:** PROPOSED
+**Task:** DE 001 · **Status:** ACCEPTED
 
 A taxonomy of the modern Data Engineering lifecycle as the platform sees it. Each row is a
 *business-level* capability; the typed system capabilities that implement it are in

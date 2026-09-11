@@ -1,6 +1,6 @@
 # Quality Strategy
 
-**Task:** DE 001 · **Status:** PROPOSED
+**Task:** DE 001 · **Status:** ACCEPTED
 
 Generated transformations are validated **objectively** by deterministic code. No LLM
 participates in deciding whether data is correct. The Quality Engine produces a

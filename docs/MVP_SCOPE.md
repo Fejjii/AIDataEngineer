@@ -1,6 +1,6 @@
 # MVP Scope — Recruiter-Ready V1
 
-**Task:** DE 001 · **Status:** PROPOSED
+**Task:** DE 001 · **Status:** ACCEPTED
 
 The MVP is one strong, repeatable, end-to-end workflow on a synthetic enterprise, executed
 against real Snowflake development objects and a real dbt project, with a real GitHub pull

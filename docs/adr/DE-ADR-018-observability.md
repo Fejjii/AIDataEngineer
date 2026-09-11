@@ -1,6 +1,6 @@
 # DE-ADR-018 — Observability: audit, telemetry tables, OpenTelemetry, structlog
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R2A)
+- **Date:** 2026-09-11 · **Status:** ACCEPTED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R2A)
 
 ## Context
 Every workflow, task, model call, tool call, approval and cost must be traceable for the

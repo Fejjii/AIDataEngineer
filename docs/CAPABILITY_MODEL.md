@@ -1,6 +1,6 @@
 # Capability Model
 
-**Task:** DE 001 (hardened by DE 001R2A and DE 001R2B) · **Status:** PROPOSED · ADR: DE-ADR-013
+**Task:** DE 001 (hardened by DE 001R2A and DE 001R2B) · **Status:** ACCEPTED · ADR: DE-ADR-013
 
 The orchestrator reasons about **capabilities**, never about vendors. A capability is a
 typed, versioned contract. A **tool** is the binding of a capability to an implementation

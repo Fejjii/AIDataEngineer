@@ -1,6 +1,6 @@
 # Permission Model, Policy, Approvals, Security, Failure & Repair
 
-**Task:** DE 001 (corrected by DE 001R1, DE 001R2A and DE 001R2B) · **Status:** PROPOSED · ADRs: DE-ADR-015, DE-ADR-016, DE-ADR-023, DE-ADR-027
+**Task:** DE 001 (corrected by DE 001R1, DE 001R2A and DE 001R2B) · **Status:** ACCEPTED · ADRs: DE-ADR-015, DE-ADR-016, DE-ADR-023, DE-ADR-027
 
 This document is the single reference for *who may do what*, *how it is enforced*, *how
 humans approve*, *how secrets and untrusted inputs are contained*, and *how failures are

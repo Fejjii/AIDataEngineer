@@ -1,6 +1,6 @@
 # Agent Model
 
-**Task:** DE 001 · **Status:** PROPOSED · ADR: DE-ADR-010
+**Task:** DE 001 · **Status:** ACCEPTED · ADR: DE-ADR-010
 
 ## 1. Starting position
 

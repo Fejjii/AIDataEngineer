@@ -1,6 +1,6 @@
 # Technology Stack
 
-**Task:** DE 001 · **Status:** PROPOSED · ADRs: DE-ADR-008, 009, 012, 017, 018, 022, 024, 025
+**Task:** DE 001 · **Status:** ACCEPTED · ADRs: DE-ADR-008, 009, 012, 017, 018, 022, 024, 025
 
 Selection rule: the simplest technology that satisfies the requirement, evaluated
 independently of what previous projects used. Anything listed as *rejected* may be

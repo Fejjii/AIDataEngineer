@@ -34,7 +34,7 @@ DE 000 records operating-system decisions only.
 - **Decision:** `ARCHITECTURE.md` remains `NOT YET DESIGNED`. Owner is DE 001. No product
   backend, frontend, connectors, schemas, APIs, or orchestration in DE 000.
 - **Consequences:** Implementation models must not invent architecture during bootstrap.
-  Current product architecture status lives in `.ai/ARCHITECTURE.md` (DE 001: DESIGNED — PROPOSED).
+  Current product architecture status lives in `.ai/ARCHITECTURE.md` (DE 001: ACCEPTED).
 
 ## DE-ADR-004 — Model routing hierarchy
 
@@ -78,8 +78,8 @@ DE 000 records operating-system decisions only.
 
 # Product architecture decisions (DE 001)
 
-Full records: `docs/adr/DE-ADR-0NN-*.md`. Status **PROPOSED** until the operator accepts
-DE 001. DE 001R1 amended DE-ADR-011, 014, 015, 016, 022, 024 and added DE-ADR-026.
+Full records: `docs/adr/DE-ADR-0NN-*.md`. Status **ACCEPTED** (operator acceptance
+2026-09-11). DE 001R1 amended DE-ADR-011, 014, 015, 016, 022, 024 and added DE-ADR-026.
 DE 001R2A amended DE-ADR-011, 013–018, 021, 022, 026 and added DE-ADR-027 after
 independent GPT 5.6 Sol High review. DE 001R2B amended DE-ADR-011, 014–016, 020–022
 to close residual verification findings (approval rejection routes, staging materialize-

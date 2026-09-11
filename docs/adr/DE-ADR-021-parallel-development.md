@@ -1,6 +1,6 @@
 # DE-ADR-021 — Parallel development lanes and unlock milestones
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R2A, DE 001R2B)
+- **Date:** 2026-09-11 · **Status:** ACCEPTED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R2A, DE 001R2B)
 
 ## Context
 DE-ADR-006 caps parallel agents at 2 (3 when clearly independent). The architecture must

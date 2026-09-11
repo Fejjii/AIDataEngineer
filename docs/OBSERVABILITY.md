@@ -1,6 +1,6 @@
 # Observability
 
-**Task:** DE 001 (hardened by DE 001R2A) · **Status:** PROPOSED · ADR: DE-ADR-018
+**Task:** DE 001 (hardened by DE 001R2A) · **Status:** ACCEPTED · ADR: DE-ADR-018
 
 Three streams, one correlation model:
 

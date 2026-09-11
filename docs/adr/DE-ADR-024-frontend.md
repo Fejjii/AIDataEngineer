@@ -1,6 +1,6 @@
 # DE-ADR-024 — Minimal Vite + React + TypeScript SPA
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001
+- **Date:** 2026-09-11 · **Status:** ACCEPTED · **Task:** DE 001
 
 ## Context
 The MVP needs a simple interface: request, clarification, plan, timeline, artifacts,

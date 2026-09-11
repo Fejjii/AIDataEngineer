@@ -38,7 +38,7 @@ When information conflicts, use this order:
 3. Automated test, CI, and validation evidence
 4. Deployment or runtime evidence
 5. `.ai/DECISIONS.md`
-6. `.ai/ARCHITECTURE.md` (current: DESIGNED — PROPOSED; ACCEPTED after operator acceptance)
+6. `.ai/ARCHITECTURE.md` (current: ACCEPTED)
 7. `.ai/TASKS.md`
 8. `.ai/MASTER_WORKFLOW.md` and other tracked `.ai/` policy
 9. Current `HANDOFF.md`
@@ -442,7 +442,7 @@ After DE 001 architecture is accepted:
 - deviations require an ADR and, for material changes, a higher-tier review;
 - implementation tasks consume the architecture; they do not rediscover it.
 
-Until the operator accepts DE 001, architecture status is `DESIGNED — PROPOSED` (`.ai/ARCHITECTURE.md`). Implementation (DE 002+) must not start. After acceptance, status becomes `ACCEPTED`.
+Architecture status is `ACCEPTED` (`.ai/ARCHITECTURE.md`; operator acceptance 2026-09-11). Implementation (DE 002+) may proceed per `.ai/TASKS.md`.
 
 Acceptance baselines the architecture; contracts evolve additively under DE-ADR-026 when
 existing tests remain valid and pass unchanged. Breaking semantic changes still require an

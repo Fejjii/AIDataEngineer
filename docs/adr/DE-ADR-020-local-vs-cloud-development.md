@@ -1,6 +1,6 @@
 # DE-ADR-020 — Local vs Cloud development boundaries for product work
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R2B)
+- **Date:** 2026-09-11 · **Status:** ACCEPTED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R2B)
 
 ## Context
 `.ai/ENVIRONMENTS.md` defines LOCAL vs CURSOR_CLOUD generally. Product tasks need a

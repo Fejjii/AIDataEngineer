@@ -1,6 +1,6 @@
 # Connector Architecture
 
-**Task:** DE 001 (corrected by DE 001R1, DE 001R2A and DE 001R2B) · **Status:** PROPOSED · ADR: DE-ADR-014
+**Task:** DE 001 (corrected by DE 001R1, DE 001R2A and DE 001R2B) · **Status:** ACCEPTED · ADR: DE-ADR-014
 
 Connectors are the only code that talks to data/Git/deployment systems. Connector adapters
 and LLM provider adapters are the only components that may resolve allow-listed

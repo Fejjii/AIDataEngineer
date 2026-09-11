@@ -1,6 +1,6 @@
 # Execution Flow — Worked Example
 
-**Task:** DE 001 (hardened by DE 001R2A and DE 001R2B) · **Status:** PROPOSED
+**Task:** DE 001 (hardened by DE 001R2A and DE 001R2B) · **Status:** ACCEPTED
 
 This document traces the canonical MVP workflow end to end and shows, at every step, the
 workflow state, the tasks executed (capability@connector), and the **structured state or

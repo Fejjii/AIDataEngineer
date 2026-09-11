@@ -1,6 +1,6 @@
 # Data Modelling Strategy
 
-**Task:** DE 001 · **Status:** PROPOSED
+**Task:** DE 001 · **Status:** ACCEPTED
 
 The **architecture class** of a data product is chosen by a deterministic rule table from
 objective signals. The LLM designs *inside* that class. It never picks the class.

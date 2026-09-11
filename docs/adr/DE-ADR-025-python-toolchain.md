@@ -1,6 +1,6 @@
 # DE-ADR-025 — Python 3.12, uv, ruff, mypy strict, pytest
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001
+- **Date:** 2026-09-11 · **Status:** ACCEPTED · **Task:** DE 001
 
 ## Context
 Reproducibility across LOCAL, Cloud and CI was a recurring gap in previous projects

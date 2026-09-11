@@ -1,6 +1,6 @@
 # Workflow State Model and Task Graph
 
-**Task:** DE 001 (corrected by DE 001R1, DE 001R2A and DE 001R2B) · **Status:** PROPOSED · ADR: DE-ADR-011, DE-ADR-022
+**Task:** DE 001 (corrected by DE 001R1, DE 001R2A and DE 001R2B) · **Status:** ACCEPTED · ADR: DE-ADR-011, DE-ADR-022
 
 Two levels of explicit, persisted state: the **workflow state machine** (coarse,
 deterministic, auditable) and the **phase-scoped task DAG** (fine-grained, concurrent).

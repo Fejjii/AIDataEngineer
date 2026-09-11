@@ -2,16 +2,15 @@
 
 ## Current status
 
-**DESIGNED — PROPOSED, hardened after independent review; awaiting acceptance**
+**ACCEPTED** (operator acceptance 2026-09-11)
 
 Designed by DE 001; corrected by DE 001R1; independently reviewed by GPT 5.6 Sol High;
 blocking contract findings hardened by DE 001R2A; residual consistency findings U-01–U-10
-closed by DE 001R2B. Composer 2.5 only persisted the independent review/verification
-artifacts. Not yet accepted. Implementation (DE 002+) must not start until the operator
-accepts this architecture. After acceptance, status becomes `ACCEPTED` and the architecture
-freeze in `.ai/MASTER_WORKFLOW.md` §20 applies — read per DE-ADR-026: the *architecture* is
-baselined and breaking deviations need an ADR; *contracts* may evolve additively when
-existing tests stay valid.
+closed by DE 001R2B; operator accepted 2026-09-11. Composer 2.5 only persisted the
+independent review/verification artifacts. Implementation (DE 002+) may proceed per
+`.ai/TASKS.md`. The architecture freeze in `.ai/MASTER_WORKFLOW.md` §20 applies — read per
+DE-ADR-026: the *architecture* is baselined and breaking deviations need an ADR; *contracts*
+may evolve additively when existing tests stay valid.
 
 ## Authoritative documents
 
@@ -98,7 +97,7 @@ evidence from real Git/deploy; redaction before logs/audit/prompts/artifacts.
 **Contract baseline is sequenced:** DE 002A pure kernel + minimal CI (**CLOUD**); DE 002B
 PostgreSQL phase-run/fencing/recovery/cancellation primitives (**LOCAL**); DE 002C first
 offline safe-SQL slice (**LOCAL**); DE 003 expands Docker/integration CI (**CLOUD**).
-DE 003 expands Docker/integration CI. No phase baselines semantics before its deterministic
+No phase baselines semantics before its deterministic
 tests pass. Baseline includes principal/grants, materialization identity, versions, typed
 health/reconciliation, approvals, policy aggregation, provenance, audit and budget ledger.
 **Breaking** changes (remove/rename/retype fields, change semantics or transitions, remove

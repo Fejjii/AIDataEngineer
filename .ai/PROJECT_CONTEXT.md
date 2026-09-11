@@ -17,11 +17,10 @@ test, observe, correct, and escalate.
 
 ## Current phase
 
-Development operating system installed (DE 000). Product architecture is **DESIGNED —
-PROPOSED** (DE 001 + DE 001R1 + DE 001R2A + DE 001R2B on
+Development operating system installed (DE 000). Product architecture is **ACCEPTED**
+(DE 001 + DE 001R1 + DE 001R2A + DE 001R2B; operator acceptance 2026-09-11 on
 `docs/DE001_mvp_architecture`). Independent GPT 5.6 Sol High review and Fable R2V
-verification residuals are closed at the document level. Operator acceptance remains
-required before DE 002A. Compact contract:
+verification residuals are closed. DE 002A is unblocked and Cloud-eligible. Compact contract:
 `.ai/ARCHITECTURE.md`; full set: `docs/ARCHITECTURE.md` and companions.
 
 ## Initial intended stack (direction only, not a freeze)

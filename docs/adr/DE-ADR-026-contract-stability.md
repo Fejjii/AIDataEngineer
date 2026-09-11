@@ -1,6 +1,6 @@
 # DE-ADR-026 — Contract stability: baseline in DE 002, compatible evolution afterwards
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001R1 · **Amended:** 2026-09-11 (DE 001R2A)
+- **Date:** 2026-09-11 · **Status:** ACCEPTED · **Task:** DE 001R1 · **Amended:** 2026-09-11 (DE 001R2A)
 
 ## Context
 The first architecture draft "froze" every core interface at DE 002. That would fix field

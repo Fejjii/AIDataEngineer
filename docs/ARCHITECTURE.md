@@ -1,6 +1,6 @@
 # AI Data Engineer — Architecture V1
 
-**Task:** DE 001 (corrected by DE 001R1, DE 001R2A and DE 001R2B) · **Status:** PROPOSED (awaiting operator acceptance) · **Date:** 2026-09-11
+**Task:** DE 001 (corrected by DE 001R1, DE 001R2A and DE 001R2B) · **Status:** ACCEPTED · **Date:** 2026-09-11
 **Owner of changes after acceptance:** ADR + higher-tier review (see `.ai/MASTER_WORKFLOW.md` §20)
 
 This is the buildable architecture for the AI Data Engineer control plane. It is the

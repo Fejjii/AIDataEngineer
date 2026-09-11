@@ -1,6 +1,6 @@
 # DE-ADR-012 — PostgreSQL + SQLAlchemy 2 + Alembic for all state
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001
+- **Date:** 2026-09-11 · **Status:** ACCEPTED · **Task:** DE 001
 
 ## Context
 Workflow, task, artifact, approval, audit, telemetry and evaluation state must be durable,

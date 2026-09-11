@@ -1,6 +1,6 @@
 # DE-ADR-008 — Modular monolith application architecture
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001
+- **Date:** 2026-09-11 · **Status:** ACCEPTED · **Task:** DE 001
 
 ## Context
 The platform has ~28 logical components (`docs/ARCHITECTURE.md` §3). It must be

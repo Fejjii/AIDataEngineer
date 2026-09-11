@@ -1,6 +1,6 @@
 # Implementation Plan
 
-**Task:** DE 001 (corrected by DE 001R1, DE 001R2A and DE 001R2B) · **Status:** PROPOSED · ADRs: DE-ADR-020, DE-ADR-021, DE-ADR-026
+**Task:** DE 001 (corrected by DE 001R1, DE 001R2A and DE 001R2B) · **Status:** ACCEPTED · ADRs: DE-ADR-020, DE-ADR-021, DE-ADR-026
 
 Contents: §1 repository layout and ownership · §2 module boundaries · §3 roadmap as
 vertical slices · §4 parallel lanes and when Cloud agents become safe · §5 DE 002 exact

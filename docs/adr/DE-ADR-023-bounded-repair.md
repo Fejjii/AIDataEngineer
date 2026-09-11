@@ -1,6 +1,6 @@
 # DE-ADR-023 — Bounded self-repair loop
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001
+- **Date:** 2026-09-11 · **Status:** ACCEPTED · **Task:** DE 001
 
 ## Context
 Self-correction is a core differentiator and the largest source of runaway cost and unsafe

@@ -1,6 +1,6 @@
 # Evaluation Strategy
 
-**Task:** DE 001 · **Status:** PROPOSED · ADR: DE-ADR-019
+**Task:** DE 001 · **Status:** ACCEPTED · ADR: DE-ADR-019
 
 Evaluation answers one question objectively: *does the platform safely produce, execute,
 test, repair and deliver a real data workflow with minimal manual intervention — and at

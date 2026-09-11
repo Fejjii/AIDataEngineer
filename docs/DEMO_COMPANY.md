@@ -1,6 +1,6 @@
 # Synthetic Enterprise — Vantara Systems
 
-**Task:** DE 001 · **Status:** PROPOSED
+**Task:** DE 001 · **Status:** ACCEPTED
 
 Vantara Systems is a fictional B2B SaaS company (workflow-automation software, ~25 000
 customer accounts, EUR/USD/GBP billing) whose operational systems land daily extracts in a

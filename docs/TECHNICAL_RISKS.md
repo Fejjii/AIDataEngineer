@@ -1,6 +1,6 @@
 # Technical Risks
 
-**Task:** DE 001 · **Status:** PROPOSED
+**Task:** DE 001 · **Status:** ACCEPTED
 
 Register of risks to the architecture and MVP, with likelihood (L/M/H), impact (L/M/H/C),
 mitigation designed into V1, residual risk, and the owner/task where the mitigation lands.

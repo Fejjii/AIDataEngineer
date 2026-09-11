@@ -26,7 +26,7 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 
 - Compact ID: `DE001`
 - Priority: P0
-- Status: IN_PROGRESS → documents complete including DE 001R2B; awaiting **operator acceptance**
+- Status: DONE (operator accepted 2026-09-11)
 - Owner: local Cursor agent (Claude Fable 5.1, high reasoning)
 - Environment: LOCAL (requires private bootstrap sources; produces the architecture baseline)
 - Branch: `docs/DE001_mvp_architecture` (operator assignment supersedes the earlier
@@ -49,9 +49,8 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 - **Review gate:** independent GPT 5.6 Sol High review completed with `REVISE BEFORE
   DE 002`; Composer 2.5 only persisted the artifact. Focused Fable verification
   (`docs/reviews/DE001_R2V_FABLE_VERIFICATION.md`) recorded residuals U-01–U-10.
-  DE 001R2B applied those corrections. Operator accepts or requests further revisions.
-  Only acceptance changes ADR statuses to `ACCEPTED` and permits DE 002A. Do not merge
-  before acceptance.
+  DE 001R2B applied those corrections. Operator accepted 2026-09-11; ADR statuses are
+  `ACCEPTED`; DE 002A is unblocked. Branch merge to `main` remains a separate human gate.
 
 ## DE 001R1 — Architecture correction before independent review
 
@@ -108,7 +107,7 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 
 - Compact ID: `DE001R2B`
 - Priority: P0
-- Status: DONE (documentation on `docs/DE001_mvp_architecture`; operator acceptance remains)
+- Status: DONE (documentation on `docs/DE001_mvp_architecture`; operator accepted 2026-09-11)
 - Owner: Grok 4.6 High
 - Environment: CLOUD · Branch: `docs/DE001_mvp_architecture` · Dependencies: DE 001R2V
   verification artifact
@@ -131,11 +130,11 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 
 Common: Git authority = branch-only; commit/push + one PR only when the task prompt says
 `GitWrite: authorized`; never merge. Deployment authority = none unless stated. Statuses
-TODO until DE 001 is accepted.
+Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
 
 ## DE 002A — Contract kernel and executable CI gate
 - `DE002A` · P0 · TODO · Env CLOUD · Branch `feat/DE002A_contract_kernel`
-- Deps: DE 001 accepted after DE 001R2B consistency closure · Risk H · Parallel none
+- Deps: DE 001 accepted (2026-09-11) · Risk H · Parallel none
 - Goal: pure domain/capability/connector/auth/grant/policy/approval/provenance/SQL/import
   contracts and minimal ruff/mypy/unit/property/import-linter CI. No persistence or slice.
 - Recommended model: GPT 5.6 Sol or Grok 4.6 · Reasoning High.

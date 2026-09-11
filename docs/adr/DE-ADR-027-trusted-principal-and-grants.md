@@ -1,6 +1,6 @@
 # DE-ADR-027 — Trusted local principal and server-authorized workflow grants
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001R2A
+- **Date:** 2026-09-11 · **Status:** ACCEPTED · **Task:** DE 001R2A
 
 ## Context
 

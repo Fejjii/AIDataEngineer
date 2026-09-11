@@ -1,6 +1,6 @@
 # DE-ADR-022 — In-process worker with PostgreSQL task queue
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1, DE 001R2A, DE 001R2B)
+- **Date:** 2026-09-11 · **Status:** ACCEPTED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1, DE 001R2A, DE 001R2B)
 
 ## Context
 Tasks (LLM calls, dbt runs up to 15 min, Snowflake queries) must run asynchronously,

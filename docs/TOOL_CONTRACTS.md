@@ -1,6 +1,6 @@
 # Tool Contracts
 
-**Task:** DE 001 (hardened by DE 001R2A and DE 001R2B) · **Status:** PROPOSED
+**Task:** DE 001 (hardened by DE 001R2A and DE 001R2B) · **Status:** ACCEPTED
 
 Per-capability contracts. Schemas are given in Pydantic-like notation; the implementation
 must match field names so the planner catalogue, UI and evaluation harness share one

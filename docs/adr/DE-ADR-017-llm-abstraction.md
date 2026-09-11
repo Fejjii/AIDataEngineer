@@ -1,6 +1,6 @@
 # DE-ADR-017 — Thin LLM gateway, structured outputs, versioned prompts
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R2A)
+- **Date:** 2026-09-11 · **Status:** ACCEPTED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R2A)
 
 ## Context
 Provider independence, inspectable prompts, validated outputs, cost accounting, offline

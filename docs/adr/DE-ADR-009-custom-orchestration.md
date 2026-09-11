@@ -1,6 +1,6 @@
 # DE-ADR-009 — Custom deterministic orchestration; no agent framework
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001
+- **Date:** 2026-09-11 · **Status:** ACCEPTED · **Task:** DE 001
 
 ## Context
 Control flow must be explicit, auditable, resumable, bounded, and testable. Previous
