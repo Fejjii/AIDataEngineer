@@ -94,34 +94,40 @@ async def apply_reconcile_result(
         task.execution_result = {"recovered": True, "external_ref": result.external_ref}
         task.status = TaskState.SUCCEEDED.value
         task.finished_at = now
-        attempt.result = output
-        attempt.output_digest = digest
-        attempt.external_ref = result.external_ref
-        attempt.outcome = AttemptOutcome.RECOVERED.value
-        attempt.finished_at = now
+        if attempt.finished_at is None:
+            attempt.result = output
+            attempt.output_digest = digest
+            attempt.external_ref = result.external_ref
+            attempt.outcome = AttemptOutcome.RECOVERED.value
+            attempt.finished_at = now
         await _clear_recovery(task)
         event_type = "TASK_RECOVERED"
     elif isinstance(result, NoEffect):
-        attempt.dispatch_state = DispatchState.REJECTED_NO_EFFECT.value
+        if attempt.finished_at is None:
+            attempt.dispatch_state = DispatchState.REJECTED_NO_EFFECT.value
         if workflow.state == WorkflowState.CANCELLING.value:
-            attempt.outcome = AttemptOutcome.CANCELLED.value
+            if attempt.finished_at is None:
+                attempt.outcome = AttemptOutcome.CANCELLED.value
             task.status = TaskState.CANCELLED.value
             task.disposition_reason = "NO_EFFECT_DURING_CANCELLATION"
             task.finished_at = now
             event_type = "RECOVERY_NO_EFFECT_CANCELLED"
         elif task.attempt_count < task.max_attempts:
-            attempt.outcome = AttemptOutcome.FAILED.value
+            if attempt.finished_at is None:
+                attempt.outcome = AttemptOutcome.FAILED.value
             task.status = TaskState.RETRY_WAIT.value
             task.retry_not_before = now
             event_type = "RECOVERY_NO_EFFECT_RETRY"
         else:
-            attempt.outcome = AttemptOutcome.FAILED.value
+            if attempt.finished_at is None:
+                attempt.outcome = AttemptOutcome.FAILED.value
             task.status = TaskState.FAILED.value
             task.failure_classification = "AMBIGUOUS_OUTCOME"
             task.disposition_reason = "NO_EFFECT_ATTEMPTS_EXHAUSTED"
             task.finished_at = now
             event_type = "RECOVERY_NO_EFFECT_EXHAUSTED"
-        attempt.finished_at = now
+        if attempt.finished_at is None:
+            attempt.finished_at = now
         await _clear_recovery(task)
     elif isinstance(result, InProgress):
         exhausted = (
@@ -136,7 +142,8 @@ async def apply_reconcile_result(
                 await _park_ambiguous(task, attempt, now, "IN_PROGRESS_EXHAUSTED")
             event_type = "RECOVERY_IN_PROGRESS_EXHAUSTED"
         else:
-            attempt.external_ref = result.external_ref
+            if attempt.finished_at is None:
+                attempt.external_ref = result.external_ref
             task.recovery_lease_expires_at = now + recovery_lease_duration
             event_type = "RECOVERY_IN_PROGRESS"
     else:

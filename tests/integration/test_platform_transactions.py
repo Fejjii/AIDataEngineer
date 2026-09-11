@@ -31,7 +31,7 @@ from aide.domain.costs import BudgetScope, CostUnit
 from aide.domain.effects import EffectSemantics
 from aide.domain.enums import ApprovalRule, RiskLevel, TargetEnv
 from aide.domain.permissions import PermissionLevel
-from aide.domain.states import TaskState, WorkflowState
+from aide.domain.states import AttemptOutcome, TaskState, WorkflowState
 from aide.orchestration.cancellation import (
     begin_cancellation,
     complete_cancellation,
@@ -706,16 +706,20 @@ async def test_parked_ambiguous_task_reconciles_during_cancellation(
     async with session_factory() as session:
         workflow = await session.get(WorkflowModel, seeded.workflow_id)
         task = await session.get(MaterializedTaskModel, seeded.task_id)
+        attempt = await session.get(TaskAttemptModel, historical_attempt_id)
         attempt_count = await session.scalar(
             select(func.count())
             .select_from(TaskAttemptModel)
             .where(TaskAttemptModel.task_id == seeded.task_id)
         )
-        assert workflow is not None and task is not None
+        assert workflow is not None and task is not None and attempt is not None
         assert workflow.state == WorkflowState.CANCELLED.value
         assert task.status == TaskState.SUCCEEDED.value
         assert task.operation_idempotency_key == operation_key
         assert task.outputs == {"reconciled": True}
+        assert attempt.outcome == AttemptOutcome.AMBIGUOUS.value
+        assert attempt.result is None
+        assert attempt.finished_at == now + timedelta(seconds=2)
         assert attempt_count == 1
 
 
@@ -784,14 +788,22 @@ async def test_parked_ambiguous_task_is_durably_recorded_before_cancelled(
     async with session_factory() as session:
         workflow = await session.get(WorkflowModel, seeded.workflow_id)
         task = await session.get(MaterializedTaskModel, seeded.task_id)
+        attempt = await session.get(TaskAttemptModel, historical_attempt_id)
         unresolved = await session.scalar(
             select(UnresolvedEffectModel).where(
                 UnresolvedEffectModel.workflow_id == seeded.workflow_id
             )
         )
-        assert workflow is not None and task is not None and unresolved is not None
+        assert (
+            workflow is not None
+            and task is not None
+            and attempt is not None
+            and unresolved is not None
+        )
         assert workflow.state == WorkflowState.CANCELLED.value
         assert task.status == TaskState.CANCELLED.value
+        assert attempt.outcome == AttemptOutcome.AMBIGUOUS.value
+        assert attempt.finished_at == now + timedelta(seconds=2)
         assert unresolved.attempt_id == historical_attempt_id
         assert unresolved.operation_idempotency_key == operation_key
         assert unresolved.recovery_context == recovery_context

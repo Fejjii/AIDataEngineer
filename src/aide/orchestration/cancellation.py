@@ -287,8 +287,9 @@ async def park_unresolved_and_cancel(
         task.lease_expires_at = None
         task.recovery_owner = None
         task.recovery_lease_expires_at = None
-        attempt.outcome = AttemptOutcome.CANCELLED.value
-        attempt.finished_at = now
+        if attempt.finished_at is None:
+            attempt.outcome = AttemptOutcome.CANCELLED.value
+            attempt.finished_at = now
     await session.flush()
     _assert_terminal_task_quiescence(tasks)
     workflow.state = WorkflowState.CANCELLED.value
