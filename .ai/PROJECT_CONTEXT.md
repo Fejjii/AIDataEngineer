@@ -17,8 +17,7 @@ test, observe, correct, and escalate.
 
 ## Current phase
 
-Development operating system installed (DE 000). Product architecture is **not yet designed**.
-DE 001 owns the first architecture.
+Development operating system installed (DE 000). Product architecture is **DESIGNED — PROPOSED** (DE 001 + DE 001R1 on `docs/DE001_mvp_architecture`). Independent frontier review and operator acceptance are required before DE 002. Compact contract: `.ai/ARCHITECTURE.md`. Full set: `docs/ARCHITECTURE.md` and companions.
 
 ## Initial intended stack (direction only, not a freeze)
 

@@ -43,8 +43,8 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 - Recommended model: Claude Fable 5.1 High. Independent GPT 6 Astra review after the draft.
 - Estimated duration: 2–4 hours
 - Estimated token class: L
-- Completion evidence: 18 docs + 18 ADRs authored 2026-09-11 (see session HANDOFF);
-  corrected by DE 001R1 (below) before independent review.
+- Completion evidence: 18 docs + 19 ADRs (DE-ADR-008…026) on `docs/DE001_mvp_architecture`;
+  corrected by DE 001R1 before independent review. Not accepted; do not start DE 002.
 - **Review gate (part of DE 001 acceptance, TODO):** independent GPT 6 Astra (High/Max)
   review of `docs/ARCHITECTURE.md` and companions against `docs/TECHNICAL_RISKS.md` and
   the checklist in the Engineering Practices Delta §7. Operator accepts or requests
@@ -56,8 +56,8 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 
 - Compact ID: `DE001R1`
 - Priority: P0
-- Status: DONE (documents corrected; uncommitted on `docs/DE001_mvp_architecture`)
-- Owner: local Cursor agent (Claude Fable 5.1, high reasoning)
+- Status: DONE (documents on `docs/DE001_mvp_architecture`; recovered after quota interruption)
+- Owner: Claude Fable 5.1 (initial corrections) then Grok 4.6 (recovery)
 - Environment: LOCAL · Branch: `docs/DE001_mvp_architecture` · Dependencies: DE 001 draft
 - Risk: High (architectural semantics)
 - Goal: Correct six architecture findings without implementing product code:
@@ -70,12 +70,14 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
   `SCOPE`/`SECURITY` → fail closed, approval-eligible → `APPROVAL_REQUIRED`) resolving the
   `CONNECTOR_UNAVAILABLE` vs `POLICY_CHECK → FAILED` contradiction; (4) DE 002 contract
   **baseline** with additive evolution instead of a permanent freeze (DE-ADR-026);
-  (5) DE 004 scale-profile prerequisite and DE 008 dbt-duckdb evaluation note;
+  (5) DE 004 scale profiles `tiny` / `demo` / `full` and DE 008 dbt-duckdb evaluation
+  (evaluate, do not mandate if compatibility evidence rejects it);
   (6) consistency sweep of all DE 001 documents and ADRs.
-- Validation: consistency greps for old semantics (ceiling, `≤ granted`, `attempt` in key,
-  `any DENY → FAILED`, `REVIEW_REQUIRED` in product state, `frozen`) return no product
-  hits; cross-reference and ADR link checks; secret scan. Recorded in session HANDOFF.
-- Completion evidence: session HANDOFF / CHANGELOG (2026-09-11).
+- Validation: consistency greps for old semantics (`permission_ceiling` as a live field,
+  ordinal permission comparison, attempt in operation key, generic DENY→FAILED,
+  permanently frozen interfaces, scale profile id `ci`) return no product hits;
+  cross-reference and ADR link checks; secret scan.
+- Completion evidence: checkpoint `9aa34ae` plus DE 001R1 recovery commit; session HANDOFF.
 
 ---
 
@@ -124,7 +126,7 @@ TODO until DE 001 is accepted.
 ## DE 004 — Synthetic enterprise generator and fixtures (Vantara)
 - `DE004` · P0 · TODO · Env CLOUD · Cloud yes · Branch `feat/DE004_synthetic_vantara` · Deps DE 002 (parallel Lane A with DE 005)
 - Goal: seeded generator, PostgreSQL DDL/load, DuckDB fixtures v1/v2, `expected/*.json`, `pii_columns.yaml`, Snowflake loader script.
-- **Prerequisite (settle in the task contract before start):** scale profiles `ci` (≈ 0.5 %, CI/tests), `demo` (≈ 10 %, offline recruiter demo), `full` (100 %, live Snowflake) with invariant planted-problem rates and per-profile `expected/` — `docs/DEMO_COMPANY.md` §11, `docs/IMPLEMENTATION_PLAN.md` §3 DE 004.
+- **Prerequisite (settle in the task contract before start):** scale profiles `tiny` (≈ 0.5 %, CI), `demo` (≈ 10 %, local recruiter demonstration), `full` (100 %, Snowflake scale demonstration) with invariant planted-problem rates and per-profile `expected/` — `docs/DEMO_COMPANY.md` §11, `docs/IMPLEMENTATION_PLAN.md` §3 DE 004.
 - Model Composer 2.5 · Reasoning Medium · Risk Low · Duration 4–6 h · Token L · Files `synthetic/**`, tests.
 
 ## DE 005 — Real Snowflake connector
@@ -142,7 +144,7 @@ TODO until DE 001 is accepted.
 
 ## DE 008 — dbt connector, generation and execution
 - `DE008` · P0 · TODO · Env LOCAL · Cloud no · Branch `feat/DE008_dbt_generation` · Deps DE 005, DE 007 (008a connector may start after DE 005)
-- **Architecture note:** DE 008a must evaluate real dbt Core (`dbtRunner`) against an offline DuckDB-compatible target (`dbt-duckdb`) for integration/contract tests, keeping the deterministic lightweight fake for unit tests; record the evaluation — `docs/CONNECTOR_ARCHITECTURE.md` §5.2, `docs/IMPLEMENTATION_PLAN.md` §3 DE 008. Also: `reconcile` for all side-effecting dbt capabilities.
+- **Architecture note:** DE 008a must evaluate real dbt Core (`dbtRunner`) against an offline DuckDB-compatible target (`dbt-duckdb`) for integration/contract tests, keeping the deterministic lightweight fake for unit tests; record the evaluation and do not adopt `dbt-duckdb` if compatibility evidence rejects it — `docs/CONNECTOR_ARCHITECTURE.md` §5.2, `docs/IMPLEMENTATION_PLAN.md` §3 DE 008. Also: `reconcile` for all side-effecting dbt capabilities.
 - Model Grok 4.6 · Reasoning High · Risk High · Duration 8–12 h (two sessions) · Token XL.
 
 ## DE 009 — Quality Engine

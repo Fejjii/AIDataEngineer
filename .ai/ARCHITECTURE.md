@@ -5,8 +5,9 @@
 **DESIGNED — PROPOSED, awaiting independent frontier review (DE 001 review gate)**
 
 Designed by DE 001 on 2026-09-11 (Claude Fable 5.1, high reasoning); corrected by DE 001R1
-on the same day (permission sets, idempotency identity, denial routing, contract stability,
-DE 004/DE 008 notes). Not yet accepted.
+the same day and recovered after a quota interruption (permission sets, idempotency
+identity, denial routing, contract baseline, `tiny`/`demo`/`full` profiles, DE 008
+dbt-duckdb evaluation). Not yet accepted.
 Implementation (DE 002+) must not start until the operator accepts this architecture,
 preferably after an independent GPT 6 Astra review. After acceptance, status becomes
 `ACCEPTED` and the architecture freeze in `.ai/MASTER_WORKFLOW.md` §20 applies — read per
@@ -103,11 +104,14 @@ rules, commands, columns) are allowed when all existing tests remain valid and p
 unchanged. Snowflake (DE 005) and dbt (DE 008) are expected to exercise and additively
 adjust these contracts; nothing is frozen "forever" before that.
 
-**Before DE 004:** the synthetic generator must support scale profiles `ci` / `demo` /
-`full` with invariant planted-problem rates (`docs/DEMO_COMPANY.md` §11).
+**Before DE 004:** the synthetic generator must support scale profiles `tiny` /
+`demo` / `full` (`tiny` = CI, `demo` = local recruiter demonstration, `full` =
+Snowflake scale demonstration) with invariant planted-problem rates
+(`docs/DEMO_COMPANY.md` §11).
 **In DE 008:** evaluate real dbt Core against an offline DuckDB-compatible target
 (`dbt-duckdb`) for integration tests while keeping the lightweight deterministic fake for
-unit tests (`docs/CONNECTOR_ARCHITECTURE.md` §5.2).
+unit tests. Do not adopt that path if compatibility evidence rejects it
+(`docs/CONNECTOR_ARCHITECTURE.md` §5.2).
 
 ## Rules for implementation tasks
 

@@ -148,9 +148,9 @@ Fallback: offline mode replays the same run with MOCK watermarks if live systems
 
   | Profile | Volume factor vs §2 | Approx. total rows | Purpose | Target runtime |
   |---|---|---|---|---|
-  | `ci` | ≈ 0.5 % | ≈ 35 000 | unit/integration tests, CI scenarios S01–S11, committable DuckDB fixture | fixture build < 30 s; offline demo run < 3 min |
-  | `demo` | ≈ 10 % | ≈ 700 000 | offline recruiter demo on a laptop (DuckDB fakes) with realistic-feeling volumes | fixture build < 3 min |
-  | `full` | 100 % | ≈ 6.9 M | live Snowflake DEV demonstration (`COPY INTO` loader), performance/cost metrics | X-Small warehouse |
+  | `tiny` | ≈ 0.5 % | ≈ 35 000 | Optimized for CI: unit/integration tests, CI scenarios S01–S11, committable DuckDB fixture | fixture build < 30 s; offline demo run < 3 min |
+  | `demo` | ≈ 10 % | ≈ 700 000 | Optimized for local recruiter demonstration on a laptop (DuckDB fakes) with realistic-feeling volumes | fixture build < 3 min |
+  | `full` | 100 % | ≈ 6.9 M | Optimized for Snowflake scale demonstration (`COPY INTO` loader), performance/cost metrics | X-Small warehouse |
 
   Planted-problem *rates* (P1–P10, F1, F2) are invariant across profiles so every scenario
   behaves identically at every size; absolute counts scale. `expected/<profile>/*.json` is

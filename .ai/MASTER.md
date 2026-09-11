@@ -23,7 +23,7 @@ The repository, Git history, and verified execution evidence have higher authori
 | Compact task IDs | DE000, DE001, DE002 |
 | Canonical branch | `main` |
 | Local checkout | `~/Developer/AIDataEngineer` |
-| Current phase | Repository bootstrap complete; architecture not yet designed |
+| Current phase | DE 001 architecture DESIGNED — PROPOSED; awaiting independent review and acceptance |
 
 ## How to use this layer
 
@@ -40,7 +40,7 @@ The repository, Git history, and verified execution evidence have higher authori
    - `RELEASE.md` — release / deploy validation
 6. Read `MODEL_ROUTING.md` before selecting or escalating a model.
 7. Read `ENVIRONMENTS.md` before choosing Local vs Cloud vs CI.
-8. Read `ARCHITECTURE.md`. Until DE 001 completes it, architecture is `NOT YET DESIGNED`.
+8. Read `ARCHITECTURE.md`. Status is `DESIGNED — PROPOSED` until operator acceptance, then `ACCEPTED`. Do not start DE 002 before acceptance.
 
 ## Non-negotiable rules (summary)
 

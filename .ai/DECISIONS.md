@@ -34,6 +34,7 @@ DE 000 records operating-system decisions only.
 - **Decision:** `ARCHITECTURE.md` remains `NOT YET DESIGNED`. Owner is DE 001. No product
   backend, frontend, connectors, schemas, APIs, or orchestration in DE 000.
 - **Consequences:** Implementation models must not invent architecture during bootstrap.
+  Current product architecture status lives in `.ai/ARCHITECTURE.md` (DE 001: DESIGNED — PROPOSED).
 
 ## DE-ADR-004 — Model routing hierarchy
 

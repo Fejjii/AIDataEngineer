@@ -6,6 +6,6 @@ alwaysApply: true
 # Architecture freeze
 
 - Do not silently change approved architecture.
-- Until DE 001 completes, `.ai/ARCHITECTURE.md` is `NOT YET DESIGNED`. Do not implement product backend, frontend, connectors, schemas, APIs, or orchestration.
-- After architecture is accepted, cheaper implementation models consume it. Material deviations need an ADR and higher-tier review.
+- Until DE 001 is accepted, `.ai/ARCHITECTURE.md` is `DESIGNED — PROPOSED`. Do not implement product backend, frontend, connectors, schemas, APIs, or orchestration.
+- After architecture is accepted, cheaper implementation models consume it. Breaking contract changes need an ADR, `.ai/DECISIONS.md` entry, and higher-tier review (DE-ADR-026). Additive changes are allowed when existing tests remain valid.
 - Do not use Fable or Astra for routine implementation. Do not escalate merely because a task is long.
