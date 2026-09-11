@@ -17,6 +17,17 @@ from aide.orchestration.materialization import acquire_workflow_lock
 from aide.persistence.audit import append_audit_event
 from aide.persistence.models import MaterializedTaskModel, TaskAttemptModel, WorkflowModel
 
+_CANCELLATION_WORKFLOW_STATES = {
+    WorkflowState.CANCEL_REQUESTED.value,
+    WorkflowState.CANCELLING.value,
+}
+_TERMINAL_WORKFLOW_STATES = {
+    WorkflowState.COMPLETED.value,
+    WorkflowState.FAILED.value,
+    WorkflowState.CANCELLED.value,
+}
+_CLAIM_FORBIDDEN_WORKFLOW_STATES = _CANCELLATION_WORKFLOW_STATES | _TERMINAL_WORKFLOW_STATES
+
 
 @dataclass(frozen=True)
 class TaskClaim:
@@ -56,13 +67,7 @@ async def claim_task(
                 MaterializedTaskModel.retry_not_before.is_(None),
                 MaterializedTaskModel.retry_not_before <= now,
             ),
-            WorkflowModel.state.notin_(
-                [
-                    WorkflowState.CANCEL_REQUESTED.value,
-                    WorkflowState.CANCELLING.value,
-                    WorkflowState.CANCELLED.value,
-                ]
-            ),
+            WorkflowModel.state.notin_(_CLAIM_FORBIDDEN_WORKFLOW_STATES),
             MaterializedTaskModel.attempt_count < MaterializedTaskModel.max_attempts,
         )
         .order_by(MaterializedTaskModel.created_at, MaterializedTaskModel.task_id)
@@ -76,6 +81,8 @@ async def claim_task(
     )
     if workflow is None:
         raise LookupError("claimable task has no workflow")
+    if workflow.state in _CLAIM_FORBIDDEN_WORKFLOW_STATES:
+        return None
     task.claim_epoch += 1
     task.attempt_count += 1
     attempt_id = uuid4()
@@ -255,10 +262,16 @@ async def acquire_recovery(
     expected_epoch: int | None = None,
     expected_attempt_id: UUID | None = None,
     expected_cancellation_epoch: int | None = None,
+    for_cancellation: bool = False,
 ) -> RecoveryClaim | None:
     """Atomically fence a prior worker and claim reconciliation ownership."""
     workflow = await _lock_workflow_for_task(session, task_id)
     if workflow is None:
+        return None
+    if for_cancellation:
+        if workflow.state != WorkflowState.CANCELLING.value or expected_cancellation_epoch is None:
+            return None
+    elif workflow.state in (_CANCELLATION_WORKFLOW_STATES | _TERMINAL_WORKFLOW_STATES):
         return None
     if (
         expected_cancellation_epoch is not None
@@ -345,11 +358,16 @@ async def acquire_expired_recovery(
                 MaterializedTaskModel.claim_epoch,
                 MaterializedTaskModel.active_attempt_id,
             )
+            .join(
+                WorkflowModel,
+                WorkflowModel.workflow_id == MaterializedTaskModel.workflow_id,
+            )
             .where(
                 MaterializedTaskModel.status.in_(
                     [TaskState.CLAIMED.value, TaskState.RUNNING.value]
                 ),
                 MaterializedTaskModel.lease_expires_at < now,
+                WorkflowModel.state.notin_(_CLAIM_FORBIDDEN_WORKFLOW_STATES),
             )
             .order_by(MaterializedTaskModel.lease_expires_at)
             .limit(1)

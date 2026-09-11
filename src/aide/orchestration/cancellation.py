@@ -131,7 +131,13 @@ async def begin_cancellation(
             task.status = TaskState.CANCELLED.value
             task.finished_at = now
             continue
-        if task.status in _ACTIVE_EFFECT_STATES:
+        is_parked_ambiguous = (
+            task.status == TaskState.PARKED.value
+            and task.failure_classification == "AMBIGUOUS_OUTCOME"
+        )
+        if task.status in _ACTIVE_EFFECT_STATES or is_parked_ambiguous:
+            if is_parked_ambiguous:
+                await _restore_ambiguous_attempt_for_cancellation(session, task)
             prior_owner = (
                 task.recovery_owner
                 if task.status == TaskState.RECONCILING.value
@@ -148,6 +154,7 @@ async def begin_cancellation(
                 expected_epoch=task.claim_epoch,
                 expected_attempt_id=task.active_attempt_id,
                 expected_cancellation_epoch=workflow.cancellation_epoch,
+                for_cancellation=True,
             )
             if claim is None:
                 raise RuntimeError("failed to acquire cancellation recovery ownership")
@@ -168,6 +175,38 @@ async def begin_cancellation(
         cancellation_epoch=workflow.cancellation_epoch,
         recovery_claims=tuple(claims),
     )
+
+
+async def _restore_ambiguous_attempt_for_cancellation(
+    session: AsyncSession,
+    task: MaterializedTaskModel,
+) -> None:
+    """Reattach a parked effect's historical attempt for fenced reconciliation."""
+    if (
+        task.active_attempt_id is not None
+        or task.lease_owner is not None
+        or task.recovery_owner is not None
+    ):
+        raise RuntimeError("parked ambiguous task unexpectedly retains ownership")
+    attempt = await session.scalar(
+        select(TaskAttemptModel)
+        .where(
+            TaskAttemptModel.task_id == task.task_id,
+            TaskAttemptModel.outcome == AttemptOutcome.AMBIGUOUS.value,
+        )
+        .order_by(TaskAttemptModel.attempt_number.desc())
+        .with_for_update()
+        .limit(1)
+    )
+    if (
+        attempt is None
+        or attempt.operation_idempotency_key != task.operation_idempotency_key
+        or attempt.resolved_input_digest != task.resolved_input_digest
+    ):
+        raise RuntimeError("parked ambiguous task has no matching historical attempt")
+    task.status = TaskState.RECONCILING.value
+    task.active_attempt_id = attempt.attempt_id
+    task.disposition_reason = None
 
 
 async def run_cancellation_io(

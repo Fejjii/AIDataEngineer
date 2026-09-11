@@ -3,14 +3,14 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from pydantic import BaseModel
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from tests.integration.helpers import SeedInput, seed_task
+from tests.integration.helpers import SeededTask, SeedInput, seed_task
 
 from aide.capabilities.registry import CapabilityRegistry
 from aide.capabilities.spec import (
@@ -18,7 +18,7 @@ from aide.capabilities.spec import (
     ConnectorRequirement,
     RetryPolicy,
 )
-from aide.connectors.base.reconcile import EffectFound
+from aide.connectors.base.reconcile import EffectFound, Unknown
 from aide.connectors.base.registry import ConnectorRegistry
 from aide.connectors.base.spec import (
     CapabilityImplementation,
@@ -123,6 +123,49 @@ def _runtime_registries(*, available: bool) -> tuple[CapabilityRegistry, Connect
         },
     )
     return capabilities, connectors
+
+
+async def _seed_parked_ambiguous_task(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> tuple[SeededTask, UUID, str]:
+    seeded = await seed_task(session_factory)
+    now = datetime(2026, 9, 11, 18, 0, 0)
+    async with session_factory() as session, session.begin():
+        worker_claim = await claim_task(
+            session,
+            owner="worker",
+            now=now,
+            lease_duration=timedelta(seconds=30),
+        )
+        assert worker_claim is not None
+        await mark_dispatched(session, worker_claim)
+        task = await session.get(MaterializedTaskModel, seeded.task_id)
+        assert task is not None
+        operation_key = task.operation_idempotency_key
+    async with session_factory() as session, session.begin():
+        recovery = await acquire_recovery(
+            session,
+            task_id=seeded.task_id,
+            recovery_owner="ordinary-reconciler",
+            now=now + timedelta(seconds=1),
+            lease_duration=timedelta(seconds=30),
+            reconcile_deadline=now + timedelta(minutes=2),
+            expected_owner=worker_claim.owner,
+            expected_epoch=worker_claim.claim_epoch,
+            expected_attempt_id=worker_claim.attempt_id,
+        )
+        assert recovery is not None
+    async with session_factory() as session, session.begin():
+        state = await apply_reconcile_result(
+            session,
+            claim=recovery,
+            result=Unknown(reason="provider history unavailable"),
+            now=now + timedelta(seconds=2),
+            max_reconcile_checks=3,
+            recovery_lease_duration=timedelta(seconds=30),
+        )
+        assert state is TaskState.PARKED
+    return seeded, worker_claim.attempt_id, operation_key
 
 
 @pytest.mark.asyncio
@@ -598,6 +641,240 @@ async def test_terminal_cancellation_is_atomic_and_has_quiescent_normal_path(
         assert task.lease_owner is None
         assert task.recovery_owner is None
         assert event is not None
+
+
+@pytest.mark.asyncio
+async def test_parked_ambiguous_task_reconciles_during_cancellation(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    seeded, historical_attempt_id, operation_key = await _seed_parked_ambiguous_task(
+        session_factory
+    )
+    now = datetime(2026, 9, 11, 18, 0, 0)
+    async with session_factory() as session:
+        workflow = await session.get(WorkflowModel, seeded.workflow_id)
+        assert workflow is not None
+        expected_version = workflow.version
+    async with session_factory() as session, session.begin():
+        await request_cancellation(
+            session,
+            workflow_id=seeded.workflow_id,
+            expected_workflow_version=expected_version,
+            actor_principal_id=uuid4(),
+            reason="cancel parked ambiguous effect",
+            now=now + timedelta(seconds=3),
+        )
+    async with session_factory() as session:
+        workflow = await session.get(WorkflowModel, seeded.workflow_id)
+        assert workflow is not None
+        cancellation_version = workflow.version
+    async with session_factory() as session, session.begin():
+        ownership = await begin_cancellation(
+            session,
+            workflow_id=seeded.workflow_id,
+            expected_workflow_version=cancellation_version,
+            owner="cancellation-coordinator",
+            now=now + timedelta(seconds=4),
+            recovery_lease_duration=timedelta(seconds=30),
+            reconcile_deadline=now + timedelta(minutes=2),
+        )
+    assert len(ownership.recovery_claims) == 1
+    cancellation_claim = ownership.recovery_claims[0]
+    assert cancellation_claim.attempt_id == historical_attempt_id
+
+    async with session_factory() as session, session.begin():
+        state = await apply_reconcile_result(
+            session,
+            claim=cancellation_claim,
+            result=EffectFound(output={"reconciled": True}, external_ref="effect-1"),
+            now=now + timedelta(seconds=5),
+            max_reconcile_checks=3,
+            recovery_lease_duration=timedelta(seconds=30),
+        )
+        assert state is TaskState.SUCCEEDED
+    async with session_factory() as session:
+        workflow = await session.get(WorkflowModel, seeded.workflow_id)
+        assert workflow is not None
+        completion_version = workflow.version
+    async with session_factory() as session, session.begin():
+        await complete_cancellation(
+            session,
+            workflow_id=seeded.workflow_id,
+            expected_workflow_version=completion_version,
+            now=now + timedelta(seconds=6),
+        )
+    async with session_factory() as session:
+        workflow = await session.get(WorkflowModel, seeded.workflow_id)
+        task = await session.get(MaterializedTaskModel, seeded.task_id)
+        attempt_count = await session.scalar(
+            select(func.count())
+            .select_from(TaskAttemptModel)
+            .where(TaskAttemptModel.task_id == seeded.task_id)
+        )
+        assert workflow is not None and task is not None
+        assert workflow.state == WorkflowState.CANCELLED.value
+        assert task.status == TaskState.SUCCEEDED.value
+        assert task.operation_idempotency_key == operation_key
+        assert task.outputs == {"reconciled": True}
+        assert attempt_count == 1
+
+
+@pytest.mark.asyncio
+async def test_parked_ambiguous_task_is_durably_recorded_before_cancelled(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    seeded, historical_attempt_id, operation_key = await _seed_parked_ambiguous_task(
+        session_factory
+    )
+    now = datetime(2026, 9, 11, 18, 0, 0)
+    principal_id = uuid4()
+    async with session_factory() as session:
+        workflow = await session.get(WorkflowModel, seeded.workflow_id)
+        assert workflow is not None
+        expected_version = workflow.version
+    async with session_factory() as session, session.begin():
+        await request_cancellation(
+            session,
+            workflow_id=seeded.workflow_id,
+            expected_workflow_version=expected_version,
+            actor_principal_id=principal_id,
+            reason="durably park ambiguous effect",
+            now=now + timedelta(seconds=3),
+        )
+    async with session_factory() as session:
+        workflow = await session.get(WorkflowModel, seeded.workflow_id)
+        assert workflow is not None
+        cancellation_version = workflow.version
+    async with session_factory() as session, session.begin():
+        ownership = await begin_cancellation(
+            session,
+            workflow_id=seeded.workflow_id,
+            expected_workflow_version=cancellation_version,
+            owner="cancellation-coordinator",
+            now=now + timedelta(seconds=4),
+            recovery_lease_duration=timedelta(seconds=30),
+            reconcile_deadline=now + timedelta(minutes=2),
+        )
+    cancellation_claim = ownership.recovery_claims[0]
+    assert cancellation_claim.attempt_id == historical_attempt_id
+    async with session_factory() as session:
+        workflow = await session.get(WorkflowModel, seeded.workflow_id)
+        assert workflow is not None
+        terminal_version = workflow.version
+    recovery_context = {
+        "operation_idempotency_key": operation_key,
+        "attempt_id": str(historical_attempt_id),
+    }
+    async with session_factory() as session, session.begin():
+        await park_unresolved_and_cancel(
+            session,
+            workflow_id=seeded.workflow_id,
+            expected_workflow_version=terminal_version,
+            principal_id=principal_id,
+            unresolved=(
+                (
+                    cancellation_claim,
+                    recovery_context,
+                    {"status": "still ambiguous"},
+                ),
+            ),
+            required_follow_up="verify external state",
+            now=now + timedelta(seconds=5),
+        )
+    async with session_factory() as session:
+        workflow = await session.get(WorkflowModel, seeded.workflow_id)
+        task = await session.get(MaterializedTaskModel, seeded.task_id)
+        unresolved = await session.scalar(
+            select(UnresolvedEffectModel).where(
+                UnresolvedEffectModel.workflow_id == seeded.workflow_id
+            )
+        )
+        assert workflow is not None and task is not None and unresolved is not None
+        assert workflow.state == WorkflowState.CANCELLED.value
+        assert task.status == TaskState.CANCELLED.value
+        assert unresolved.attempt_id == historical_attempt_id
+        assert unresolved.operation_idempotency_key == operation_key
+        assert unresolved.recovery_context == recovery_context
+
+
+@pytest.mark.asyncio
+async def test_ordinary_recovery_cannot_replace_cancellation_ownership(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    seeded = await seed_task(session_factory)
+    now = datetime(2026, 9, 11, 18, 0, 0)
+    async with session_factory() as session, session.begin():
+        worker_claim = await claim_task(
+            session,
+            owner="worker",
+            now=now,
+            lease_duration=timedelta(seconds=30),
+        )
+        assert worker_claim is not None
+        workflow = await session.get(WorkflowModel, seeded.workflow_id)
+        assert workflow is not None
+        expected_version = workflow.version
+    async with session_factory() as session, session.begin():
+        await request_cancellation(
+            session,
+            workflow_id=seeded.workflow_id,
+            expected_workflow_version=expected_version,
+            actor_principal_id=uuid4(),
+            reason="protect cancellation ownership",
+            now=now + timedelta(seconds=1),
+        )
+    async with session_factory() as session, session.begin():
+        assert (
+            await acquire_recovery(
+                session,
+                task_id=seeded.task_id,
+                recovery_owner="ordinary-reconciler",
+                now=now + timedelta(seconds=2),
+                lease_duration=timedelta(seconds=30),
+                reconcile_deadline=now + timedelta(minutes=2),
+                expected_owner=worker_claim.owner,
+                expected_epoch=worker_claim.claim_epoch,
+                expected_attempt_id=worker_claim.attempt_id,
+            )
+            is None
+        )
+    async with session_factory() as session:
+        workflow = await session.get(WorkflowModel, seeded.workflow_id)
+        assert workflow is not None
+        cancellation_version = workflow.version
+    async with session_factory() as session, session.begin():
+        ownership = await begin_cancellation(
+            session,
+            workflow_id=seeded.workflow_id,
+            expected_workflow_version=cancellation_version,
+            owner="cancellation-coordinator",
+            now=now + timedelta(seconds=3),
+            recovery_lease_duration=timedelta(seconds=30),
+            reconcile_deadline=now + timedelta(minutes=2),
+        )
+    cancellation_claim = ownership.recovery_claims[0]
+    async with session_factory() as session, session.begin():
+        assert (
+            await acquire_recovery(
+                session,
+                task_id=seeded.task_id,
+                recovery_owner="ordinary-reconciler",
+                now=now + timedelta(seconds=4),
+                lease_duration=timedelta(seconds=30),
+                reconcile_deadline=now + timedelta(minutes=2),
+                expected_owner=cancellation_claim.owner,
+                expected_epoch=cancellation_claim.claim_epoch,
+                expected_attempt_id=cancellation_claim.attempt_id,
+            )
+            is None
+        )
+    async with session_factory() as session:
+        task = await session.get(MaterializedTaskModel, seeded.task_id)
+        assert task is not None
+        assert task.status == TaskState.RECONCILING.value
+        assert task.recovery_owner == cancellation_claim.owner
+        assert task.claim_epoch == cancellation_claim.claim_epoch
+        assert task.active_attempt_id == cancellation_claim.attempt_id
 
 
 @pytest.mark.asyncio

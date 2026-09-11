@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tests.integration.helpers import seed_task
 
 from aide.connectors.base.reconcile import NoEffect
-from aide.domain.states import TaskState
+from aide.domain.states import TaskState, WorkflowState
 from aide.orchestration.recovery import apply_reconcile_result
 from aide.orchestration.worker import (
     RecoveryClaim,
@@ -20,7 +20,12 @@ from aide.orchestration.worker import (
     mark_dispatched,
     renew_heartbeat,
 )
-from aide.persistence.models import AuditEventModel, MaterializedTaskModel, TaskAttemptModel
+from aide.persistence.models import (
+    AuditEventModel,
+    MaterializedTaskModel,
+    TaskAttemptModel,
+    WorkflowModel,
+)
 
 
 def moment() -> datetime:
@@ -48,6 +53,44 @@ async def test_two_workers_cannot_finalize_one_claim(
     async with session_factory() as session, session.begin():
         assert await finalize_success(session, claim=claim, output={"ok": True}, now=now)
         assert not await finalize_success(session, claim=claim, output={"ok": False}, now=now)
+
+
+@pytest.mark.parametrize(
+    "terminal_state",
+    [WorkflowState.COMPLETED, WorkflowState.FAILED, WorkflowState.CANCELLED],
+)
+@pytest.mark.asyncio
+async def test_terminal_workflows_cannot_claim_ready_tasks(
+    session_factory: async_sessionmaker[AsyncSession],
+    terminal_state: WorkflowState,
+) -> None:
+    seeded = await seed_task(session_factory)
+    now = moment()
+    async with session_factory() as session, session.begin():
+        workflow = await session.get(WorkflowModel, seeded.workflow_id)
+        assert workflow is not None
+        workflow.state = terminal_state.value
+    async with session_factory() as session, session.begin():
+        assert (
+            await claim_task(
+                session,
+                owner="worker",
+                now=now,
+                lease_duration=timedelta(seconds=30),
+            )
+            is None
+        )
+    async with session_factory() as session:
+        task = await session.get(MaterializedTaskModel, seeded.task_id)
+        attempt_count = await session.scalar(
+            select(func.count())
+            .select_from(TaskAttemptModel)
+            .where(TaskAttemptModel.task_id == seeded.task_id)
+        )
+        assert task is not None
+        assert task.status == TaskState.READY.value
+        assert task.attempt_count == 0
+        assert attempt_count == 0
 
 
 @pytest.mark.asyncio
