@@ -12,6 +12,7 @@ from aide.domain.approvals import (
     DesignApproval,
     OperationApproval,
     OperationBinding,
+    approval_is_effective,
 )
 from aide.domain.artifacts import transitive_mock_derived
 from aide.domain.enums import ApprovalRule, TargetEnv
@@ -51,10 +52,11 @@ def granted(request: PolicyRequest) -> bool:
     required = request.capability.required_permission
     if required in request.workflow_grants:
         return True
+    binding = _operation_binding(request)
     return any(
-        record.status is ApprovalStatus.APPROVED
+        approval_is_effective(record, request.evaluated_at)
         and isinstance(record.subject, OperationApproval)
-        and record.subject.covers_operation(_operation_binding(request))
+        and record.subject.covers_operation(binding)
         for record in request.approvals
     )
 
@@ -76,18 +78,17 @@ def _operation_binding(request: PolicyRequest) -> OperationBinding:
     connector_id = request.connector.connector_id if request.connector else "unbound"
     connector_version = request.connector.version if request.connector else "unbound"
     target = request.target_environment or TargetEnv.DEV
-    hashes = tuple(sorted({item.resolved_input_digest for item in request.artifact_provenance}))
     return OperationBinding(
         operation_idempotency_key=request.operation_idempotency_key,
         resolved_input_digest=request.resolved_input_digest,
-        artifact_hashes=hashes,
+        artifact_hashes=request.artifact_hashes,
         capability_id=request.capability.id,
         capability_contract_version=request.capability.version,
         connector_id=connector_id,
         connector_version=connector_version,
         target_environment=target,
         required_permission=request.capability.required_permission,
-        external_state_digest=None,
+        external_state_digest=request.external_state_digest,
     )
 
 
@@ -324,10 +325,9 @@ DENY_RULES: tuple[tuple[RuleId, DenyRule], ...] = (
 def _has_matching_operation_approval(request: PolicyRequest) -> bool:
     binding = _operation_binding(request)
     return any(
-        record.status is ApprovalStatus.APPROVED
+        approval_is_effective(record, request.evaluated_at)
         and isinstance(record.subject, OperationApproval)
         and record.subject.covers_operation(binding)
-        and record.expires_at > request.evaluated_at
         for record in request.approvals
     )
 
@@ -336,7 +336,7 @@ def _matching_records(request: PolicyRequest) -> tuple[ApprovalRecord, ...]:
     return tuple(
         record
         for record in request.approvals
-        if record.status is ApprovalStatus.APPROVED and record.expires_at > request.evaluated_at
+        if approval_is_effective(record, request.evaluated_at)
     )
 
 
@@ -366,7 +366,7 @@ def collect_approval_requirements(request: PolicyRequest) -> tuple[ApprovalSubje
                     authorized_new_cap=cost.worst_case,
                     authorized_delta=cost.worst_case
                     - (cost.prior_cap if cost.prior_cap is not None else cost.current_cap),
-                    expires_at=request.evaluated_at,
+                    expires_at=request.approval_expires_at,
                 )
             )
     if request.design_approval_required and not _has_design_approval(request):
@@ -378,7 +378,7 @@ def collect_approval_requirements(request: PolicyRequest) -> tuple[ApprovalSubje
                     design_artifact_hash="pending",
                     validation_report_hash="pending",
                     invariant_hashes=(),
-                    expires_at=request.evaluated_at,
+                    expires_at=request.approval_expires_at,
                 )
             )
     return tuple(requirements)
@@ -427,7 +427,7 @@ def _synthetic_operation_approval(
         target_environment=binding.target_environment,
         required_permission=permission or binding.required_permission,
         external_state_digest=binding.external_state_digest,
-        expires_at=request.evaluated_at,
+        expires_at=request.approval_expires_at,
     )
 
 

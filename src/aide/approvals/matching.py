@@ -6,12 +6,12 @@ from datetime import datetime
 
 from aide.domain.approvals import (
     ApprovalRecord,
-    ApprovalStatus,
     ApprovalSubject,
     BudgetIncreaseApproval,
     DesignApproval,
     OperationApproval,
     OperationBinding,
+    approval_is_effective,
 )
 
 
@@ -28,9 +28,7 @@ def match_operation_approval(
     subject = record.subject
     if not isinstance(subject, OperationApproval):
         return False
-    if record.status is not ApprovalStatus.APPROVED:
-        return False
-    if record.expires_at <= now or subject.expires_at <= now:
+    if not approval_is_effective(record, now):
         return False
     return subject.covers_operation(binding)
 
@@ -44,9 +42,7 @@ def match_design_approval(
     subject = record.subject
     if not isinstance(subject, DesignApproval):
         return False
-    if record.status is not ApprovalStatus.APPROVED:
-        return False
-    if record.expires_at <= now or subject.expires_at <= now:
+    if not approval_is_effective(record, now):
         return False
     return (
         subject.design_artifact_hash == expected.design_artifact_hash
@@ -64,9 +60,7 @@ def match_budget_approval(
     subject = record.subject
     if not isinstance(subject, BudgetIncreaseApproval):
         return False
-    if record.status is not ApprovalStatus.APPROVED:
-        return False
-    if record.expires_at <= now or subject.expires_at <= now:
+    if not approval_is_effective(record, now):
         return False
     return (
         subject.budget_scope is expected.budget_scope

@@ -124,3 +124,12 @@ class ApprovalRecord(BaseModel):
     decided_by: PrincipalRef | None = None
     decided_at: datetime | None = None
     comment: str | None = None
+
+
+def approval_is_effective(record: ApprovalRecord, at: datetime) -> bool:
+    """True when a record may authorize at `at`. Does not check subject binding."""
+    return (
+        record.status is ApprovalStatus.APPROVED
+        and record.expires_at > at
+        and record.subject.expires_at > at
+    )

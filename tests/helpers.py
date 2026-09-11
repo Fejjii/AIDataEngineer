@@ -199,6 +199,10 @@ def policy_request(
     )
     if extra:
         kwargs.update(extra)
+    evaluated = kwargs["evaluated_at"]
+    assert isinstance(evaluated, datetime)
+    if extra is None or "approval_expires_at" not in extra:
+        kwargs["approval_expires_at"] = evaluated + timedelta(hours=1)
     return PolicyRequest.model_validate(kwargs)
 
 

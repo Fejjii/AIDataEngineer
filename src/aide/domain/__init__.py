@@ -8,6 +8,7 @@ from aide.domain.approvals import (
     DesignApproval,
     OperationApproval,
     OperationBinding,
+    approval_is_effective,
 )
 from aide.domain.artifacts import ArtifactProvenance, ExecutionMode
 from aide.domain.costs import BudgetScope, CostEstimate, CostUnit
@@ -100,6 +101,7 @@ __all__ = [
     "TaskTemplate",
     "UnresolvedInputError",
     "WorkflowState",
+    "approval_is_effective",
     "canonical_json_bytes",
     "compute_operation_idempotency_key",
     "compute_resolved_input_digest",

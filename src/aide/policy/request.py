@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from aide.capabilities.spec import CapabilitySpec
 from aide.connectors.base.health import ConnectorHealthSnapshot
@@ -41,8 +41,11 @@ class PolicyRequest(BaseModel):
     payload_classification: SqlClassification | GitChangeClassification | None = None
     estimated_cost: CostEstimate | None = None
     artifact_provenance: tuple[ArtifactProvenance, ...] = ()
+    artifact_hashes: tuple[str, ...] = ()
+    external_state_digest: str | None = None
     approvals: tuple[ApprovalRecord, ...] = ()
     evaluated_at: datetime
+    approval_expires_at: datetime
     capability_known: bool = True
     connector_registered: bool = True
     connector_advertises_capability: bool = True
@@ -51,6 +54,12 @@ class PolicyRequest(BaseModel):
     design_approval_required: bool = False
     design_subject: ApprovalSubject | None = None
     dev_namespace_schemas: frozenset[tuple[str, str]] = frozenset()
+
+    @model_validator(mode="after")
+    def _approval_expiry_after_evaluation(self) -> PolicyRequest:
+        if self.approval_expires_at <= self.evaluated_at:
+            raise ValueError("approval_expires_at must be later than evaluated_at")
+        return self
 
 
 class PolicyDecision(BaseModel):
