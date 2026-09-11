@@ -1,23 +1,26 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from tests.integration.helpers import seed_task
 
 from aide.connectors.base.reconcile import NoEffect
 from aide.domain.states import TaskState
 from aide.orchestration.recovery import apply_reconcile_result
 from aide.orchestration.worker import (
+    RecoveryClaim,
     acquire_expired_recovery,
+    acquire_recovery,
     claim_task,
     finalize_success,
     mark_dispatched,
     renew_heartbeat,
 )
 from aide.persistence.models import MaterializedTaskModel, TaskAttemptModel
-from tests.integration.helpers import seed_task
 
 
 def moment() -> datetime:
@@ -80,6 +83,36 @@ async def test_stale_worker_after_recovery_updates_nothing(
         assert task is not None
         assert task.outputs is None
         assert task.status == TaskState.RECONCILING.value
+
+
+@pytest.mark.asyncio
+async def test_only_one_reconciler_acquires_recovery_ownership(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    seeded = await seed_task(session_factory)
+    now = moment()
+    async with session_factory() as session, session.begin():
+        claim = await claim_task(
+            session, owner="worker", now=now, lease_duration=timedelta(seconds=10)
+        )
+    assert claim is not None
+
+    async def recover(owner: str) -> RecoveryClaim | None:
+        async with session_factory() as session, session.begin():
+            return await acquire_recovery(
+                session,
+                task_id=seeded.task_id,
+                recovery_owner=owner,
+                now=now + timedelta(seconds=1),
+                lease_duration=timedelta(seconds=10),
+                reconcile_deadline=now + timedelta(minutes=1),
+                expected_owner=claim.owner,
+                expected_epoch=claim.claim_epoch,
+                expected_attempt_id=claim.attempt_id,
+            )
+
+    results = await asyncio.gather(recover("r1"), recover("r2"))
+    assert sum(result is not None for result in results) == 1
 
 
 @pytest.mark.asyncio

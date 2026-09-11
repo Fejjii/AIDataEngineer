@@ -64,7 +64,7 @@ async def claim_task(
             MaterializedTaskModel.attempt_count < MaterializedTaskModel.max_attempts,
         )
         .order_by(MaterializedTaskModel.created_at, MaterializedTaskModel.task_id)
-        .with_for_update(skip_locked=True)
+        .with_for_update(skip_locked=True, of=MaterializedTaskModel)
         .limit(1)
     )
     if task is None:

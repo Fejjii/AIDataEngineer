@@ -64,17 +64,23 @@ async def propagate_required_dependency_failures(
             .with_for_update()
         )
     ).all()
-    existing = {
-        item.template_id
-        for item in (
-            await session.scalars(
-                select(TemplateDispositionModel).where(
-                    TemplateDispositionModel.phase_run_id == phase_run_id
-                )
+    dispositions = (
+        await session.scalars(
+            select(TemplateDispositionModel).where(
+                TemplateDispositionModel.phase_run_id == phase_run_id
             )
-        ).all()
-    }
-    task_by_local = {task.local_id: task for task in tasks}
+        )
+    ).all()
+    existing = {item.template_id for item in dispositions}
+    template_by_id = {item.template_id: item for item in templates}
+    outcomes = {task.local_id: task.status for task in tasks}
+    outcomes.update(
+        {
+            template_by_id[item.template_id].local_id: item.status
+            for item in dispositions
+            if item.template_id in template_by_id
+        }
+    )
     terminal_failure = {
         TaskState.FAILED.value,
         TaskState.PARKED.value,
@@ -83,11 +89,10 @@ async def propagate_required_dependency_failures(
     }
     created = 0
     for template in templates:
-        if template.template_id in existing or template.local_id in task_by_local:
+        if template.template_id in existing or template.local_id in outcomes:
             continue
         for dependency_local_id in sorted(template.required_dependencies):
-            dependency = task_by_local.get(dependency_local_id)
-            if dependency is None or dependency.status not in terminal_failure:
+            if outcomes.get(dependency_local_id) not in terminal_failure:
                 continue
             session.add(
                 TemplateDispositionModel(
@@ -98,6 +103,7 @@ async def propagate_required_dependency_failures(
                     upstream_local_id=dependency_local_id,
                 )
             )
+            outcomes[template.local_id] = TaskState.SKIPPED.value
             created += 1
             break
     await session.flush()

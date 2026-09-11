@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from tests.integration.helpers import seed_task
 
 from aide.connectors.base.context import (
     AttemptRecoveryRef,
@@ -29,7 +30,6 @@ from aide.orchestration.worker import (
     mark_dispatched,
 )
 from aide.persistence.models import MaterializedTaskModel, RecoveryEventModel
-from tests.integration.helpers import seed_task
 
 
 def now() -> datetime:

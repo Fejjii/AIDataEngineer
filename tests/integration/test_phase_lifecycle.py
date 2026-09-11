@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from tests.integration.helpers import seed_task
 
 from aide.domain.states import PhaseRunStatus, TaskState, WorkflowState
 from aide.orchestration.coordination import (
@@ -15,7 +16,6 @@ from aide.orchestration.coordination import (
 )
 from aide.orchestration.materialization import (
     ConcurrentStateError,
-    TemplateSpec,
     create_phase_occurrence,
     resume_existing_phase,
 )
@@ -26,7 +26,6 @@ from aide.persistence.models import (
     TemplateDispositionModel,
     WorkflowModel,
 )
-from tests.integration.helpers import seed_task
 
 
 @pytest.mark.asyncio

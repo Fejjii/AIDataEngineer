@@ -8,8 +8,9 @@ from uuid import uuid4
 import pytest
 from pydantic import BaseModel
 from sqlalchemy import func, select, text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from tests.integration.helpers import SeedInput, seed_task
 
 from aide.capabilities.registry import CapabilityRegistry
 from aide.capabilities.spec import (
@@ -37,7 +38,12 @@ from aide.orchestration.cancellation import (
 )
 from aide.orchestration.compatibility import evaluate_pinned_contract
 from aide.orchestration.materialization import advisory_lock_key
-from aide.orchestration.worker import claim_task, mark_dispatched
+from aide.orchestration.worker import (
+    RecoveryClaim,
+    claim_task,
+    finalize_success,
+    mark_dispatched,
+)
 from aide.persistence.audit import append_audit_event
 from aide.persistence.budget import BudgetExceededError, BudgetLedger
 from aide.persistence.models import (
@@ -50,7 +56,6 @@ from aide.persistence.models import (
     TaskTemplateModel,
     WorkflowModel,
 )
-from tests.integration.helpers import SeedInput, seed_task
 
 
 class SeedOutput(BaseModel):
@@ -154,7 +159,7 @@ async def test_cancellation_ownership_is_serialized_and_io_runs_after_unlock(
         )
     assert len(ownership.recovery_claims) == 1
 
-    async def connector_io(_: object) -> bool:
+    async def connector_io(_: RecoveryClaim) -> bool:
         async with session_factory() as session, session.begin():
             acquired = await session.scalar(
                 text("SELECT pg_try_advisory_xact_lock(:key)"),
@@ -184,8 +189,6 @@ async def test_cancellation_ownership_is_serialized_and_io_runs_after_unlock(
 async def test_cancellation_epoch_fences_prior_worker_result(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    from aide.orchestration.worker import finalize_success
-
     seeded = await seed_task(session_factory)
     now = datetime(2026, 9, 11, 18, 0, 0)
     async with session_factory() as session, session.begin():
@@ -251,19 +254,17 @@ async def test_audit_sequence_is_monotonic(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     seeded = await seed_task(session_factory)
-    async with session_factory() as session, session.begin():
-        await append_audit_event(
-            session,
-            workflow_id=seeded.workflow_id,
-            event_type="ONE",
-            payload={},
-        )
-        await append_audit_event(
-            session,
-            workflow_id=seeded.workflow_id,
-            event_type="TWO",
-            payload={},
-        )
+
+    async def append(event_type: str) -> None:
+        async with session_factory() as session, session.begin():
+            await append_audit_event(
+                session,
+                workflow_id=seeded.workflow_id,
+                event_type=event_type,
+                payload={},
+            )
+
+    await asyncio.gather(append("ONE"), append("TWO"), append("THREE"))
     async with session_factory() as session:
         sequences = list(
             (
