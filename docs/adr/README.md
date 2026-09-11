@@ -46,3 +46,9 @@ transitions), DE-ADR-020 (DE 002A CLOUD; DE 002B/C LOCAL), DE-ADR-022 (lock scop
 exhausted `NoEffect` failure).
 
 Accepted by operator (2026-09-11): DE-ADR-008 through DE-ADR-027 status set to ACCEPTED.
+
+Amended by OPS004 (2026-09-11): DE-ADR-020 — OPS002 assessed remote development readiness;
+OPS003 implemented and validated the Cursor Cloud environment; operator saved the environment;
+fresh Cloud Agent verification passed; DE 002B and DE 002C reclassified from LOCAL to CLOUD.
+Credential boundaries unchanged (real Snowflake, live dbt on Snowflake, live staging,
+production, and secret entry remain LOCAL or Hybrid per existing gates).
