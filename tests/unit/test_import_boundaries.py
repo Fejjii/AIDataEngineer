@@ -21,3 +21,4 @@ def test_import_every_module() -> None:
     assert any(name.startswith("aide.domain") for name in imported)
     assert any(name.startswith("aide.policy") for name in imported)
     assert any(name.startswith("aide.connectors.base") for name in imported)
+    assert any(name.startswith("aide.secrets") for name in imported)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from aide.domain.permissions import PermissionLevel
@@ -43,3 +44,15 @@ def test_required_architecture_docs_exist() -> None:
     ]
     for rel in required:
         assert (ROOT / rel).is_file(), rel
+
+
+def test_aide_secrets_package_is_tracked() -> None:
+    """Regression: a root `secrets/` gitignore must not hide aide.secrets."""
+    path = ROOT / "src" / "aide" / "secrets" / "__init__.py"
+    assert path.is_file()
+    ignored = subprocess.run(
+        ["git", "check-ignore", "-q", str(path.relative_to(ROOT))],
+        cwd=ROOT,
+        check=False,
+    )
+    assert ignored.returncode == 1
