@@ -1,6 +1,6 @@
 # Permission Model, Policy, Approvals, Security, Failure & Repair
 
-**Task:** DE 001 (corrected by DE 001R1 and DE 001R2A) · **Status:** PROPOSED · ADRs: DE-ADR-015, DE-ADR-016, DE-ADR-023, DE-ADR-027
+**Task:** DE 001 (corrected by DE 001R1, DE 001R2A and DE 001R2B) · **Status:** PROPOSED · ADRs: DE-ADR-015, DE-ADR-016, DE-ADR-023, DE-ADR-027
 
 This document is the single reference for *who may do what*, *how it is enforced*, *how
 humans approve*, *how secrets and untrusted inputs are contained*, and *how failures are
@@ -91,19 +91,24 @@ test asserts that ordering comparisons on `PermissionLevel` raise `TypeError`.
 ### 2.1 Connector instance allowed permission sets (V1)
 
 `ConnectorSpec.allowed_permissions: frozenset[PermissionLevel]` lists every permission the
-instance may ever exercise. Membership is the only check (rule R4). A connector instance
-must list a permission for each capability it advertises (startup check, §3 R0);
+instance may ever exercise. Membership is the only permission check (rule R4). A connector
+instance must list a permission for each capability it advertises (startup check, §3 R0);
 `READ` must be listed explicitly where read capabilities are advertised — nothing is
 implied by another grant.
 
-| Connector instance | `allowed_permissions` | Notes |
-|---|---|---|
-| `snowflake_dev` | `{READ, DEVELOPMENT_WRITE, DESTRUCTIVE}` | `DESTRUCTIVE` only reachable through `drop_dataset` in DEV with approval (R16) |
-| `snowflake_ro` | `{READ}` | profiling / discovery identity |
-| `postgres_source` | `{READ}` | |
-| `dbt_dev` | `{READ, DEVELOPMENT_EXECUTE, DEVELOPMENT_WRITE}` | `get_lineage` (READ), compile/run/test (DX), `create_transformation` (DW) |
-| `dbt_staging` | `{STAGING_DEPLOY}` | `deploy_staging` only |
-| `github` | `{GIT_WRITE}` | `prepare_git_change`, `prepare_pull_request` |
+Warehouse and database instances also carry `identity_class`. Read capabilities that
+require those kinds may bind only to `READ_ONLY` (rule R4b). `snowflake_dev` retains
+`DEVELOPMENT_WRITE` and `DESTRUCTIVE` for DEV object writes; it does **not** list `READ`
+and is not a valid read binding.
+
+| Connector instance | `identity_class` | `allowed_permissions` | Notes |
+|---|---|---|---|
+| `snowflake_dev` | `DEVELOPMENT` | `{DEVELOPMENT_WRITE, DESTRUCTIVE}` | DEV writes (`create_dataset`, `drop_dataset`); `DESTRUCTIVE` only via `drop_dataset` in DEV with approval (R16). No READ capabilities. |
+| `snowflake_ro` | `READ_ONLY` | `{READ}` | every Snowflake read capability: discover, describe, profile, sample, infer, validate/EXPLAIN, `execute_query`, metrics |
+| `postgres_source` | `READ_ONLY` | `{READ}` | |
+| `dbt_dev` | `DEVELOPMENT` | `{READ, DEVELOPMENT_EXECUTE, DEVELOPMENT_WRITE}` | `get_lineage` (READ), compile/run/test (DX), `create_transformation` (DW) |
+| `dbt_staging` | `STAGING_DEPLOY` | `{STAGING_DEPLOY}` | `deploy_staging` only |
+| `github` | `VCS` | `{GIT_WRITE}` | `prepare_git_change`, `prepare_pull_request` |
 
 Approval-eligible permissions (the only permissions a workflow may obtain at runtime
 through an approval rather than at creation): `APPROVAL_ELIGIBLE = {STAGING_DEPLOY,
@@ -178,6 +183,7 @@ exist.
 | R2b | `status = DEGRADED` ∧ `required_permission ∈ connector_health.missing_permissions` ∨ `SECRET_UNRESOLVED` reported | DENY `CONNECTOR_PERMISSION_MISSING` / `SECRET_UNRESOLVED` |
 | R3 | ¬`granted(req)` | REQUIRE_APPROVAL (kind `DEPLOY` or `DESTRUCTIVE`) if `approval_eligible(req)`; else DENY `PERM_NOT_GRANTED` |
 | R4 | ¬`connector_allows(req)` | DENY `PERMISSION_NOT_ALLOWED_FOR_CONNECTOR` |
+| R4b | `required_permission = READ` ∧ `connector.kind ∈ {warehouse, database}` ∧ `connector.identity_class ≠ READ_ONLY` | DENY `READ_ONLY_IDENTITY_REQUIRED` |
 | R5 | `target_environment ≠ connector.target_environment` | DENY `ENV_MISMATCH` |
 | R6 | `target_environment = PROD` | DENY `PROD_DISABLED_V1` |
 | R7 | SQL payload: `parse_ok = false` | DENY `SQL_UNPARSEABLE` |
@@ -215,7 +221,7 @@ and auditing lower-severity reasons. Rule declaration order never affects the re
 | Deny class | Meaning | Reason codes | Task outcome | Workflow routing | Human action |
 |---|---|---|---|---|---|
 | `ENVIRONMENTAL` | Operator-resolvable condition; the operation itself is legitimate | `CONNECTOR_UNAVAILABLE`, `CONNECTOR_PERMISSION_MISSING`, `SECRET_UNRESOLVED`, `CONTRACT_VERSION_UNAVAILABLE` | `PARKED` (no new attempt) | `BLOCKED` with all reasons; resume re-evaluates | fix environment, then resume |
-| `SCOPE` | Operation outside authorized workflow/connector/environment scope | `UNKNOWN_TARGET`, `PERM_NOT_GRANTED`, `PERMISSION_NOT_ALLOWED_FOR_CONNECTOR`, `ENV_MISMATCH`, `PROD_DISABLED_V1`, `SCOPE_VIOLATION`, `WRITE_OUTSIDE_NAMESPACE`, `READ_ONLY_REQUIRED`, `PROVENANCE_MISMATCH`, `MOCK_PROVENANCE_TO_REAL_TARGET` | `FAILED(POLICY_DENIED)`; never retried | **fail closed** | create a correctly scoped operation |
+| `SCOPE` | Operation outside authorized workflow/connector/environment scope | `UNKNOWN_TARGET`, `PERM_NOT_GRANTED`, `PERMISSION_NOT_ALLOWED_FOR_CONNECTOR`, `READ_ONLY_IDENTITY_REQUIRED`, `ENV_MISMATCH`, `PROD_DISABLED_V1`, `SCOPE_VIOLATION`, `WRITE_OUTSIDE_NAMESPACE`, `READ_ONLY_REQUIRED`, `PROVENANCE_MISMATCH`, `MOCK_PROVENANCE_TO_REAL_TARGET` | `FAILED(POLICY_DENIED)`; never retried | **fail closed** | create a correctly scoped operation |
 | `SECURITY` | Payload is unsafe or a protection boundary would be crossed | `SQL_UNPARSEABLE`, `SQL_DESTRUCTIVE`, `SQL_SECURITY`, `SQL_UNSAFE_FUNCTION`, `SQL_UNSAFE_CONSTRUCT`, `SQL_MULTI`, `PROTECTED_BRANCH`, `SECRET_IN_DIFF` | `FAILED(POLICY_DENIED)` + failure classification `UNSAFE_OPERATION`; never retried | **fail closed**: `FAILED`; audit `POLICY_DENY_SECURITY` alert event | investigate the audit alert |
 | — (`REQUIRE_APPROVAL`) | No denial exists and one or more typed approval subjects are unmet | rules R3, R16–R19 | `AWAITING_APPROVAL` | `APPROVAL_REQUIRED` with all mandatory subject ids | approve/reject each subject |
 
@@ -238,6 +244,25 @@ exception and ensures approvals never bind to unresolved input.
 Consistency: `docs/STATE_MODEL.md` §2 (`POLICY_CHECK`, `BLOCKED`), §3 (transition table)
 and §4.3 (task state `PARKED`), `docs/CAPABILITY_MODEL.md` §4, and §10 of this document
 implement this table and must not define a different routing.
+
+### 3.2 Scheduler-emitted environmental reasons
+
+`CONTRACT_VERSION_UNAVAILABLE` is mapped in §3.1 as `ENVIRONMENTAL`, but it is **not**
+produced by policy rules R0–R21. The **authoritative emitter** is the scheduler /
+materialization layer:
+
+1. After a phase contract snapshot is pinned, and again before claim/dispatch, the
+   scheduler looks up the pinned capability contract version, payload schema versions and
+   connector implementation version in the runtime registry and connector advertisements.
+2. If any pinned version is absent, unsupported, or disabled, the scheduler emits
+   `CONTRACT_VERSION_UNAVAILABLE` without silently upcasting. The task is `PARKED`; the
+   workflow is `BLOCKED`. Routing remains the §3.1 `ENVIRONMENTAL` path.
+3. This is distinct from R1 `UNKNOWN_TARGET` (unknown capability/connector — `SCOPE`, fail
+   closed). A known capability whose **pinned historical version** is temporarily
+   unavailable is environmental: restoring the advertised handler unparks the work.
+
+DE 002A tests the emission predicate and the reason→class mapping. DE 002B tests that the
+scheduler actually parks (does not fail closed) and that resume re-evaluates availability.
 
 ---
 
@@ -291,14 +316,17 @@ delta must equal new minus prior); it does not approve an operation.
 A policy decision may produce multiple mandatory subject requirements. They are stored as
 an unordered set with a canonical digest; execution resumes only when **all** are approved
 and valid. Any rejection prevents execution immediately and invalidates sibling pending
-requirements for that gate. Subject-specific routing is authoritative:
+requirements for that gate. Subject-specific routing is authoritative and **must** appear
+as guarded rows in `docs/STATE_MODEL.md` §3 (approval semantics are not weakened):
 
 - rejected design → `PLANNING` with human feedback;
 - rejected staging operation → task `CANCELLED(APPROVAL_REJECTED)` and delivery completes
-  as `DELIVERED_PR_ONLY` when that documented fallback exists, otherwise `BLOCKED`;
-- rejected destructive/Git operation → required task fails closed; optional task is
-  `SKIPPED(APPROVAL_REJECTED)`;
-- rejected budget increase → workflow remains `BLOCKED(BUDGET_NOT_AUTHORIZED)` until the
+  as `DELIVERED_PR_ONLY` when that documented fallback exists (`APPROVAL_REQUIRED →
+  COMPLETED`), otherwise `BLOCKED`;
+- rejected required destructive/Git operation → task `FAILED` (fail closed), workflow
+  `FAILED`; optional such task is `SKIPPED(APPROVAL_REJECTED)` and the originating phase
+  continues;
+- rejected budget increase → workflow `BLOCKED(BUDGET_NOT_AUTHORIZED)` until the
   operator reduces scope or abandons.
 
 Only a trusted principal with role `approver` may decide. The V1 principal may also be the
@@ -480,8 +508,10 @@ by the workflow cap.
 
 Defence in depth, each independently sufficient for the common case:
 
-1. Identity: every read capability, including `execute_query`, uses the `snowflake_ro`
-   connector/`AIDE_DEV_RO`; write identity is never selected for a read contract.
+1. Identity: every warehouse/database read capability, including `execute_query`, binds
+   only to `identity_class=READ_ONLY` (`snowflake_ro` / `AIDE_DEV_RO`). R4b and the
+   absence of `READ` from `snowflake_dev.allowed_permissions` make this a policy failure,
+   not a convention. Write identity is never selected for a read contract.
 2. Classifier: Snowflake parse → normalized render → reparse must preserve the AST;
    destructive/security/multi-statement, external functions, unapproved UDFs/table
    functions, stages/URLs, dynamic/session constructs and unknown AST nodes are denied.

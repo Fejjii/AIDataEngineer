@@ -5,15 +5,13 @@
 **DESIGNED — PROPOSED, hardened after independent review; awaiting acceptance**
 
 Designed by DE 001; corrected by DE 001R1; independently reviewed by GPT 5.6 Sol High;
-blocking contract findings hardened by DE 001R2A (materialized operation identity,
-phase-run serialization, fencing/recovery/cancellation, denial aggregation, typed
-approvals, trusted grants, versioning, SQL/connector safety and DE 002 sequencing).
-Composer 2.5 only persisted the review artifact. Not yet accepted.
-Implementation (DE 002+) must not start until the operator accepts this architecture,
-after a focused independent verification of DE 001R2A. After acceptance, status becomes
-`ACCEPTED` and the architecture freeze in `.ai/MASTER_WORKFLOW.md` §20 applies — read per
-DE-ADR-026: the *architecture* is baselined and breaking deviations need an ADR; *contracts*
-may evolve additively when existing tests stay valid.
+blocking contract findings hardened by DE 001R2A; residual consistency findings U-01–U-10
+closed by DE 001R2B. Composer 2.5 only persisted the independent review/verification
+artifacts. Not yet accepted. Implementation (DE 002+) must not start until the operator
+accepts this architecture. After acceptance, status becomes `ACCEPTED` and the architecture
+freeze in `.ai/MASTER_WORKFLOW.md` §20 applies — read per DE-ADR-026: the *architecture* is
+baselined and breaking deviations need an ADR; *contracts* may evolve additively when
+existing tests stay valid.
 
 ## Authoritative documents
 
@@ -79,8 +77,8 @@ INFRASTRUCTURE, SECURITY`. Every check is set membership: required permission �
 grant set (or covered by an approval) and ∈ the connector instance's
 `allowed_permissions`; no ceilings/ranks. Every applicable denial rule runs; all reasons
 persist; routing severity is `SECURITY > SCOPE > ENVIRONMENTAL`; approval requirements
-are evaluated only with no denial. SQL read capabilities use RO identities and classify
-functions/constructs/scope with dialect round-trip parsing. Typed
+are evaluated only with no denial. SQL read capabilities bind to `identity_class=READ_ONLY`
+(`snowflake_ro`) and classify functions/constructs/scope with dialect round-trip parsing. Typed
 `OperationApproval|DesignApproval|BudgetIncreaseApproval` subjects have kind-specific
 binding and rejection semantics. **Denials are routed by class**
 (`docs/PERMISSION_MODEL.md` §3.1): `ENVIRONMENTAL` (connector unavailable, secret
@@ -97,8 +95,9 @@ weaken tests; escalate to `BLOCKED`.
 connector and LLM provider adapters; transitive REAL/MOCK artifact provenance blocks mock
 evidence from real Git/deploy; redaction before logs/audit/prompts/artifacts.
 
-**Contract baseline is sequenced:** DE 002A pure kernel + minimal CI; DE 002B PostgreSQL
-phase-run/fencing/recovery/cancellation primitives; DE 002C first offline safe-SQL slice;
+**Contract baseline is sequenced:** DE 002A pure kernel + minimal CI (**CLOUD**); DE 002B
+PostgreSQL phase-run/fencing/recovery/cancellation primitives (**LOCAL**); DE 002C first
+offline safe-SQL slice (**LOCAL**); DE 003 expands Docker/integration CI (**CLOUD**).
 DE 003 expands Docker/integration CI. No phase baselines semantics before its deterministic
 tests pass. Baseline includes principal/grants, materialization identity, versions, typed
 health/reconciliation, approvals, policy aggregation, provenance, audit and budget ledger.

@@ -1,6 +1,6 @@
 # DE-ADR-014 — Connector protocol with real + fake implementations and status
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1, DE 001R2A)
+- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1, DE 001R2A, DE 001R2B)
 
 ## Context
 The system must be testable and demonstrable without production credentials, simulate
@@ -12,9 +12,11 @@ real implementation, a deterministic fake with fault injection, a vendor error �
 class mapper, configuration with `SecretRef` only, contract tests parametrized over
 fake/real, and a README. Connector instances are bound to exactly one environment and
 carry an explicit `allowed_permissions` set (membership-checked, no ordering — DE 001R1
-replaced the earlier "permission ceiling") and an object allow-list. Product-visible status
-`AVAILABLE | DEGRADED | UNAVAILABLE | MOCK`; `UNAVAILABLE` parks dependent tasks rather
-than failing them.
+replaced the earlier "permission ceiling"), an `identity_class`, and an object allow-list.
+Warehouse/database read capabilities bind only to `identity_class=READ_ONLY` (Snowflake:
+`snowflake_ro`). `snowflake_dev` retains DEV write permissions and does not list `READ`.
+Product-visible status `AVAILABLE | DEGRADED | UNAVAILABLE | MOCK`; `UNAVAILABLE` parks
+dependent tasks rather than failing them.
 
 Every connector advertises supported contract/schema versions and receives materialized
 immutable input. Side-effecting handlers propagate operation and attempt identities.

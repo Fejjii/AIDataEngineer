@@ -81,7 +81,11 @@ DE 000 records operating-system decisions only.
 Full records: `docs/adr/DE-ADR-0NN-*.md`. Status **PROPOSED** until the operator accepts
 DE 001. DE 001R1 amended DE-ADR-011, 014, 015, 016, 022, 024 and added DE-ADR-026.
 DE 001R2A amended DE-ADR-011, 013–018, 021, 022, 026 and added DE-ADR-027 after
-independent GPT 5.6 Sol High review.
+independent GPT 5.6 Sol High review. DE 001R2B amended DE-ADR-011, 014–016, 020–022
+to close residual verification findings (approval rejection routes, staging materialize-
+then-approve, DE 002A Cloud eligibility, discovery exit criteria, READ_ONLY identity,
+reconciliation exhaustion, lock scope, resume semantics, `CONTRACT_VERSION_UNAVAILABLE`
+emitter, retry summary).
 
 ## DE-ADR-008 — Modular monolith application architecture
 - **Decision:** One Python package `aide`, one image, one PostgreSQL; API + worker in-process (separable). No microservices/Kubernetes.
@@ -98,9 +102,12 @@ independent GPT 5.6 Sol High review.
 ## DE-ADR-011 — Workflow = state machine + phase-scoped task DAG
 - **Decision:** Persist phase occurrence/generation and pinned contract snapshot. Templates
   have no operation identity; fully resolved validated input precedes digest/key, policy,
-  approval and attempts. Fan-out uses a new planning boundary. PostgreSQL advisory
-  transaction lock serializes phase reduction/advance; dependency outcomes are exhaustive.
-  Cancellation is intent and controlled shutdown before terminal state.
+  approval and attempts. Fan-out uses a new planning boundary; per-run `phase_exit_criteria`
+  let DISCOVERY enumeration complete before description. Resume of PARKED/AWAITING_APPROVAL
+  work does not allocate a new phase run. PostgreSQL advisory transaction lock serializes
+  coordination only; connector cancel/reconcile I/O is outside the lock. Dependency
+  outcomes are exhaustive. Cancellation is intent and controlled shutdown before terminal
+  state.
 - **Rejected:** ordered list; whole-workflow static DAG; fully dynamic LLM-driven DAG.
 
 ## DE-ADR-012 — PostgreSQL + SQLAlchemy 2 + Alembic for all state
@@ -114,25 +121,29 @@ independent GPT 5.6 Sol High review.
 - **Rejected:** vendor-specific tools exposed to planner; free-form function calling over SDKs.
 
 ## DE-ADR-014 — Connector protocol with real + fake and product-visible status
-- **Decision:** Connectors advertise supported versions and typed health; side effects
-  reconcile from complete immutable context with bounded
-  `EffectFound|NoEffect|InProgress|Unknown`. Artifacts carry REAL/MOCK provenance. Read SQL
-  uses RO identity; canonical query tags carry full operation and attempt identity.
+- **Decision:** Connectors advertise supported versions, `identity_class` and typed health;
+  side effects reconcile from complete immutable context with bounded
+  `EffectFound|NoEffect|InProgress|Unknown`. Artifacts carry REAL/MOCK provenance. Warehouse
+  READ binds only to `identity_class=READ_ONLY` (`snowflake_ro`; `READ ∉ snowflake_dev`).
+  Canonical query tags carry full operation and attempt identity.
 - **Rejected:** per-test mocks only; replay-only.
 
 ## DE-ADR-015 — Deterministic policy engine and SQL safety classifier
 - **Decision:** Every applicable denial rule runs; all reasons persist; authoritative
   severity `SECURITY > SCOPE > ENVIRONMENTAL` drives routing independent of order.
   Approvals evaluate only with no denial. Policy uses trusted principal/server-derived
-  grants, typed health, transitive provenance, RO read identity and safe
-  function/construct/scope classification. Plan validity is independent of temporary health.
+  grants, typed health, transitive provenance, RO read identity (`identity_class=READ_ONLY`)
+  and safe function/construct/scope classification. Plan validity is independent of
+  temporary health. Scheduler emits `CONTRACT_VERSION_UNAVAILABLE` for missing pinned
+  versions (ENVIRONMENTAL parking, not R1 fail-closed).
 - **Rejected:** prompt-only guardrails; LLM safety judge; regex-only filtering; ordered permission hierarchy; uniform DENY → FAILED.
 
 ## DE-ADR-016 — Typed approval subjects with complete binding
 - **Decision:** `OperationApproval`, `DesignApproval`, `BudgetIncreaseApproval` are distinct.
   Operation binding covers operation/input/artifacts/provenance/capability/connector/target/
   external state/expiry. Design grants no permission; budget authorizes explicit cap/delta.
-  All simultaneous mandatory subjects approve; rejection has subject-specific routing.
+  All simultaneous mandatory subjects approve; rejection has subject-specific routing
+  including legal `APPROVAL_REQUIRED → PLANNING|COMPLETED|BLOCKED|FAILED`.
 - **Rejected:** workflow-level approval; chat-based approval.
 
 ## DE-ADR-017 — Thin LLM gateway, structured outputs, versioned prompts
@@ -151,17 +162,18 @@ independent GPT 5.6 Sol High review.
 - **Rejected:** prompt-eval frameworks as primary; LLM judges.
 
 ## DE-ADR-020 — Local vs Cloud development boundaries for product work
-- **Decision:** Cloud-eligible iff tracked state + fakes/fixtures suffice + no credentials + declared files + isolated branch. LOCAL: DE 002, 005, 008, 012-live, 017, 018, 019. Architecture fully in tracked `docs/`.
+- **Decision:** Cloud-eligible iff tracked state + fakes/fixtures suffice + no credentials + declared files + isolated branch. **DE 002A is CLOUD** (pure contracts + minimal CI; no credentials or local persistence). **DE 002B and DE 002C remain LOCAL.** Other LOCAL: DE 005, 008, 012-live, 017, 018, 019. Architecture fully in tracked `docs/`.
 
 ## DE-ADR-021 — Parallel development lanes and unlock milestones
-- **Decision:** Sequential foundation is DE 002A kernel+CI → DE 002B recovery persistence
-  → DE 002C slice → DE 003 CI expansion. Two agents only after all merge.
+- **Decision:** Sequential foundation is DE 002A kernel+CI (CLOUD) → DE 002B recovery persistence
+  (LOCAL) → DE 002C slice (LOCAL) → DE 003 CI expansion (CLOUD). Two agents only after all merge.
 
 ## DE-ADR-022 — In-process worker with PostgreSQL task queue
 - **Decision:** `SKIP LOCKED` plus renewable lease/claim epoch; owner+epoch finalization;
   atomic recovery ownership fences stale workers. Every ambiguous side effect reconciles
-  before retry; bounded `InProgress` cannot become absence. Cancellation stops claims,
-  fences results, cancels cooperatively and reconciles before terminal state.
+  before retry; proven `NoEffect` retries only within `max_attempts` else `FAILED`; bounded
+  `InProgress` cannot become absence. Cancellation lock covers coordination only; connector
+  cancel/reconcile I/O is outside it.
 - **Rejected:** Celery/RQ/arq + Redis; Temporal (deferred); blind re-run after lease expiry.
 
 ## DE-ADR-023 — Bounded self-repair loop

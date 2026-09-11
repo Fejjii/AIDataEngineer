@@ -1,6 +1,6 @@
 # DE-ADR-022 — In-process worker with PostgreSQL task queue
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1, DE 001R2A)
+- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1, DE 001R2A, DE 001R2B)
 
 ## Context
 Tasks (LLM calls, dbt runs up to 15 min, Snowflake queries) must run asynchronously,
@@ -22,11 +22,14 @@ Retry safety is evidence-based on every failure path. Definite pre-dispatch or a
 no-effect rejection may retry within `max_attempts`. Timeout after dispatch, connection or
 response loss, fail-after-effect, crash and lease expiry are ambiguous for side effects and
 must reconcile first. `EffectFound` requires schema-valid output; `NoEffect` permits a new
-attempt; `InProgress` renews bounded recovery; `Unknown` or exhausted `InProgress` parks.
+attempt only while `attempt_count < max_attempts`, otherwise the task fails; `InProgress`
+renews bounded recovery; `Unknown` or exhausted `InProgress` parks.
 No ambiguous side effect is blindly repeated.
 
-Cancellation persists intent, stops claims, advances fencing, attempts cooperative cancel
-and reconciles. Terminal cancellation requires quiescence or explicit durable parking of
+Cancellation persists intent, stops claims, and advances fencing under a short
+serialization lock used only for deterministic coordination and ownership changes.
+Cooperative cancel and reconciliation I/O run outside that lock under fenced recovery
+ownership. Terminal cancellation requires quiescence or explicit durable parking of
 unresolved effects. A human cannot mark success without verified or imported schema-valid
 output.
 

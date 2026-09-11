@@ -1,6 +1,6 @@
 # Capability Model
 
-**Task:** DE 001 (hardened by DE 001R2A) · **Status:** PROPOSED · ADR: DE-ADR-013
+**Task:** DE 001 (hardened by DE 001R2A and DE 001R2B) · **Status:** PROPOSED · ADR: DE-ADR-013
 
 The orchestrator reasons about **capabilities**, never about vendors. A capability is a
 typed, versioned contract. A **tool** is the binding of a capability to an implementation
@@ -55,6 +55,9 @@ Rules:
 - `effect_semantics` is invocation safety metadata, not permission to blind-retry. Every
   ambiguous side-effecting failure reconciles first. `PROVEN_CONVERGENT` requires a
   validator over the materialized input; dbt runs default to `NON_IDEMPOTENT`.
+  `retry.retry_on` for side-effecting capabilities is subject to the §4.7 evidence rule.
+- Warehouse/database READ capabilities must bind to `identity_class=READ_ONLY`
+  (`docs/PERMISSION_MODEL.md` §2.1, R4b).
 
 ---
 
@@ -68,26 +71,26 @@ Full per-capability contracts: `docs/TOOL_CONTRACTS.md`.
 
 | Id | Purpose | Perm | Risk | Approval | Connector |
 |---|---|---|---|---|---|
-| `discover_assets` | Enumerate databases/schemas/tables/views/files within an allow-listed scope | R | L | NEVER | REQUIRED(warehouse\|database\|storage) |
-| `describe_asset` | Columns, types, constraints, comments, row count, last altered for one asset | R | L | NEVER | REQUIRED |
-| `detect_schema_drift` | Diff current `describe_asset` against a stored snapshot | R | L | NEVER | REQUIRED |
+| `discover_assets` | Enumerate databases/schemas/tables/views/files within an allow-listed scope | R | L | NEVER | REQUIRED(warehouse\|database\|storage); warehouse/database = `READ_ONLY` |
+| `describe_asset` | Columns, types, constraints, comments, row count, last altered for one asset | R | L | NEVER | REQUIRED; warehouse/database = `READ_ONLY` |
+| `detect_schema_drift` | Diff current `describe_asset` against a stored snapshot | R | L | NEVER | REQUIRED; warehouse/database = `READ_ONLY` |
 | `select_relevant_assets` *(reasoning)* | Choose assets relevant to the requirement; output must be a subset of the catalogue | R | M | NEVER | NONE |
 
 ### 2.2 Profiling
 
 | Id | Purpose | Perm | Risk | Approval | Connector |
 |---|---|---|---|---|---|
-| `profile_dataset` | Column statistics, null/distinct ratios, candidate keys, duplicates, within budget | R | L | NEVER | REQUIRED(warehouse\|database) |
-| `sample_dataset` | Bounded, column-masked sample rows | R | M (privacy) | NEVER | REQUIRED |
-| `infer_relationships` | Candidate FK/join paths by inclusion-dependency sampling between assets | R | L | NEVER | REQUIRED |
+| `profile_dataset` | Column statistics, null/distinct ratios, candidate keys, duplicates, within budget | R | L | NEVER | REQUIRED(warehouse\|database); `READ_ONLY` |
+| `sample_dataset` | Bounded, column-masked sample rows | R | M (privacy) | NEVER | REQUIRED; warehouse/database = `READ_ONLY` |
+| `infer_relationships` | Candidate FK/join paths by inclusion-dependency sampling between assets | R | L | NEVER | REQUIRED; warehouse/database = `READ_ONLY` |
 
 ### 2.3 SQL and datasets
 
 | Id | Purpose | Perm | Risk | Approval | Connector |
 |---|---|---|---|---|---|
 | `classify_sql` | Deterministic classification: statement types, referenced objects, destructive flags, dialect | R | L | NEVER | NONE (uses dialect registry) |
-| `validate_query` | Compile/explain without executing (dry run) | R | L | NEVER | REQUIRED(warehouse) |
-| `execute_query` | Run a **read-only** statement with row/byte/time caps | R | M | NEVER | REQUIRED(warehouse\|database) |
+| `validate_query` | Compile/explain without executing (dry run) | R | L | NEVER | REQUIRED(warehouse); `READ_ONLY` |
+| `execute_query` | Run a **read-only** statement with row/byte/time caps | R | M | NEVER | REQUIRED(warehouse\|database); `READ_ONLY` |
 | `generate_sql_query` *(reasoning)* | Produce one read-only SELECT, or one `CREATE TABLE … AS SELECT` targeting a DEV namespace, for investigation requests and the DE 002 slice | R | M | NEVER | NONE |
 | `create_dataset` | Create/replace a table or view in a DEV schema | DW | M | IF_POLICY_FLAGS | REQUIRED(warehouse) |
 | `drop_dataset` | Drop an object | DS | H | ALWAYS (DEV) / DISABLED (non-DEV) | REQUIRED(warehouse) |
@@ -116,8 +119,8 @@ Full per-capability contracts: `docs/TOOL_CONTRACTS.md`.
 |---|---|---|---|---|---|
 | `get_lineage` | Model- and column-level lineage graph from manifest + SQL parsing | R | L | NEVER | REQUIRED(transformation) |
 | `generate_documentation` *(reasoning)* | Model/column descriptions, run summary, PR body | R | L | NEVER | NONE |
-| `get_execution_metrics` | Query history: duration, bytes scanned, rows, spilling for tagged queries | R | L | NEVER | REQUIRED(warehouse) |
-| `get_cost_metrics` | Credits/cost attributed to a workflow tag | R | L | NEVER | REQUIRED(warehouse) |
+| `get_execution_metrics` | Query history: duration, bytes scanned, rows, spilling for tagged queries | R | L | NEVER | REQUIRED(warehouse); `READ_ONLY` |
+| `get_cost_metrics` | Credits/cost attributed to a workflow tag | R | L | NEVER | REQUIRED(warehouse); `READ_ONLY` |
 
 ### 2.7 Delivery and monitoring
 
@@ -125,7 +128,7 @@ Full per-capability contracts: `docs/TOOL_CONTRACTS.md`.
 |---|---|---|---|---|---|
 | `prepare_git_change` | Branch, commit artifact set, push to remote | GW | M | IF_POLICY_FLAGS | REQUIRED(vcs) |
 | `prepare_pull_request` | Open/update PR with generated body | GW | M | IF_POLICY_FLAGS (default: NEVER) | REQUIRED(vcs) |
-| `deploy_staging` | Promote an artifact set to STAGING | SD | H | ALWAYS | REQUIRED(transformation\|orchestration) |
+| `deploy_staging` | Promote an artifact set to STAGING. Materialize first; policy may require `OperationApproval` bound to that operation. Input has no `approval_id`. | SD | H | ALWAYS | REQUIRED(transformation\|orchestration) |
 | `deploy_production` | Promote an artifact set to PROD; registered but disabled in V1 | PW | C | DISABLED | REQUIRED(transformation\|orchestration) |
 | `register_monitor` | Persist monitor definitions (freshness, tests, cost thresholds) as artifacts | DW | L | NEVER | OPTIONAL |
 | `check_monitor` | Evaluate a registered monitor once | R | L | NEVER | REQUIRED |
@@ -205,8 +208,9 @@ dispatch/effect. Reconciliation is mandatory before another attempt
 - **Introspection endpoint** (`GET /capabilities`) exposes the catalogue for the UI and
   evaluation harness.
 - **Upgrade behaviour:** new phase runs select a new immutable contract snapshot. In-flight
-  runs continue on their pinned versions. A deployment must keep those handlers available
-  or park affected work as `CONTRACT_VERSION_UNAVAILABLE`; it must never silently upcast,
+  runs continue on their pinned versions. The scheduler emits
+  `CONTRACT_VERSION_UNAVAILABLE` when a pinned handler is unavailable
+  (`docs/PERMISSION_MODEL.md` §3.2) and parks; it must never silently upcast,
   reinterpret, or rewrite an in-flight task. Explicit schema adapters may be added later
   as versioned implementations, not migration machinery in DE 002.
 

@@ -18,10 +18,10 @@ test, observe, correct, and escalate.
 ## Current phase
 
 Development operating system installed (DE 000). Product architecture is **DESIGNED —
-PROPOSED** (DE 001 + DE 001R1 + DE 001R2A on
-`docs/DE001_mvp_architecture`). Independent GPT 5.6 Sol High review required blocking
-contract hardening; Composer 2.5 only persisted that review artifact. Focused verification
-and operator acceptance remain required before DE 002A. Compact contract:
+PROPOSED** (DE 001 + DE 001R1 + DE 001R2A + DE 001R2B on
+`docs/DE001_mvp_architecture`). Independent GPT 5.6 Sol High review and Fable R2V
+verification residuals are closed at the document level. Operator acceptance remains
+required before DE 002A. Compact contract:
 `.ai/ARCHITECTURE.md`; full set: `docs/ARCHITECTURE.md` and companions.
 
 ## Initial intended stack (direction only, not a freeze)

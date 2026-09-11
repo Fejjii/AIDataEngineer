@@ -1,6 +1,6 @@
 # Implementation Plan
 
-**Task:** DE 001 (corrected by DE 001R1 and DE 001R2A) · **Status:** PROPOSED · ADRs: DE-ADR-020, DE-ADR-021, DE-ADR-026
+**Task:** DE 001 (corrected by DE 001R1, DE 001R2A and DE 001R2B) · **Status:** PROPOSED · ADRs: DE-ADR-020, DE-ADR-021, DE-ADR-026
 
 Contents: §1 repository layout and ownership · §2 module boundaries · §3 roadmap as
 vertical slices · §4 parallel lanes and when Cloud agents become safe · §5 DE 002 exact
@@ -312,8 +312,15 @@ inventing recovery/concurrency contracts while still delivering the same first s
 
 **Tests:** operation identity cannot exist before resolved validated input; same operation
 stable across attempts and distinct phase runs; policy rule-order permutation and
-SECURITY dominance; simultaneous approval aggregation; principal/grant forgery rejection;
-SQL adversarial corpus; version compatibility; MOCK provenance; exact `max_attempts`.
+SECURITY dominance; simultaneous approval aggregation; approval rejection routes
+`APPROVAL_REQUIRED → PLANNING|COMPLETED|BLOCKED|FAILED`; principal/grant forgery
+rejection; SQL adversarial corpus; warehouse READ binds only to `identity_class=READ_ONLY`
+(R4b; `READ ∉ snowflake_dev.allowed_permissions`); version compatibility;
+`CONTRACT_VERSION_UNAVAILABLE` emission predicate (pinned version absent → that reason,
+not `UNKNOWN_TARGET`) and ENVIRONMENTAL mapping; MOCK provenance; exact `max_attempts`;
+retry summary vs evidence rule (no blind retry of `CONNECTOR_FAILURE` /
+`TRANSIENT_PROVIDER` / `TIMEOUT` on side-effecting ops); `NoEffect` with exhausted
+`max_attempts` → `FAILED`.
 
 **Exclusions:** SQLAlchemy/Alembic, worker, LLM provider, vendor connector, API feature
 surface, vertical slice, Docker integration.
@@ -335,11 +342,15 @@ surface, vertical slice, Docker integration.
 6. Cancellation intent/shutdown/reconciliation and explicit unresolved parking.
 7. Same-transaction audit events and atomic budget reservation/settlement.
 
-**Tests:** two coordinators create one next phase run; two workers cannot finalize one
-claim; stale worker after replacement updates nothing; timeout/connection loss/response
-loss/fail-after-effect/lease expiry all reconcile before retry; every reconcile branch and
-attempt count; cancellation during effect; required dependency cascade; audit rollback
-atomicity/sequence; concurrent budget reservation.
+**Tests:** two coordinators create one next phase run; resume of PARKED/AWAITING_APPROVAL
+does not allocate a second occurrence; two workers cannot finalize one claim; stale worker
+after replacement updates nothing; timeout/connection loss/response loss/fail-after-effect/
+lease expiry all reconcile before retry; `NoEffect` with exhausted `max_attempts` fails
+rather than remaining in `RECONCILING`; every reconcile branch and attempt count;
+cancellation records ownership under the serialization lock then performs connector
+cancel/reconcile I/O outside it; required dependency cascade; audit rollback
+atomicity/sequence; concurrent budget reservation; scheduler parks
+`CONTRACT_VERSION_UNAVAILABLE` (does not fail closed) and resume re-evaluates.
 
 **Exclusions:** LLM planning, discovery/generation business flow, real connectors, frontend.
 
@@ -365,7 +376,9 @@ Implement `interpret_requirement`, `plan_phase`, `discover_assets`, `describe_as
 queries and read-only SSE. The fake supplies complete version/recovery/provenance behavior.
 
 **Tests:** offline end to end; unavailable connector parks without invalidating the plan;
-fan-out boundary creates deterministic unique tasks; SQL read uses RO binding; canonical
+fan-out boundary creates deterministic unique tasks; enumeration phase run exits on
+catalogue-only `phase_exit_criteria` before description/selection exist; SQL read uses RO
+binding (`snowflake_ro` / `identity_class=READ_ONLY`; `snowflake_dev` rejected); canonical
 query tag round-trip includes full operation and attempt ids; ambiguous success cannot
 pass without validated output; leakage scan.
 

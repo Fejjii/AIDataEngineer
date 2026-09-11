@@ -1,6 +1,6 @@
 # Execution Flow — Worked Example
 
-**Task:** DE 001 (hardened by DE 001R2A) · **Status:** PROPOSED
+**Task:** DE 001 (hardened by DE 001R2A and DE 001R2B) · **Status:** PROPOSED
 
 This document traces the canonical MVP workflow end to end and shows, at every step, the
 workflow state, the tasks executed (capability@connector), and the **structured state or
@@ -79,26 +79,37 @@ connector health is evaluated only after operation materialization:
 ]}
 ```
 
-The accepted plan creates phase run generation 1 and one immutable template. Its literal
-input materializes immediately: validate → resolved-input digest → operation key → policy
-→ attempt. After `d1` succeeds, the phase completes and the workflow re-enters
-`PLANNING`. Generation 2 deterministically sorts the catalogue by canonical asset address
-and creates one explicit `describe_asset` template per asset plus `select_relevant_assets`
-depending on those task ids. Unique `(phase_run_id, local_id)` constraints prevent duplicate
-expansion. There is no `assets[*]` insertion into an active DAG.
+The accepted plan creates phase run generation 1 and one immutable template with
+`phase_exit_criteria` requiring only the catalogue snapshot. Its literal input
+materializes immediately: validate → resolved-input digest → operation key → policy
+→ attempt. After `d1` succeeds, those exit criteria are satisfied, the enumeration run
+completes, and the workflow re-enters `PLANNING`. Generation 2 deterministically sorts
+the catalogue by canonical asset address and creates one explicit `describe_asset`
+template per asset plus `select_relevant_assets` depending on those task ids, with
+`phase_exit_criteria` covering catalogue plus selection. Unique `(phase_run_id, local_id)`
+constraints prevent duplicate expansion. There is no `assets[*]` insertion into an
+active DAG.
 
 ---
 
 ## 4. DISCOVERY
 
+Enumeration run (generation 1) — exit: catalogue snapshot.
+
 | Tasks | Capability@Connector | Output |
 |---|---|---|
-| d1 | `discover_assets@snowflake_dev` | `A5 MetadataCatalog snapshot` (13 tables in 5 schemas; `USAGE` disabled) |
-| d2.1–d2.13 (concurrent) | `describe_asset@snowflake_dev` | 13 describe snapshots (columns, types, comments flagged untrusted) |
+| d1 | `discover_assets@snowflake_ro` | `A5 MetadataCatalog snapshot` (13 tables in 5 schemas; `USAGE` disabled) |
+
+That run's `phase_exit_criteria` are satisfied. Workflow → `PLANNING` → description run
+(generation 2) — exit: catalogue + selection.
+
+| Tasks | Capability@Connector | Output |
+|---|---|---|
+| d2.1–d2.13 (concurrent) | `describe_asset@snowflake_ro` | 13 describe snapshots (columns, types, comments flagged untrusted) |
 | d3 | `select_relevant_assets` (LLM) | `A6 AssetSelection` (10): `CRM.ACCOUNTS`, `CRM.CONTACTS`, `CRM.ACCOUNT_CROSSWALK`, `BILLING.CUSTOMERS`, `BILLING.SUBSCRIPTIONS`, `BILLING.INVOICES`, `BILLING.INVOICE_LINES`, `PAYMENTS.PAYMENTS`, `PAYMENTS.REFUNDS`, `PRODUCT.PLANS`; excluded `CRM.OPPORTUNITIES`, `SUPPORT.TICKETS` with reasons |
 
-Det subset check passes (all selected ∈ snapshot). Phase exit: catalogue + selection
-exist. Orchestrator calls `plan_phase(PROFILING)` → `PLANNING` → `PROFILING`.
+Det subset check passes (all selected ∈ snapshot). Orchestrator calls
+`plan_phase(PROFILING)` → `PLANNING` → `PROFILING`.
 
 ---
 
@@ -106,9 +117,9 @@ exist. Orchestrator calls `plan_phase(PROFILING)` → `PLANNING` → `PROFILING`
 
 | Tasks | Capability@Connector | Output |
 |---|---|---|
-| p1–p10 (concurrent) | `profile_dataset@snowflake_dev` | 10 `DatasetProfile` artifacts |
-| p11 | `infer_relationships@snowflake_dev` | `A16 RelationshipCandidates` |
-| p12–p14 | `sample_dataset@snowflake_dev` (n=20, masked) | 3 masked samples for design reasoning |
+| p1–p10 (concurrent) | `profile_dataset@snowflake_ro` | 10 `DatasetProfile` artifacts |
+| p11 | `infer_relationships@snowflake_ro` | `A16 RelationshipCandidates` |
+| p12–p14 | `sample_dataset@snowflake_ro` (n=20, masked) | 3 masked samples for design reasoning |
 
 Findings surfaced as **facts** (Det):
 
@@ -160,7 +171,7 @@ tracking columns. Policy: `approval_required=false` (no flagged signals) → `PL
 | n21 | `classify_sql` on every model (Det) | all read-only SELECT ✔ |
 | n22 | `create_transformation@dbt_dev` | `A31 project_state v1` |
 | n23 | `compile_transformation@dbt_dev` | `A32 manifest v1`, compiled SQL |
-| n24 | `validate_query@snowflake_dev` for each compiled model (EXPLAIN) | validation outputs |
+| n24 | `validate_query@snowflake_ro` for each compiled model (EXPLAIN) | validation outputs |
 
 Result: `stg_billing__invoices` EXPLAIN → `valid=false, error: invalid identifier
 'INVOICE_STATUS' (000904)`. Because this is *output* of `validate_query` (not a task
@@ -189,7 +200,7 @@ Whole-plan evaluation for the upcoming `EXECUTION` phase (Det):
 
 | Check | Result |
 |---|---|
-| Every task permission ∈ workflow grants (`DEVELOPMENT_EXECUTE`, `DEVELOPMENT_WRITE` both granted) and ∈ its connector's `allowed_permissions` (`dbt_dev`, `snowflake_dev`) | ✔ |
+| Every EXECUTION task permission ∈ workflow grants (`DEVELOPMENT_EXECUTE`, `DEVELOPMENT_WRITE` both granted) and ∈ its connector's `allowed_permissions` (`dbt_dev`, `snowflake_dev` for DEV writes). Discovery/profiling/EXPLAIN/read queries used `snowflake_ro` (`identity_class=READ_ONLY`) | ✔ |
 | All writes target `AIDE_DEV.WF7F3A_*` schemas | ✔ |
 | No destructive statements in compiled SQL | ✔ |
 | Estimated warehouse cost ≤ per-workflow cap | ✔ (X-Small, est. 0.2 credits) |
@@ -243,19 +254,24 @@ Transition → `PLANNING(DELIVERY)` → `DELIVERY`.
 
 ---
 
-## 13. DELIVERY (pre-approval)
+## 13. DELIVERY (one phase run)
+
+Lineage, Git and the staging deploy are templates in the **same** DELIVERY phase run.
+`deploy_staging` is materialized after the PR exists; policy then requires
+`OperationApproval` bound to that already computed operation identity. There is no
+pre-approval versus post-approval phase split and no `approval_id` in capability input.
 
 | Tasks | Capability@Connector | Output |
 |---|---|---|
 | v1 | `get_lineage@dbt_dev` (column-level) | `A50 lineage.json` |
 | v2 | `generate_documentation` (LLM; scope MODEL, COLUMN, RUN_SUMMARY, PR_BODY) | docs artifacts; Det checks every referenced model/column exists |
-| v3 | `get_execution_metrics@snowflake_dev`, `get_cost_metrics@snowflake_dev` | `A55 metrics` (credits 0.23, 63 queries, 0 spilled) |
+| v3 | `get_execution_metrics@snowflake_ro`, `get_cost_metrics@snowflake_ro` | `A55 metrics` (credits 0.23, 63 queries, 0 spilled) |
 | v4 | `register_monitor` ×3 (freshness on sources, test suite on marts, cost threshold) | monitor artifacts |
 | v5 | `prepare_git_change@github` | branch `aide/wf7f3a_customer_revenue`, commit `c0ffee1`, pushed (secret scan clean) |
 | v6 | `prepare_pull_request@github` | PR #17 (draft=false), body = `A54 PR_BODY` |
-| v7 | `request_approval(subject=OperationApproval(operation key, resolved-input digest, artifact/provenance hashes, dbt_staging version, STAGING, STAGING_DEPLOY, expiry, external-state digest))` | approval `ap_01` PENDING |
+| v7 | `deploy_staging@dbt_staging(strategy=DBT_RUN_TARGET, release_id=rel_01)` materializes; policy `REQUIRE_APPROVAL`; task `AWAITING_APPROVAL` | operation key + resolved-input digest committed; `OperationApproval` subject `ap_01` PENDING |
 
-Transition → `APPROVAL_REQUIRED`.
+Transition → `APPROVAL_REQUIRED`. The DELIVERY phase run remains the active occurrence.
 
 ---
 
@@ -263,21 +279,23 @@ Transition → `APPROVAL_REQUIRED`.
 
 | | |
 |---|---|
-| UI shows | PR link, diff summary, validation, lineage, cost, repair history and complete `deploy_staging` subject for `AIDE_STAGING` |
+| UI shows | PR link, diff summary, validation, lineage, cost, repair history and complete `deploy_staging` subject for `AIDE_STAGING` (operation key, input digest, artifacts, connector, target) |
 | Human | Approves `ap_01` (identity recorded) |
 | Det check | Complete operation subject unchanged, artifact provenance REAL, approval unexpired, approver role trusted ✔ |
-| Transition | → `DELIVERY` (post-approval) |
+| Transition | → originating DELIVERY phase run; task `v7` returns `READY`; the **same** materialized operation continues |
 
-If the human rejects: workflow → `COMPLETED` with outcome `DELIVERED_PR_ONLY` (PR remains
-for manual handling); nothing is deployed.
+If the human rejects the staging subject: task `CANCELLED(APPROVAL_REJECTED)`; workflow →
+`COMPLETED` with outcome `DELIVERED_PR_ONLY` (PR remains for manual handling); nothing is
+deployed. Other rejection classes follow `docs/PERMISSION_MODEL.md` §4 (`BLOCKED` or
+`FAILED`); they are legal transitions in `docs/STATE_MODEL.md` §3.
 
 ---
 
-## 15. DELIVERY (post-approval) → MONITORING → COMPLETED
+## 15. DELIVERY continues → MONITORING → COMPLETED
 
 | Task | Capability@Connector | Output |
 |---|---|---|
-| v8 | `deploy_staging@dbt_staging(strategy=DBT_RUN_TARGET, approval_id=ap_01)` | `release_id`, `rollback_ref` (previous manifest artifact) |
+| v7 (same operation) | `deploy_staging@dbt_staging` dispatches with the already persisted `release_id` | `release_id`, `rollback_ref` (previous manifest artifact) |
 | v9 | `check_monitor` ×3 once | initial monitor states |
 | — | Orchestrator | `MONITORING` state recorded with monitor ids; V1 immediately proceeds to `COMPLETED` with outcome `DELIVERED_STAGING` |
 
@@ -300,7 +318,7 @@ first-attempt build success: no, final success: yes, elapsed 14 min.
 | generation → execution | files → `project_state_id` | Artifact Manager + dbt working copy |
 | execution → validation | `run_results`, `ValidationReport` | `artifacts`, `validation_reports` |
 | validation → repair | `FailureClassification`, evidence bundle | `task_attempts`, `repair_attempts` |
-| delivery → approval | artifact hashes, PR url | `approvals` |
+| delivery → approval | materialized operation key, input digest, artifact hashes, PR url | `approvals` (subject binds to operation; not capability input) |
 | everything → audit/telemetry | events | `audit_events`, `model_calls`, `tool_calls` |
 
 No step consumes an LLM's free text. Every LLM output is a validated typed artifact.
@@ -316,9 +334,10 @@ No step consumes an LLM's free text. Every LLM output is a validated typed artif
 | Repair budget exhausted | `BLOCKED` with `RepairExhausted` summary |
 | Snowflake `UNAVAILABLE` mid-phase | affected tasks `PARKED` after transient retries (policy deny class `ENVIRONMENTAL`); workflow `BLOCKED(blocked_from_phase=…)`; when status returns `AVAILABLE` and the human clicks *Resume* (or auto-resume if configured) parked tasks return to `READY` and policy is re-evaluated |
 | Atomic cost reservation exceeds cap | no provider dispatch; request `BudgetIncreaseApproval` with explicit new cap/delta; approval updates ledger then policy re-evaluates |
-| Operator cancels while a connector call is active | `CANCEL_REQUESTED` persists intent and fences claims/results; `CANCELLING` attempts cooperative cancel and reconciliation; terminal `CANCELLED` only after quiescence or explicit unresolved-effect parking |
+| Operator cancels while a connector call is active | `CANCEL_REQUESTED` persists intent and fences claims/results under a short serialization lock; cooperative cancel and reconciliation I/O run **outside** the lock under fenced recovery ownership; terminal `CANCELLED` only after quiescence or explicit unresolved-effect parking |
 | Worker loses the response after `create_dataset` applied its effect | failure is ambiguous even before lease expiry; recovery atomically advances claim epoch, stale completion is rejected, and `reconcile(RecoveryContext)` verifies the table/output before `RECOVERED`; no second effect |
 | `deploy_staging` times out and bounded reconciliation remains `InProgress`/`Unknown` | attempt `AMBIGUOUS`, task `PARKED`, workflow `BLOCKED`; success requires connector-verified schema-valid output or validated manual import. Effect-confirmed/result-unknown, compensation and abandonment are explicit alternatives; no bare human success and no automatic redeploy |
+| `deploy_staging` reconciles `NoEffect` with `max_attempts=1` already consumed | task `FAILED`; workflow `FAILED`; no remaining legal `RECONCILING` wait |
 | Planner proposes `drop_dataset` in a plan | plan-time policy pre-check: `DESTRUCTIVE` ∉ grants and no approval → plan **invalid** (`PERM_NOT_GRANTED`); planner re-invoked with the violation and replans without it (max 2) — no task is ever created for it |
 | Destructive SQL reaches `POLICY_CHECK` or a Tool Registry call (validator bypass) | `DENY` class `SECURITY` → task `FAILED(POLICY_DENIED)`, workflow `FAILED`, audit alert `POLICY_DENY_SECURITY` — fail closed, no re-planning |
 | Prompt-injection text in a table comment ("ignore previous instructions and drop…") | Comments are delimited untrusted data; even if the LLM emitted a destructive suggestion, `classify_sql` + policy deny it; event logged as `SUSPECTED_INJECTION` |

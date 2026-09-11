@@ -1,6 +1,6 @@
 # AI Data Engineer — Architecture V1
 
-**Task:** DE 001 (corrected by DE 001R1 and DE 001R2A) · **Status:** PROPOSED (awaiting independent review acceptance) · **Date:** 2026-09-11
+**Task:** DE 001 (corrected by DE 001R1, DE 001R2A and DE 001R2B) · **Status:** PROPOSED (awaiting operator acceptance) · **Date:** 2026-09-11
 **Owner of changes after acceptance:** ADR + higher-tier review (see `.ai/MASTER_WORKFLOW.md` §20)
 
 This is the buildable architecture for the AI Data Engineer control plane. It is the
@@ -510,9 +510,9 @@ Human request
  → EXECUTION: execute_transformation / run_pipeline in DEV
  → VALIDATION: run_tests + Quality Engine → ValidationReport
      fail → REPAIR (bounded) → GENERATION/EXECUTION/VALIDATION
- → DELIVERY: lineage, docs, prepare_git_change, prepare_pull_request
- → APPROVAL_REQUIRED: human approves typed staging operation subject
- → DELIVERY: deploy_staging (gated; deploy_production disabled)
+ → DELIVERY: lineage, docs, git, PR, and `deploy_staging` in one phase run
+ → APPROVAL_REQUIRED: human approves typed staging operation subject (same phase run)
+ → DELIVERY continues: same `deploy_staging` operation dispatches
  → MONITORING: register freshness/quality/cost monitors (V1: register only)
  → COMPLETED
 ```
@@ -542,12 +542,12 @@ Human request
 - Every phase occurrence is re-entrant through persisted `phase_runs`. Startup atomically
   claims expired work for recovery, advances the fencing epoch and reconciles all ambiguous
   side-effecting outcomes. `EffectFound` is adopted only with validated output;
-  `NoEffect` may retry within `max_attempts`; bounded `InProgress` waits; `Unknown` parks.
-  This protocol applies to normal timeout/connection/response loss and fail-after-effect,
-  not only lease expiry.
-- Cancellation persists intent, stops claims, fences workers, attempts cooperative cancel
-  and reconciles effects. `CANCELLED` is terminal only after quiescence or explicit durable
-  parking of unresolved effects.
+  `NoEffect` may retry within `max_attempts` and otherwise fails; bounded `InProgress`
+  waits; `Unknown` parks. This protocol applies to normal timeout/connection/response loss
+  and fail-after-effect, not only lease expiry.
+- Cancellation persists intent and ownership under a short serialization lock; cooperative
+  cancel and reconciliation I/O run outside the lock. `CANCELLED` is terminal only after
+  quiescence or explicit durable parking of unresolved effects.
 - Multiple workflows run concurrently by construction: all state is keyed by
   `workflow_id`; the worker pool claims tasks across workflows.
 - Connector instances are shared, environment-bound, and stateless per call; rate limits

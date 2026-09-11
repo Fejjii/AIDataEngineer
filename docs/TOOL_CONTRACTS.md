@@ -1,6 +1,6 @@
 # Tool Contracts
 
-**Task:** DE 001 (hardened by DE 001R2A) · **Status:** PROPOSED
+**Task:** DE 001 (hardened by DE 001R2A and DE 001R2B) · **Status:** PROPOSED
 
 Per-capability contracts. Schemas are given in Pydantic-like notation; the implementation
 must match field names so the planner catalogue, UI and evaluation harness share one
@@ -19,9 +19,18 @@ Shared conventions for **every** capability:
   attempt—including expired, recovered, cancelled and ambiguous—consumes the budget;
   reconciliation checks and pre-attempt parking do not. Attempts share
   `operation_idempotency_key`; attempt identity never contributes to it.
+  `retry_on` never means blind retry for a side-effecting operation. Authoritative rule
+  (`docs/STATE_MODEL.md` §4.7): a definite pre-dispatch failure may retry directly; an
+  ambiguous side effect must reconcile first; only proven `NoEffect` may retry while
+  `attempt_count < max_attempts`; exhausted `NoEffect` is `FAILED`. Side-effect-free
+  capabilities may retry listed classes directly within `max_attempts`.
 - **Effect semantics:** `SIDE_EFFECT_FREE`, `EXTERNALLY_DEDUPLICATED`,
   `PROVEN_CONVERGENT`, or `NON_IDEMPOTENT`. Every ambiguous side-effecting result
   reconciles before retry; only authoritative `NoEffect` permits another attempt.
+- **Warehouse/database read binding:** a capability with `required_permission=READ` that
+  requires a warehouse or database connector must bind to an instance with
+  `identity_class=READ_ONLY` (Snowflake: `snowflake_ro`). Policy rule R4b and
+  `allowed_permissions` membership both enforce this (`docs/PERMISSION_MODEL.md` §2.1, §3).
 - **Permission row semantics:** the single `PermissionLevel` the capability requires; policy
   checks membership in the workflow grant set and in the connector's `allowed_permissions`
   (`docs/PERMISSION_MODEL.md` §3). Permissions are never compared by rank.
@@ -74,7 +83,7 @@ extension without changing generic task or orchestration schemas.
 | Timeout / Retry | 120 s / `max_attempts=3, backoff=exp, retry_on={TRANSIENT_PROVIDER, CONNECTOR_FAILURE}` |
 | Failure classes | `PERMISSION_FAILURE`, `CONNECTOR_FAILURE`, `TRANSIENT_PROVIDER`, `TIMEOUT` |
 | Validation | Every returned asset must lie within `scope`; snapshot persisted with hash; `truncated` must be set if connector paging stopped early. |
-| Connector | REQUIRED: warehouse, database, or storage kind. Snowflake: `SHOW TABLES/VIEWS IN SCHEMA` + `INFORMATION_SCHEMA`. PostgreSQL: `information_schema`. |
+| Connector | REQUIRED: warehouse, database, or storage kind. Warehouse/database instances must be `identity_class=READ_ONLY` (Snowflake: `snowflake_ro`). Snowflake: `SHOW TABLES/VIEWS IN SCHEMA` + `INFORMATION_SCHEMA`. PostgreSQL: `information_schema`. |
 | Effect semantics | SIDE_EFFECT_FREE |
 
 ## 2. `describe_asset` (deterministic, v1)
@@ -200,7 +209,7 @@ extension without changing generic task or orchestration schemas.
 | Timeout / Retry | `budget.max_seconds` ≤ 300 / `max_attempts=2, backoff=exp, retry_on={TRANSIENT_PROVIDER}` |
 | Failure classes | `SQL_SYNTAX`, `MISSING_OBJECT`, `SCHEMA_MISMATCH`, `TYPE_MISMATCH`, `PERMISSION_FAILURE`, `TIMEOUT`, `RESOURCE_LIMIT`, `TRANSIENT_PROVIDER`, `UNSAFE_OPERATION` |
 | Validation | Pre-validator: `classify_sql.is_read_only == True`, `is_multi_statement == False`, `has_dynamic_sql == False`, all `objects_read` within connector allow-list. Wrapper adds `LIMIT` when `result_mode == ROWS`. Rows persisted only as artifact when ≤ `max_rows`; otherwise `COUNT_ONLY`. |
-| Connector | REQUIRED(warehouse\|database). The selected instance must use a read-only identity (`snowflake_ro`/`AIDE_DEV_RO` for Snowflake); a DEV RW identity is not a valid implementation of this capability. |
+| Connector | REQUIRED(warehouse\|database). Binding is valid only when `connector.identity_class = READ_ONLY` (Snowflake: `snowflake_ro` / `AIDE_DEV_RO`). A DEVELOPMENT identity (`snowflake_dev`) is not a valid implementation of this capability; R0/R4/R4b reject it. |
 | Effect semantics | SIDE_EFFECT_FREE |
 
 ## 10a. `generate_sql_query` (reasoning, v1)
@@ -395,10 +404,10 @@ Input `{repository_ref, head_branch, base_branch, title, body_ref: ArtifactRef, 
 | Field | Value |
 |---|---|
 | Purpose | Promote an artifact set to STAGING. Production uses the separate, disabled-in-V1 `deploy_production` contract. |
-| Input | `{artifact_set, strategy: "DBT_RUN_TARGET"|"ORCHESTRATOR_RELEASE", approval_id: UUID, release_id: str}` — target is statically STAGING; `release_id` is persisted before dispatch (`docs/STATE_MODEL.md` §4.7). |
+| Input | `{artifact_set, strategy: "DBT_RUN_TARGET"|"ORCHESTRATOR_RELEASE", release_id: str}` — target is statically STAGING. `release_id` is part of the materialized input and is persisted before dispatch (`docs/STATE_MODEL.md` §4.7). **`approval_id` is not an input field:** approval identity depends on the materialized operation and therefore cannot participate in the operation key. Policy decides whether `OperationApproval` is required; the approval binds to the already computed `operation_idempotency_key` and `resolved_input_digest`. After approval the same operation continues. |
 | Output | `{deployed: bool, target: "STAGING", release_id: str, rollback_ref: str|None}` |
 | Permission / Risk / Approval | STAGING_DEPLOY / HIGH / OperationApproval ALWAYS |
-| Timeout / Retry | 900 s / `max_attempts=1`. Any ambiguous outcome reconciles; `Unknown` or bounded `InProgress` exhaustion parks and never auto-retries. |
+| Timeout / Retry | 900 s / `max_attempts=1`. Ambiguous outcomes reconcile first. Proven `NoEffect` cannot retry because the budget is already exhausted → task/workflow `FAILED`. `Unknown` or bounded `InProgress` exhaustion parks and never auto-retries. |
 | Failure classes | `PERMISSION_FAILURE`, `CONNECTOR_FAILURE`, `DBT_RUNTIME`, `TIMEOUT`, `UNSAFE_OPERATION`, `AMBIGUOUS_OUTCOME` |
 | Validation | Approval subject must match operation key, resolved-input digest, artifact/provenance closure, connector/version, STAGING target and external-state digest. MOCK-derived artifacts are denied. |
 | Connector | REQUIRED(transformation\|orchestration); must implement `reconcile` by looking up `release_id` in the target's release marker |
@@ -436,7 +445,7 @@ registered as `DISABLED` and no connector advertises it in V1; policy returns
 | Permission / Risk / Approval | READ / MEDIUM / NEVER |
 | Timeout / Retry | 120 s / `max_attempts=2, backoff=fixed, retry_on={TRANSIENT_PROVIDER, OUTPUT_INVALID}` |
 | Failure classes | `OUTPUT_INVALID`, `TRANSIENT_PROVIDER`, `LLM_BUDGET_EXCEEDED` |
-| Validation | Capability/connector versions exist in the snapshot; connector kind and permissions are structurally compatible; DAG acyclic; task count bounded. Temporary health is not structural validity. Templates may contain scalar `{"$from": local_id, "path": ...}` references, but cannot receive policy/approval/operation identity until Det resolves and validates all input. List fan-out is forbidden inside an active phase: discovery enumeration ends, assets are sorted, and a new planning boundary creates explicit description templates unique on `(phase_run_id, local_id)`. |
+| Validation | Capability/connector versions exist in the snapshot; connector kind and permissions are structurally compatible; warehouse/database READ tasks name a `READ_ONLY` identity; DAG acyclic; task count bounded. Temporary health is not structural validity. Templates may contain scalar `{"$from": local_id, "path": ...}` references, but cannot receive policy/approval/operation identity until Det resolves and validates all input. List fan-out is forbidden inside an active phase: discovery enumeration ends when that run's `phase_exit_criteria` (catalogue) are satisfied; assets are sorted; a new planning boundary creates explicit description templates unique on `(phase_run_id, local_id)` whose exit criteria include catalogue plus selection. |
 | Connector | NONE |
 
 ## 32. `propose_model_design` (reasoning, v1)
@@ -457,7 +466,7 @@ Input `{subjects: list[OperationApproval|DesignApproval|BudgetIncreaseApproval],
 output `{approval_requirement_ids: list[UUID], status: "PENDING"}`. Operation subjects are
 created only after materialization and include operation key, resolved-input digest,
 artifact/provenance closure, connector/version, target, permission, relevant external
-state and expiry. Design subjects contain no permission. Budget subjects authorize an
+state and expiry. They never include an `approval_id` inside capability input. Design subjects contain no permission. Budget subjects authorize an
 explicit new cap/delta. All mandatory subjects must approve; rejection routing is defined
 in `docs/PERMISSION_MODEL.md` §4.
 
@@ -476,9 +485,9 @@ in `docs/PERMISSION_MODEL.md` §4.
 | `DBT_TEST` | test/build | no | yes | after 2 |
 | `DATA_QUALITY` | Quality Engine | no | yes | after 2 |
 | `OUTPUT_INVALID` | reasoning capabilities | yes (1) | — | then BLOCKED |
-| `CONNECTOR_FAILURE` | any connector | yes (per policy) | no | BLOCKED |
-| `TRANSIENT_PROVIDER` | any | yes | no | BLOCKED after retries |
-| `TIMEOUT` | any | yes (profiling with reduced budget) | no | BLOCKED |
+| `CONNECTOR_FAILURE` | any connector | **not blindly.** Side-effect-free: yes within `max_attempts`. Side-effecting: only `DEFINITELY_BEFORE_DISPATCH` or `DEFINITELY_REJECTED_NO_EFFECT`; else reconcile first; proven `NoEffect` only if `attempt_count < max_attempts` | no | PARKED/BLOCKED if ambiguous/`Unknown`; `FAILED` if `NoEffect` exhausted |
+| `TRANSIENT_PROVIDER` | any | same evidence rule as `CONNECTOR_FAILURE`; exception class alone is insufficient | no | PARKED/BLOCKED after bounded reconcile; `FAILED` if `NoEffect` exhausted |
+| `TIMEOUT` | any | side-effect-free may retry (profiling may reduce budget); side-effecting must reconcile unless proven pre-dispatch | no | PARKED/BLOCKED if still ambiguous; `FAILED` if `NoEffect` exhausted |
 | `RESOURCE_LIMIT` | warehouse | no | no | BLOCKED (cost gate) |
 | `PERMISSION_FAILURE` | any | no | no | task PARKED; workflow BLOCKED (human fixes grants) |
 | `POLICY_DENIED` | policy | no | no | by deny class (`docs/PERMISSION_MODEL.md` §3.1): ENVIRONMENTAL → PARKED/BLOCKED; SCOPE/SECURITY → FAILED (fail closed) |

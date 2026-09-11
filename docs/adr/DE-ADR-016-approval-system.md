@@ -1,6 +1,6 @@
 # DE-ADR-016 — Typed approval subjects with complete binding
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1, DE 001R2A)
+- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1, DE 001R2A, DE 001R2B)
 
 ## Context
 Production/staging deploys, destructive actions, flagged designs and cost overruns require
@@ -22,8 +22,9 @@ acceptance evidence, never a grant. Budget approval only updates the cap atomica
 
 One policy gate may require multiple subjects. Execution waits for all mandatory approvals.
 Any rejection immediately prevents execution, invalidates sibling pending requirements and
-follows subject-specific routing in `docs/PERMISSION_MODEL.md` §4. Decisions require a
-trusted principal with approver role; production remains disabled in V1.
+follows subject-specific routing in `docs/PERMISSION_MODEL.md` §4, including legal
+workflow transitions `APPROVAL_REQUIRED → PLANNING | COMPLETED | BLOCKED | FAILED`.
+Decisions require a trusted principal with approver role; production remains disabled in V1.
 
 ## Alternatives
 - Approve "the workflow" once: rejected — content can change after approval.

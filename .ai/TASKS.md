@@ -26,7 +26,7 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 
 - Compact ID: `DE001`
 - Priority: P0
-- Status: IN_PROGRESS → documents drafted; awaiting **review gate** (see below)
+- Status: IN_PROGRESS → documents complete including DE 001R2B; awaiting **operator acceptance**
 - Owner: local Cursor agent (Claude Fable 5.1, high reasoning)
 - Environment: LOCAL (requires private bootstrap sources; produces the architecture baseline)
 - Branch: `docs/DE001_mvp_architecture` (operator assignment supersedes the earlier
@@ -44,11 +44,14 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 - Estimated duration: 2–4 hours
 - Estimated token class: L
 - Completion evidence: architecture docs + ADRs DE-ADR-008…027 on
-  `docs/DE001_mvp_architecture`; DE 001R1 then DE 001R2A corrections.
+  `docs/DE001_mvp_architecture`; DE 001R1 then DE 001R2A corrections; DE 001R2B closed
+  residual R2V findings U-01–U-10.
 - **Review gate:** independent GPT 5.6 Sol High review completed with `REVISE BEFORE
-  DE 002`; Composer 2.5 only persisted the artifact. After DE 001R2A, run focused
-  independent verification, then operator accepts or requests revisions. Only acceptance
-  changes statuses to `ACCEPTED` and permits DE 002A. Do not merge before acceptance.
+  DE 002`; Composer 2.5 only persisted the artifact. Focused Fable verification
+  (`docs/reviews/DE001_R2V_FABLE_VERIFICATION.md`) recorded residuals U-01–U-10.
+  DE 001R2B applied those corrections. Operator accepts or requests further revisions.
+  Only acceptance changes ADR statuses to `ACCEPTED` and permits DE 002A. Do not merge
+  before acceptance.
 
 ## DE 001R1 — Architecture correction before independent review
 
@@ -97,8 +100,30 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 - Exclusions: product code, unrelated non-blocking review findings, merge, deployment.
 - Validation: stale-semantics greps excluding the immutable review report; Markdown/link
   checks; ADR index/decision alignment; secret scan; Git diff review.
-- Completion gate: focused independent verification and operator acceptance; do not begin
-  DE 002 before that gate.
+- Completion gate: focused independent verification (`docs/reviews/DE001_R2V_FABLE_VERIFICATION.md`)
+  recorded residuals U-01–U-10; DE 001R2B closed them. Operator acceptance remains the
+  DE 001 gate; do not begin DE 002A until ADRs are `ACCEPTED`.
+
+## DE 001R2B — Architecture consistency closure
+
+- Compact ID: `DE001R2B`
+- Priority: P0
+- Status: DONE (documentation on `docs/DE001_mvp_architecture`; operator acceptance remains)
+- Owner: Grok 4.6 High
+- Environment: CLOUD · Branch: `docs/DE001_mvp_architecture` · Dependencies: DE 001R2V
+  verification artifact
+- Risk: High (foundational consistency; no product code)
+- Goal: Close exactly residual findings U-01 through U-10 from
+  `docs/reviews/DE001_R2V_FABLE_VERIFICATION.md`. No redesign, no product code, no new
+  requirements except those required to resolve a listed contradiction.
+- Scope: approval rejection routes; staging materialize-then-approve; DE 002A CLOUD /
+  DE 002B–C LOCAL; discovery per-run exit criteria; READ_ONLY Snowflake binding;
+  reconciliation exhaustion → FAILED; cancellation lock scope; phase-run resume vs new
+  occurrence; `CONTRACT_VERSION_UNAVAILABLE` emitter; retry summary vs reconcile-first.
+- Exclusions: product code, merge, deployment, immutable review artifact edits except
+  provenance if clearly wrong.
+- Validation: stale-semantics greps excluding immutable reviews; ADR index/decision
+  alignment; internal links; secret scan; Git diff review.
 
 ---
 
@@ -110,7 +135,7 @@ TODO until DE 001 is accepted.
 
 ## DE 002A — Contract kernel and executable CI gate
 - `DE002A` · P0 · TODO · Env CLOUD · Branch `feat/DE002A_contract_kernel`
-- Deps: DE 001 accepted after DE 001R2A verification · Risk H · Parallel none
+- Deps: DE 001 accepted after DE 001R2B consistency closure · Risk H · Parallel none
 - Goal: pure domain/capability/connector/auth/grant/policy/approval/provenance/SQL/import
   contracts and minimal ruff/mypy/unit/property/import-linter CI. No persistence or slice.
 - Recommended model: GPT 5.6 Sol or Grok 4.6 · Reasoning High.
@@ -211,7 +236,7 @@ TODO until DE 001 is accepted.
 ## Parallel waves and integration order
 
 ```text
-Wave 0  DE 002A → DE 002B → DE 002C → DE 003 (sequential)
+Wave 0  DE 002A [CLOUD] → DE 002B [LOCAL] → DE 002C [LOCAL] → DE 003 [CLOUD]
 Wave 1  DE 004 [CLOUD] ∥ DE 005 [LOCAL]       (2 agents; merge DE 004 first)
 Wave 2  DE 006 [CLOUD] ∥ DE 008a [LOCAL]      (2 agents; merge DE 006 first)
 Wave 3  DE 007 ∥ DE 008b ∥ DE 011             (3 agents; merge 007 → 008b → 011)

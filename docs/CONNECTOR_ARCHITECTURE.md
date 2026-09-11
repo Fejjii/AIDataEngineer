@@ -1,6 +1,6 @@
 # Connector Architecture
 
-**Task:** DE 001 (corrected by DE 001R1 and DE 001R2A) · **Status:** PROPOSED · ADR: DE-ADR-014
+**Task:** DE 001 (corrected by DE 001R1, DE 001R2A and DE 001R2B) · **Status:** PROPOSED · ADR: DE-ADR-014
 
 Connectors are the only code that talks to data/Git/deployment systems. Connector adapters
 and LLM provider adapters are the only components that may resolve allow-listed
@@ -47,6 +47,7 @@ class ConnectorSpec(BaseModel, frozen=True):
     vendor: str                               # "snowflake", "dbt", "github", "postgres", "fake"
     version: str                              # connector implementation version
     target_environment: TargetEnv             # exactly one of DEV | STAGING | PROD
+    identity_class: Literal["READ_ONLY", "DEVELOPMENT", "STAGING_DEPLOY", "VCS"]
     implementations: frozenset[CapabilityImplementation]
     # capability id + supported contract/input/output schema versions
     allowed_permissions: frozenset[PermissionLevel]  # every permission this instance may exercise; membership only, no ordering
@@ -95,8 +96,9 @@ ReconcileResult = (
 `allowed_permissions` replaces any notion of a permission "ceiling": `PermissionLevel` is a
 set of distinct grants with no ordering (`docs/PERMISSION_MODEL.md` §2), so the policy
 engine checks `required_permission ∈ allowed_permissions` (rule R4) and a startup check
-(R0) fails if an advertised capability's required permission is not listed. V1 sets per
-instance are in `docs/PERMISSION_MODEL.md` §2.1.
+(R0) fails if an advertised capability's required permission is not listed. Warehouse and
+database read capabilities additionally require `identity_class=READ_ONLY` (rule R4b).
+V1 sets per instance are in `docs/PERMISSION_MODEL.md` §2.1.
 
 Capability implementations are registered per connector as handlers:
 
@@ -165,8 +167,9 @@ snapshot and tests `required_permission ∈ missing_permissions`.
 - Connector advertisements include capability contract and payload schema compatibility;
   each phase run pins selected implementations in `contract_snapshot_id`.
 - New phase runs may select upgraded implementations. In-flight runs continue on pinned
-  versions. If one is unavailable, work parks as `CONTRACT_VERSION_UNAVAILABLE`; no JSONB
-  payload is silently reinterpreted.
+  versions. If a pinned version is absent from the runtime registry, the **scheduler**
+  emits `CONTRACT_VERSION_UNAVAILABLE` (`docs/PERMISSION_MODEL.md` §3.2) and parks the
+  work; no JSONB payload is silently reinterpreted.
 - Every connector-produced artifact carries immutable `REAL|MOCK` execution mode,
   connector id/version, capability version, operation identity, resolved-input digest and
   transitive parent artifact ids.
@@ -197,9 +200,9 @@ snapshot and tests `required_permission ∈ missing_permissions`.
 | Aspect | Specification |
 |---|---|
 | Library | `snowflake-connector-python` (async via thread pool) |
-| Identity | Separate instances and credentials: `snowflake_ro` uses `AIDE_DEV_RO` for every read capability, including `execute_query`, metadata, profiling, metrics and validation; `snowflake_dev` uses `AIDE_DEV_RW` only for DEV writes. Classifier checks are defence in depth, never a substitute for RO grants. `AIDE_STAGING_DEPLOY` is separate. |
+| Identity | Separate instances and credentials. `snowflake_ro` has `identity_class=READ_ONLY` and uses `AIDE_DEV_RO` for every read capability (discover, describe, profile, sample, infer, validate/EXPLAIN, `execute_query`, metrics). `snowflake_dev` has `identity_class=DEVELOPMENT`, uses `AIDE_DEV_RW`, and advertises only DEV writes (`create_dataset`, `drop_dataset`); it does not list `READ`. Classifier checks are defence in depth, never a substitute for RO grants or R4b. `AIDE_STAGING_DEPLOY` is separate. |
 | Session defaults | `STATEMENT_TIMEOUT_IN_SECONDS` from task deadline; `AUTOCOMMIT = TRUE`; warehouse from config. Every statement sets canonical `QUERY_TAG = aide:v1;wf=<uuid>;phase_run=<uuid>;task=<uuid>;op=<64-hex>;attempt=<uuid>;n=<int>`. The serializer/parser round-trips exact fields, rejects duplicate/unknown mandatory keys, and never truncates the operation key. |
-| Capabilities | `discover_assets`, `describe_asset`, `detect_schema_drift`, `profile_dataset`, `sample_dataset`, `infer_relationships`, `validate_query` (EXPLAIN), `execute_query`, `create_dataset`, `drop_dataset` (DEV), `get_execution_metrics`, `get_cost_metrics` |
+| Capabilities | **RO instance:** `discover_assets`, `describe_asset`, `detect_schema_drift`, `profile_dataset`, `sample_dataset`, `infer_relationships`, `validate_query` (EXPLAIN), `execute_query`, `get_execution_metrics`, `get_cost_metrics`. **DEV instance:** `create_dataset`, `drop_dataset` (DEV). |
 | Allow-list | Configured databases/schemas; DEV write schema pattern `AIDE_DEV.<WORKFLOW_SHORT_ID>_*` |
 | Error mapping | Snowflake error codes: 001003 → `SQL_SYNTAX`; 002003 → `MISSING_OBJECT`; 000904 → `SCHEMA_MISMATCH` (invalid identifier); 100038/100040 → `TYPE_MISMATCH`; 003001/001011 → `PERMISSION_FAILURE`; 000630/604 → `TIMEOUT`/cancelled; 390114/network → `TRANSIENT_PROVIDER`; credit quota → `RESOURCE_LIMIT` |
 | SQL safety | Parse and re-render with the Snowflake dialect, then reparse and require an equivalent normalized AST. Classify statement type, canonical scoped identifiers, functions, table functions, stages/URLs, UDFs, external functions and session constructs. Read paths use an explicit safe-function allow-list; external/unknown functions, stages/URLs, dynamic SQL, unknown AST nodes and role/session mutation are denied. Quoted identifiers are normalized with Snowflake case rules before allow-list checks. |

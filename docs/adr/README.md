@@ -38,3 +38,9 @@ Amended by DE 001R2A (2026-09-11): DE-ADR-011, 013–018, 021, 022 and 026; adde
 DE-ADR-027. Changes harden materialization identity, phase serialization, fencing,
 ambiguous reconciliation, policy aggregation, typed approvals, trusted grants, versioning
 and DE 002 sequencing without changing the modular-monolith thesis.
+
+Amended by DE 001R2B (2026-09-11): DE-ADR-011 (phase-run exit criteria and resume vs new
+occurrence), DE-ADR-014 (`identity_class` and READ_ONLY warehouse binding), DE-ADR-015
+(scheduler-emitted `CONTRACT_VERSION_UNAVAILABLE`), DE-ADR-016 (approval rejection
+transitions), DE-ADR-020 (DE 002A CLOUD; DE 002B/C LOCAL), DE-ADR-022 (lock scope and
+exhausted `NoEffect` failure).

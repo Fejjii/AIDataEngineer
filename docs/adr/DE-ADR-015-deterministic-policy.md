@@ -1,6 +1,6 @@
 # DE-ADR-015 — Deterministic policy engine and SQL safety classifier
 
-- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1, DE 001R2A)
+- **Date:** 2026-09-11 · **Status:** PROPOSED · **Task:** DE 001 · **Amended:** 2026-09-11 (DE 001R1, DE 001R2A, DE 001R2B)
 
 ## Context
 Critical policy must not live only in prompts. Generated SQL must not cause unsafe
@@ -43,7 +43,9 @@ may request but cannot set effective grants. Connector health is a typed fresh s
 Plan validation is structural and independent of temporary health. SQL safety uses RO
 identities for reads, dialect round-trip parsing, canonical scope, safe function/construct
 classification, and denial of external/unknown functions, stages/URLs and unknown nodes.
-MOCK provenance cannot enter real Git/deploy.
+MOCK provenance cannot enter real Git/deploy. The scheduler, not a payload rule, emits
+`CONTRACT_VERSION_UNAVAILABLE` when a pinned handler is missing; routing stays
+`ENVIRONMENTAL`.
 
 ## Alternatives
 - Prompt-level guardrails only: rejected — bypassable, untestable.

@@ -1,6 +1,6 @@
 # Workflow State Model and Task Graph
 
-**Task:** DE 001 (corrected by DE 001R1 and DE 001R2A) · **Status:** PROPOSED · ADR: DE-ADR-011, DE-ADR-022
+**Task:** DE 001 (corrected by DE 001R1, DE 001R2A and DE 001R2B) · **Status:** PROPOSED · ADR: DE-ADR-011, DE-ADR-022
 
 Two levels of explicit, persisted state: the **workflow state machine** (coarse,
 deterministic, auditable) and the **phase-scoped task DAG** (fine-grained, concurrent).
@@ -45,8 +45,11 @@ stateDiagram-v2
     DELIVERY --> COMPLETED: PR only
     APPROVAL_REQUIRED --> DESIGN: design approved
     APPROVAL_REQUIRED --> EXECUTION: execution approved
-    APPROVAL_REQUIRED --> DELIVERY: deploy approved
-    APPROVAL_REQUIRED --> COMPLETED: rejected (PR only)
+    APPROVAL_REQUIRED --> DELIVERY: deploy approved (same phase run)
+    APPROVAL_REQUIRED --> PLANNING: design rejected
+    APPROVAL_REQUIRED --> COMPLETED: staging rejected with PR fallback
+    APPROVAL_REQUIRED --> BLOCKED: rejection requires parking
+    APPROVAL_REQUIRED --> FAILED: required operation rejected fail-closed
     APPROVAL_REQUIRED --> CANCEL_REQUESTED: cancelled
     MONITORING --> COMPLETED
     BLOCKED --> PLANNING: human resumes (no parked tasks → re-plan phase)
@@ -66,8 +69,8 @@ stateDiagram-v2
 | Change | Reason |
 |---|---|
 | Added `CANCEL_REQUESTED`, `CANCELLING`, `CANCELLED` | Cancellation is persisted intent followed by controlled shutdown; it is not terminal while an external effect may still be running |
-| `PLANNING` is re-entered before every phase | Each phase gets a fresh, validated DAG; this is the point where the planner is invoked or a deterministic template applied |
-| `APPROVAL_REQUIRED` is reentrant with `approval_kind` | One state, several gates (DESIGN, COST, GIT, DEPLOY, DESTRUCTIVE); return edge is determined by the kind |
+| `PLANNING` is a planning boundary, not a mandatory hop | A **new planning boundary** enters `PLANNING`, accepts a `Plan`, and allocates a **new phase occurrence**. Direct transitions (for example `GENERATION → POLICY_CHECK`) and **resume of an existing phase run** (`BLOCKED` with `PARKED` tasks, `APPROVAL_REQUIRED` return to the originating phase) do not re-enter `PLANNING` and do not allocate a new `phase_runs` row |
+| `APPROVAL_REQUIRED` is reentrant with typed subjects | One state, several gates (DESIGN, COST, GIT, DEPLOY, DESTRUCTIVE). Approval returns to the originating phase run; rejection follows subject-specific routes including `BLOCKED` and `FAILED` (`docs/PERMISSION_MODEL.md` §4) |
 | `CLARIFICATION_REQUIRED` records `asked_from_phase` | A question asked during DESIGN returns to `PLANNING` for that phase with the answer in context, not to `RECEIVED` (which would restart discovery) |
 | `POLICY_CHECK` kept as a phase **and** enforced per task | Whole-plan check catches cost and aggregate risk before spending; per-task check inside the Tool Registry is the non-bypassable guarantee |
 | `REPAIR` can return to `GENERATION` or `EXECUTION` | Pre-execution (compile/explain) repairs are cheaper than post-execution ones |
@@ -114,10 +117,10 @@ permitted next states, failure handling, human intervention, persistence.
 ### DISCOVERY
 - **Entry:** validated plan with only READ capabilities.
 - **Allowed:** `discover_assets`, `describe_asset`, `detect_schema_drift`, `select_relevant_assets`.
-- **Required output:** `MetadataCatalog` snapshot; `AssetSelection`.
-- **Validation:** selection ⊆ catalogue; scope ⊆ allow-list.
-- **Next:** `PLANNING`; `BLOCKED` (connector unavailable, selection invalid twice).
-- **Persistence:** snapshots (immutable), selection artifact.
+- **Required output:** whatever the accepted `Plan.phase_exit_criteria` names for **this** phase run. Enumeration typically requires an immutable `MetadataCatalog` snapshot. Description/selection typically requires that catalogue plus `AssetSelection`. DISCOVERY is one workflow state spanning two phase-run occurrences; it is not split into extra states.
+- **Validation:** enumerated assets ⊆ connector allow-list; when selection is in this run's exit criteria, selection ⊆ catalogue.
+- **Next:** `PLANNING` when this run's exit criteria are satisfied; `BLOCKED` (connector unavailable, selection invalid twice when selection is in-run).
+- **Persistence:** snapshots (immutable), selection artifact when produced.
 
 ### PROFILING
 - **Entry:** `AssetSelection` exists.
@@ -179,21 +182,21 @@ permitted next states, failure handling, human intervention, persistence.
 - **Persistence:** repair attempts, new artifact versions, audit `REPAIR_APPLIED` / `REPAIR_REJECTED`.
 
 ### APPROVAL_REQUIRED
-- **Entry:** `request_approval` or policy `REQUIRE_APPROVAL`.
+- **Entry:** `request_approval` or policy `REQUIRE_APPROVAL` after the subject operation or design is fully materialized (or budget reservation cannot fit the current cap).
 - **Allowed:** none automatic; `resolve_approval`, `cancel`.
 - **Required output:** one or more PENDING typed approval subjects (`OperationApproval`, `DesignApproval`, `BudgetIncreaseApproval`).
 - **Validation:** all mandatory subjects are approved by an authorized principal, unexpired, and still match their complete subject binding (`docs/PERMISSION_MODEL.md` §4).
-- **Next:** only after every mandatory subject is approved: DESIGN → `DESIGN`; BUDGET → the blocked policy gate; operation → its originating phase. Any rejection follows the subject-specific deterministic route; cancellation enters `CANCEL_REQUESTED`.
+- **Next:** only after every mandatory subject is approved: return to the **same originating phase run** (DESIGN remains DESIGN; a budget gate re-evaluates policy; a staging/Git/destructive operation continues from `AWAITING_APPROVAL`). Rejection does not weaken approval semantics; it follows the subject-specific deterministic routes in §3 and `docs/PERMISSION_MODEL.md` §4 (`PLANNING`, `COMPLETED` with PR fallback, `BLOCKED`, or `FAILED`). Cancellation enters `CANCEL_REQUESTED`.
 - **Human:** approve / reject with comment.
 - **Persistence:** approval, actor, decision, comment.
 
 ### DELIVERY
-- **Entry:** validation passed (pre-approval) or staging operation approval granted.
-- **Allowed:** lineage/docs/metrics/monitor/Git capabilities, typed approval request, and `deploy_staging` after its `OperationApproval`.
-- **Required output:** lineage, docs, metrics, branch, PR, approval request; post-approval: release.
-- **Validation:** secret scan, protected-branch check, REAL artifact provenance and complete operation-approval binding.
-- **Next:** `APPROVAL_REQUIRED`, `MONITORING`, `COMPLETED`, `BLOCKED` (ambiguous/environmental), `FAILED` (definite `deploy_staging` failure).
-- **Persistence:** artifacts, PR metadata, release record (intent row written **before** the deploy call, §4.7).
+- **Entry:** validation passed and a DELIVERY phase run accepted. Staging approval is **not** an entry criterion and does not start a second DELIVERY occurrence.
+- **Allowed:** lineage/docs/metrics/monitor/Git capabilities and `deploy_staging`. `deploy_staging` is a template in this same phase run. It materializes first; policy then decides whether its `OperationApproval` is required; the approval binds to the already materialized operation identity and validated input. After approval the same operation continues.
+- **Required output:** lineage, docs, metrics, branch, PR; plus a release when `deploy_staging` is in the plan and approved.
+- **Validation:** secret scan, protected-branch check, REAL artifact provenance. Staging dispatch additionally requires a matching, unexpired `OperationApproval`.
+- **Next:** `APPROVAL_REQUIRED` (staging subject pending), `MONITORING`, `COMPLETED` (PR-only, including rejected staging with documented PR fallback), `BLOCKED` (ambiguous/environmental, or rejected staging without fallback), `FAILED` (definite `deploy_staging` failure, exhausted `NoEffect`, or rejected required destructive/Git operation).
+- **Persistence:** artifacts, PR metadata, release record (intent/`release_id` committed **before** dispatch, §4.7). Approval identity is never part of the capability input or operation key.
 
 ### MONITORING
 - **Entry:** `deploy_staging` succeeded.
@@ -205,7 +208,7 @@ permitted next states, failure handling, human intervention, persistence.
 ### CANCEL_REQUESTED / CANCELLING
 - **Entry:** an authenticated operator requests cancellation of any non-terminal workflow.
 - **`CANCEL_REQUESTED` transaction:** persist actor, reason and time; increment the workflow cancellation epoch; disable new task claims and phase creation. Existing worker writes from the older epoch are fenced.
-- **`CANCELLING`:** coordinator acquires the workflow serialization lock, cancels unclaimed tasks, sends best-effort cooperative cancellation to active connectors/subprocesses, and reconciles every side-effecting attempt whose outcome is not definitely known. Cancellation never turns an ambiguous effect into a failure or silently discards it.
+- **`CANCELLING`:** the workflow serialization lock is used only for deterministic coordination and ownership state changes (cancel unclaimed tasks, record fenced recovery ownership, persist reducer/audit rows). Slow connector cancellation and reconciliation I/O run **outside** the lock under that fenced recovery ownership. Cancellation never turns an ambiguous effect into a failure or silently discards it.
 - **Exit:** `CANCELLED` only when all attempts are quiescent and effects are reconciled, or when an operator explicitly invokes `park_unresolved_and_cancel` after the bounded reconciliation horizon. That command creates immutable `unresolved_effects` rows with operation identity, recovery context, evidence and required follow-up.
 - **Late results:** owner, claim epoch, attempt and cancellation epoch predicates reject worker finalization. A valid external completion is recovered only through reconciliation under the cancellation coordinator.
 
@@ -234,7 +237,7 @@ permitted next states, failure handling, human intervention, persistence.
 | CLARIFICATION_REQUIRED | CANCEL_REQUESTED | cancel | authenticated operator |
 | PLANNING | {DISCOVERY, PROFILING, DESIGN, GENERATION, DELIVERY} | plan valid; phase run and task templates committed atomically | system |
 | PLANNING | BLOCKED | structurally invalid replans ≥ 2 | system |
-| DISCOVERY / PROFILING | PLANNING | all tasks terminal ∧ required outputs present | system |
+| DISCOVERY / PROFILING | PLANNING | all tasks terminal ∧ accepted `Plan.phase_exit_criteria` satisfied for this phase run | system |
 | DESIGN | APPROVAL_REQUIRED | decision.approval_required | system |
 | DESIGN | CLARIFICATION_REQUIRED | blocking open_questions | system |
 | DESIGN | PLANNING | design validated | system |
@@ -250,14 +253,17 @@ permitted next states, failure handling, human intervention, persistence.
 | VALIDATION | BLOCKED | otherwise | system |
 | REPAIR | GENERATION / EXECUTION | proposal accepted | system |
 | REPAIR | BLOCKED | rejected twice ∨ exhausted ∨ requires_human | system |
-| DELIVERY | APPROVAL_REQUIRED | `deploy_staging` operation subject required | system |
+| DELIVERY | APPROVAL_REQUIRED | `deploy_staging` materialized ∧ policy requires unmatched `OperationApproval` | system |
 | DELIVERY | MONITORING | `deploy_staging` succeeded | system |
 | DELIVERY | COMPLETED | no staging deploy requested | system |
-| DELIVERY | FAILED | `deploy_staging` definitely failed | system |
-| APPROVAL_REQUIRED | originating phase | every mandatory typed subject approved and still valid | authorized approver |
-| APPROVAL_REQUIRED | COMPLETED / PLANNING | rejected | human |
+| DELIVERY | FAILED | `deploy_staging` definitely failed ∨ (`NoEffect` ∧ `attempt_count ≥ max_attempts`) | system |
+| APPROVAL_REQUIRED | originating phase run | every mandatory typed subject approved and still valid (same `phase_run_id`; no new occurrence) | authorized approver |
+| APPROVAL_REQUIRED | PLANNING | `DesignApproval` rejected | human |
+| APPROVAL_REQUIRED | COMPLETED | staging `OperationApproval` rejected ∧ documented PR fallback exists | human |
+| APPROVAL_REQUIRED | BLOCKED | staging `OperationApproval` rejected ∧ no PR fallback ∨ `BudgetIncreaseApproval` rejected | human |
+| APPROVAL_REQUIRED | FAILED | required destructive/Git `OperationApproval` rejected (fail closed); optional such tasks are `SKIPPED(APPROVAL_REJECTED)` and do not take this row | human |
 | ANY non-terminal except CANCEL_REQUESTED/CANCELLING | CANCEL_REQUESTED | cancel intent persisted ∧ cancellation epoch incremented | authenticated operator |
-| CANCEL_REQUESTED | CANCELLING | coordinator holds workflow serialization lock | system |
+| CANCEL_REQUESTED | CANCELLING | coordinator records cancellation ownership under a short workflow serialization lock | system |
 | CANCELLING | CANCELLED | all attempts quiescent ∧ all side effects reconciled | system |
 | CANCELLING | CANCELLED | bounded reconciliation exhausted ∧ operator explicitly parks each unresolved effect | authenticated operator |
 | ANY non-terminal | BLOCKED | execution-time policy routing = PARK ∨ connector UNAVAILABLE for pending tasks ∨ runtime PERMISSION_FAILURE ∨ AMBIGUOUS_OUTCOME ∨ LLM budget exceeded (affected tasks → PARKED; `blocked_from_phase` recorded) | system |
@@ -303,9 +309,19 @@ No later step may be created or evaluated before its predecessor is committed.
 
 ### 4.2 Phase runs and task templates
 
-Every entry into an executable phase creates a distinct `phase_runs` occurrence. Repeating
-the same workflow phase later creates a new occurrence and therefore cannot collide with
-an earlier legitimate operation.
+Phase-run allocation is explicit. These three events are not interchangeable:
+
+| Event | What happens | Allocates `phase_runs`? |
+|---|---|---|
+| **New planning boundary** | Workflow enters `PLANNING`; a planner or deterministic template produces a `Plan`; acceptance commits the plan, one new occurrence, and all templates | Yes — one new occurrence for the planned phase |
+| **New phase occurrence** | First activation of a planned executable phase, or a later repetition of the same workflow phase (new monotonic `generation`) | Yes — distinct `phase_run_id` |
+| **Resume of an existing phase run** | `BLOCKED` with `PARKED` tasks returns those tasks to `READY`; `APPROVAL_REQUIRED` returns to the originating run; cancellation coordinates the active run | **No** — same `phase_run_id` continues |
+
+Every **new phase occurrence** creates a distinct `phase_runs` row. Repeating the same
+workflow phase later creates a new occurrence and therefore cannot collide with an
+earlier legitimate operation. Direct workflow transitions that resume or continue an
+already allocated occurrence (parked tasks, approved operations, intra-run task
+progress) must not allocate another row.
 
 | `phase_runs` field | Contract |
 |---|---|
@@ -324,13 +340,16 @@ bounds (`timeout_seconds`, `max_attempts`) and creator. It has **no operation id
 cannot be evaluated for execution approval or claimed**.
 
 List fan-out is not resolved by inserting tasks into an active DAG. The selected
-deterministic approach is a new planning boundary: discovery enumeration completes and
-persists its catalogue snapshot; the workflow re-enters `PLANNING`; the next phase run
-contains one explicit `describe_asset` template per sorted asset id. The transaction that
-accepts that plan writes the plan, phase run, all templates and `PLAN_ACCEPTED` audit
-events in canonical `(phase_run.generation, local_id)` order. The uniqueness constraint
-prevents duplicate materialization. The phase cannot complete until every explicit
-required template has reached a reducer-recognized terminal outcome.
+deterministic approach is a new planning boundary: discovery **enumeration** completes when
+its accepted `Plan.phase_exit_criteria` (catalogue snapshot) are satisfied; the workflow
+re-enters `PLANNING`; the next phase run contains one explicit `describe_asset` template
+per sorted asset id plus `select_relevant_assets`, with exit criteria covering catalogue
+plus selection. The transaction that accepts that plan writes the plan, phase run, all
+templates and `PLAN_ACCEPTED` audit events in canonical `(phase_run.generation, local_id)`
+order. The uniqueness constraint prevents duplicate materialization. The phase run cannot
+complete until every explicit required template has reached a reducer-recognized terminal
+outcome **and** this run's `phase_exit_criteria` hold. Enumeration is therefore allowed to
+exit DISCOVERY before description and selection exist.
 
 ### 4.2a Input materialization and operation identity
 
@@ -397,9 +416,9 @@ attempt budget. Pre-materialization parking and approval waiting create no attem
 
 ```text
 TEMPLATE_PENDING → MATERIALIZED → READY → CLAIMED → RUNNING → SUCCEEDED
-                              ├→ AWAITING_APPROVAL → READY (approved) | CANCELLED (rejected)
+                              ├→ AWAITING_APPROVAL → READY (approved) | CANCELLED (rejected; staging may complete PR-only) | FAILED (required fail-closed rejection)
                               ├→ RETRY_WAIT → READY
-                              ├→ RECONCILING → SUCCEEDED | RETRY_WAIT | PARKED
+                              ├→ RECONCILING → SUCCEEDED | RETRY_WAIT | PARKED | FAILED
                               ├→ PARKED → READY (human resume; policy re-evaluated)
                               └→ FAILED
 PENDING/READY → SKIPPED (dependency failed and task not required)  | CANCELLED
@@ -411,7 +430,7 @@ PENDING/READY → SKIPPED (dependency failed and task not required)  | CANCELLED
 - Every finalization uses the same owner/epoch/attempt/cancellation-epoch predicate. Zero updated rows means `STALE_RESULT_REJECTED`: output is not adopted and no task or attempt terminal field is overwritten.
 - `PARKED`: the task is intact and legitimate but cannot run now — policy deny class `ENVIRONMENTAL`, connector `UNAVAILABLE`, runtime `PERMISSION_FAILURE`, or `AMBIGUOUS_OUTCOME` awaiting human reconciliation (§4.7). Parking does not consume a new attempt. The workflow enters `BLOCKED` with `blocked_from_phase`.
 - Required dependency failure is exhaustive: the phase reducer traverses dependants in canonical local-id order. A required dependant becomes `SKIPPED(UPSTREAM_FAILED)` and the phase takes the upstream failure's deterministic route (`FAILED`, `BLOCKED`, or cancellation); optional dependants materialize only when their declared fallback input validates. No dependant remains permanently pending.
-- A phase is reducible only when every template has materialized or has an explicit upstream terminal disposition and no task is in an active/waiting state. `PARKED` reduces the phase to `BLOCKED`, not success.
+- A phase is reducible only when every template has materialized or has an explicit upstream terminal disposition and no task is in an active/waiting state. `PARKED` reduces the phase to `BLOCKED`, not success. A DISCOVERY run is reducible when those task conditions hold **and** the accepted `Plan.phase_exit_criteria` for that run are satisfied.
 
 ### 4.4 Concurrency and corruption guards
 
@@ -433,13 +452,13 @@ Phases with no reasoning need do **not** call the planner; a template produces t
 
 | Phase | Template |
 |---|---|
-| DISCOVERY enumeration | one `discover_assets`; phase completes with immutable sorted catalogue |
-| DISCOVERY description | created only after the enumeration planning boundary; one explicit `describe_asset` per catalogue asset, then `select_relevant_assets` |
+| DISCOVERY enumeration | one `discover_assets`; `phase_exit_criteria` = immutable sorted catalogue; phase run completes without description or selection |
+| DISCOVERY description | created only after the enumeration planning boundary; one explicit `describe_asset` per catalogue asset, then `select_relevant_assets`; `phase_exit_criteria` = catalogue + selection |
 | POLICY_CHECK | one Det evaluation task per upcoming EXECUTION task |
 | EXECUTION (dbt) | `run_pipeline` or `execute_transformation` + `run_tests` selection derived from generation units |
 | VALIDATION | Quality Engine validators derived from `ModelDesign.tests` and standard checks |
 | REPAIR | `inspect_failure → diagnose_failure → apply` chain per failing unit (max 2 units concurrently) |
-| DELIVERY | fixed chain: lineage → docs → metrics → monitors → git → PR → approval |
+| DELIVERY | fixed chain in **one** phase run: lineage → docs → metrics → monitors → git → PR → `deploy_staging`. Staging is materialized in this run; policy may move that task to `AWAITING_APPROVAL`; approval binds to the materialized operation; the same operation continues after approval |
 
 The planner is used for DISCOVERY, PROFILING (asset scoping and budgets), DESIGN (which
 reasoning inputs to include), and GENERATION (unit ordering). This keeps LLM planning where
@@ -454,16 +473,20 @@ The coordinator operation `reduce_and_advance(workflow_id)` is one PostgreSQL tr
    coordinator epoch and cancellation intent;
 3. run the exhaustive phase reducer over one consistent task snapshot;
 4. persist reducer outcome and same-transaction audit event;
-5. if the phase succeeded, create exactly one next plan/phase run and all task templates
-   (or transition to the next non-executable state), guarded by unique
-   `(workflow_id, generation)` and `(phase_run_id, local_id)` constraints;
+5. if the phase succeeded, either resume/continue an already allocated next occurrence or
+   create exactly one next plan/phase run and all task templates (or transition to the
+   next non-executable state), guarded by unique `(workflow_id, generation)` and
+   `(phase_run_id, local_id)` constraints. Resume of `PARKED` or `AWAITING_APPROVAL` work
+   must not create a second occurrence for the same generation;
 6. transition the workflow and commit.
 
-No connector or LLM call occurs while the lock is held. If planning needs an LLM, a
-versioned proposal artifact is produced before this transaction; acceptance rechecks its
-expected workflow/phase generation under the lock. A competing coordinator either waits
-and observes the committed generation or fails the expected-version predicate. It cannot
-create a second plan, expand tasks twice, or transition the workflow independently.
+No connector or LLM call occurs while the lock is held. Cooperative cancellation and
+reconciliation I/O also occur outside the lock, under fenced recovery ownership acquired
+in a short locked transaction. If planning needs an LLM, a versioned proposal artifact is
+produced before this transaction; acceptance rechecks its expected workflow/phase
+generation under the lock. A competing coordinator either waits and observes the committed
+generation or fails the expected-version predicate. It cannot create a second plan, expand
+tasks twice, or transition the workflow independently.
 
 ### 4.7 Attempt failure, fencing and recovery
 
@@ -500,7 +523,11 @@ Protocol (Det, in the Scheduler and Tool Registry):
    - `EFFECT_FOUND(output, external_ref)` — output must pass the pinned output schema and
      validators; then recover the existing attempt and task as `SUCCEEDED`;
    - `NO_EFFECT(evidence)` — proven absent/rejected; schedule a new attempt with the same
-     operation key only when `attempt_count < max_attempts`;
+     operation key only when `attempt_count < max_attempts`; otherwise the attempt and
+     task take the documented deterministic failure outcome (`FAILED`). There is no legal
+     remaining `RECONCILING` wait when the attempt budget is exhausted after authoritative
+     `NoEffect` (`deploy_staging` has `max_attempts=1`, so this path is reachable on the
+     first proven absence);
    - `IN_PROGRESS(external_ref, retry_after)` — renew recovery ownership and check again,
      bounded by `max_reconcile_checks` and `reconcile_deadline`;
    - `UNKNOWN(reason, evidence)` — park as `AMBIGUOUS_OUTCOME`; never re-execute
@@ -543,5 +570,6 @@ On process start: acquire atomic recovery ownership for expired claims; reconcil
 ambiguous side-effecting attempt under §4.7; then invoke the serialized phase reducer
 under §4.6. Reasoning calls are side-effect-free but still obey `max_attempts`. No task is
 claimed while its workflow is cancelling. An unsupported pinned capability or connector
-version parks with `CONTRACT_VERSION_UNAVAILABLE`; an in-flight phase is never silently
-upgraded to the latest contract.
+version is emitted by the scheduler / materialization layer as
+`CONTRACT_VERSION_UNAVAILABLE` (`docs/PERMISSION_MODEL.md` §3.2) and parks; an in-flight
+phase is never silently upgraded to the latest contract.

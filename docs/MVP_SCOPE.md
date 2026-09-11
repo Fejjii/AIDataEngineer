@@ -28,8 +28,9 @@ request, and with the whole thing also runnable **offline** against deterministi
    deterministic deduplication rule in the intermediate layer, re-runs, tests pass.
 8. Documentation and a lineage graph appear. A GitHub branch and pull request are created
    with a generated summary.
-9. The system asks for a typed `deploy_staging` operation approval. Nothing deploys until
-   the complete subject is approved.
+9. The system materializes `deploy_staging` in the same DELIVERY phase run, then asks for
+   a typed `OperationApproval` bound to that operation. Nothing deploys until the complete
+   subject is approved.
 10. The audit timeline shows every plan, policy decision, tool call, model call with cost,
     repair, and approval. A metrics panel shows first-attempt success, repairs, tokens,
     cost, and estimated engineering time saved.
@@ -89,7 +90,7 @@ request, and with the whole thing also runnable **offline** against deterministi
 5. Both planted failures are detected, classified into the expected classes, and repaired automatically; the repair history shows distinct hypotheses.
 6. All Quality Engine checks pass on the final data product; reconciliation of billed vs paid totals is reported.
 7. Lineage artifact contains the expected edges (`docs/DEMO_COMPANY.md` §9).
-8. GitHub PR is created; `deploy_staging` remains `APPROVAL_REQUIRED` until its typed operation subject is approved.
+8. GitHub PR is created; `deploy_staging` is materialized in the same DELIVERY run and remains `AWAITING_APPROVAL` / workflow `APPROVAL_REQUIRED` until its typed operation subject is approved.
 9. Audit timeline is complete: every tool call and model call linked to a task; no secret appears in any artifact, log or prompt record (verified by automated scan in tests).
 10. Same scenario completes in offline mode with fakes in CI in under 5 minutes.
 11. Evaluation report shows the metrics in `docs/EVALUATION_STRATEGY.md` §3 for all three scenarios.
