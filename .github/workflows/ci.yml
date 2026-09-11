@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - feat/DE002A_contract_kernel
+
+jobs:
+  contract-kernel:
+    name: DE 002A contract kernel
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Sync locked toolchain
+        run: uv sync --frozen --all-groups
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format
+        run: uv run ruff format --check .
+
+      - name: Mypy strict
+        run: uv run mypy src tests
+
+      - name: Import linter
+        run: uv run lint-imports
+
+      - name: Pytest unit, property, and documentation contracts
+        run: uv run pytest

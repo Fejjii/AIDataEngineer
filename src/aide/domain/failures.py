@@ -1,0 +1,43 @@
+"""Failure classes used by capabilities, policy, and retry evidence."""
+
+from __future__ import annotations
+
+from enum import Enum
+
+
+class FailureClass(str, Enum):
+    SQL_SYNTAX = "SQL_SYNTAX"
+    MISSING_OBJECT = "MISSING_OBJECT"
+    SCHEMA_MISMATCH = "SCHEMA_MISMATCH"
+    TYPE_MISMATCH = "TYPE_MISMATCH"
+    DBT_COMPILE = "DBT_COMPILE"
+    DBT_RUNTIME = "DBT_RUNTIME"
+    DBT_TEST = "DBT_TEST"
+    DATA_QUALITY = "DATA_QUALITY"
+    OUTPUT_INVALID = "OUTPUT_INVALID"
+    CONNECTOR_FAILURE = "CONNECTOR_FAILURE"
+    TRANSIENT_PROVIDER = "TRANSIENT_PROVIDER"
+    TIMEOUT = "TIMEOUT"
+    RESOURCE_LIMIT = "RESOURCE_LIMIT"
+    PERMISSION_FAILURE = "PERMISSION_FAILURE"
+    POLICY_DENIED = "POLICY_DENIED"
+    BUSINESS_AMBIGUITY = "BUSINESS_AMBIGUITY"
+    UNSAFE_OPERATION = "UNSAFE_OPERATION"
+    AMBIGUOUS_OUTCOME = "AMBIGUOUS_OUTCOME"
+    LLM_BUDGET_EXCEEDED = "LLM_BUDGET_EXCEEDED"
+    LEASE_EXPIRED = "LEASE_EXPIRED"
+    UNKNOWN = "UNKNOWN"
+
+
+REPAIRABLE_FAILURES: frozenset[FailureClass] = frozenset(
+    {
+        FailureClass.SQL_SYNTAX,
+        FailureClass.MISSING_OBJECT,
+        FailureClass.SCHEMA_MISMATCH,
+        FailureClass.TYPE_MISMATCH,
+        FailureClass.DBT_COMPILE,
+        FailureClass.DBT_RUNTIME,
+        FailureClass.DBT_TEST,
+        FailureClass.DATA_QUALITY,
+    }
+)

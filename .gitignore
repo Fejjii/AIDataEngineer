@@ -39,7 +39,9 @@ id_rsa
 id_rsa.pub
 credentials.json
 service-account*.json
-secrets/
+# Credential stores only. Do not ignore the tracked aide.secrets contract package.
+/secrets/
+.ai/private/secrets/
 *.secret
 
 # --- AI collaboration (generated / private / local) ---
