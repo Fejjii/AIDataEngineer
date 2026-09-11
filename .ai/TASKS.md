@@ -247,3 +247,30 @@ Wave 7  DE 017 → DE 018 → DE 019              (sequential, LOCAL)
 
 Two agents become safe after DE 002A/B/C + DE 003 merge; three after Wave 2 merges. Create
 `.ai/local/WORKSTREAMS.md` before any multi-agent wave.
+
+---
+
+## OPS 001 — Unified tracked handoff system
+
+- Compact ID: `OPS001`
+- Priority: P0
+- Status: DONE
+- Owner: Cursor Cloud agent (composer-2.5-fast, medium reasoning)
+- Environment: CURSOR_CLOUD
+- Branch: `ops/OPS001_unified_handoff`
+- Base commit: `97f4bd0`
+- Dependencies: DE 000 (bootstrap handoff), DE 001 accepted (Cloud-eligible work follows)
+- Risk: Low (governance and docs only)
+- Goal: Install unified tracked handoff for Local and Cloud agents via
+  `docs/agent/CLOUD_HANDOFF.md` and per-run reports under `docs/agent/runs/<TASK_ID>/`.
+  Update aligned governance. No product code.
+- Explicit exclusions: Product source, sanitizer scripts, merge to `main`, secrets in tracked
+  files.
+- Expected files: `docs/agent/**`, `.ai/MASTER_WORKFLOW.md`, `.ai/HANDOFF_TEMPLATE.md`,
+  `.ai/TASKS.md`, `.cursor/rules/50-handoff.mdc`
+- Forbidden files: `src/**`, product tests, `.ai/private/**`, `.ai/local/**`, root handoffs
+- Validation: Structure exists; private paths gitignored; secret scan; governance agreement;
+  collision-safe run-report paths; run report created for OPS001.
+- Recommended model: Composer 2.5
+- Completion evidence: Run report
+  `docs/agent/runs/OPS001/OPS001-SESSION-20260911T152424Z.md` and PR to `main`.
