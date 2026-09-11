@@ -1,15 +1,30 @@
 ---
-description: Mandatory HANDOFF.md and CHANGELOG_SESSION.md regeneration
+description: Mandatory handoff regeneration and tracked run reports
 alwaysApply: true
 ---
 
 # Handoff
 
-Authoritative standard: `.ai/MASTER_WORKFLOW.md` and `.ai/HANDOFF_TEMPLATE.md`.
+Authoritative standard: `.ai/MASTER_WORKFLOW.md`, `.ai/HANDOFF_TEMPLATE.md`, and
+`docs/agent/CLOUD_HANDOFF.md`.
 
-- Regenerate root `HANDOFF.md` and `CHANGELOG_SESSION.md` after success, failure, blocker, partial completion, review requirement, context exhaustion, quota interruption, credential failure, or environment failure.
+## Private operational handoffs (gitignored)
+
+- Regenerate root `HANDOFF.md` and `CHANGELOG_SESSION.md` after success, failure, blocker,
+  partial completion, review requirement, context exhaustion, quota interruption, credential
+  failure, or environment failure.
 - Statuses only: `IN_PROGRESS`, `REVIEW_REQUIRED`, `BLOCKED`, `FAILED`, `READY`. Never `DRAFT`.
 - `CHANGELOG_SESSION.md` is the current session only, not an infinite log.
 - Compute `Source File SHA256` with `grep -v '^Source File SHA256:' <file> | shasum -a 256`.
-- These two files are gitignored. Do not stage them into product commits.
-- On Local Mac, run `~/.local/bin/sync-aidataengineer-handoff.sh` and verify SHA256 + `cmp`.
+- Do not stage these files into commits. On Local Mac, run
+  `~/.local/bin/sync-aidataengineer-handoff.sh` and verify SHA256 + `cmp`.
+
+## Tracked run reports (committed)
+
+- Every agent run on a task branch must create exactly one report at
+  `docs/agent/runs/<TASK_ID>/<SESSION_ID>.md` (never overwrite).
+- Run-report statuses only: `SUCCESS`, `PARTIAL`, `BLOCKED`, `FAILED`, `REVIEW_REQUIRED`.
+- Cloud agents: run report is mandatory before push; private handoffs must not be staged.
+- Parallel agents: distinct task ID, branch, session ID, run report, file ownership, base/final
+  commit, dependencies, and integration order when relevant.
+- Never include secrets, tokens, passwords, private keys, or sensitive environment values.

@@ -117,6 +117,9 @@ command, exit status, result counts, skipped checks, and honest gaps.
 Set `READY` only when the stated scope is complete and validated. Otherwise use
 `REVIEW_REQUIRED`, `BLOCKED`, or `FAILED`. Always regenerate both operational files.
 
+When Git writes are authorized, also create or update the tracked run report on the task
+branch per `docs/agent/CLOUD_HANDOFF.md` and record the PR number when applicable.
+
 ---
 
 ## 5. Handoff status model
@@ -184,14 +187,18 @@ Cloud agents:
   or Git stash exist;
 - work on their own task branch from the authorized base SHA;
 - commit and push only on that branch when the task authorizes Git writes;
+- **create one tracked run report** at
+  `docs/agent/runs/<TASK_ID>/<SESSION_ID>.md` before push (mandatory);
 - open a pull request into `main`;
 - do not merge `main`;
 - do not write iCloud;
-- regenerate `HANDOFF.md` / `CHANGELOG_SESSION.md` in the Cloud worktree for continuity,
-  and summarize evidence in the PR body.
+- may regenerate `HANDOFF.md` / `CHANGELOG_SESSION.md` in the Cloud worktree for continuity,
+  but must **never stage** those gitignored files;
+- summarize evidence in the PR body and in the run report.
 
-A sanitized tracked Cloud handoff (`docs/agent/CLOUD_HANDOFF.md`) is deferred until Cloud
-work actually starts. Until then, Cloud context is the tracked governance plus the PR.
+Tracked run reports are defined in `docs/agent/CLOUD_HANDOFF.md`. Allowed run-report
+statuses: `SUCCESS`, `PARTIAL`, `BLOCKED`, `FAILED`, `REVIEW_REQUIRED`. Private operational
+handoffs retain `IN_PROGRESS`, `REVIEW_REQUIRED`, `BLOCKED`, `FAILED`, `READY`.
 
 Cloud execution is not allowed for a task that forbids it.
 
@@ -326,7 +333,9 @@ remaining bounded work, and do not retry the same expensive model in a loop.
 
 ---
 
-## 14. HANDOFF regeneration rules
+## 14. Handoff regeneration rules
+
+### Private operational handoffs (Local primary)
 
 Regenerate `HANDOFF.md` after:
 
@@ -347,6 +356,15 @@ are defined in `.ai/HANDOFF_TEMPLATE.md`.
 Normalized self-hash: hash the document with the entire `Source File SHA256:` line
 removed, then write that digest into the field. The sync script verifies actual bytes
 independently with SHA256 and `cmp`.
+
+### Tracked run reports (Local and Cloud)
+
+Every agent run that commits to a task branch must add exactly one sanitized run report at
+`docs/agent/runs/<TASK_ID>/<SESSION_ID>.md`. See `docs/agent/CLOUD_HANDOFF.md` for required
+fields, allowed statuses, session ID format, and parallel coordination extensions.
+
+Run reports are the durable GitHub-visible evidence. Private root handoffs remain
+gitignored and are not a substitute for run reports on Cloud branches.
 
 ---
 
@@ -390,14 +408,18 @@ Parallel tasks require:
 
 - different task IDs;
 - different branches;
+- **different session IDs** and **one run report each** at
+  `docs/agent/runs/<TASK_ID>/<SESSION_ID>.md` (never overwrite);
 - explicit owner;
-- explicit expected files;
+- explicit expected files (declared file ownership);
 - explicit forbidden files when needed;
+- recorded base commit and final commit in each run report;
+- declared dependencies;
+- defined integration order when branches must merge in sequence;
 - no conflicting migrations;
 - no conflicting central architecture edits;
 - no conflicting orchestration state edits;
 - no conflicting security boundary edits;
-- defined integration order;
 - relevant tests after integration.
 
 If overlap is unclear, execute sequentially.
@@ -554,6 +576,7 @@ scan, and GitHub remote confirmation — not product tests.
 6. Cursor runs required validation.
 7. Cursor updates `TASKS.md` / `DECISIONS.md` when local.
 8. Cursor regenerates HANDOFF and CHANGELOG regardless of success or block.
-9. Local: sync to iCloud. Cloud: commit/push branch and open PR when authorized.
-10. Human reviews and merges protected `main`.
-11. Next bounded task.
+9. Cursor creates the tracked run report on the task branch when Git writes are authorized.
+10. Local: sync to iCloud. Cloud: commit/push branch and open PR when authorized.
+11. Human reviews and merges protected `main`.
+12. Next bounded task.
