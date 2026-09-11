@@ -1,0 +1,11 @@
+---
+description: Testing and honest validation
+alwaysApply: true
+---
+
+# Testing
+
+- Run the tests required by the task. Report exact commands and results.
+- Never claim tests or CI passed if they were not run. Record skipped checks and why.
+- Add tests for behavior and failure paths when changing product code.
+- Keep tests deterministic. Do not depend on production systems by default.

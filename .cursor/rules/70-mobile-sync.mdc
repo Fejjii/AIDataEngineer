@@ -1,0 +1,13 @@
+---
+description: iCloud mobile sync for HANDOFF.md and CHANGELOG_SESSION.md only
+alwaysApply: true
+---
+
+# Mobile sync
+
+- After regenerating handoff files on Local Mac, run `~/.local/bin/sync-aidataengineer-handoff.sh`.
+- Copy only `HANDOFF.md` and `CHANGELOG_SESSION.md` to
+  `~/Library/Mobile Documents/com~apple~CloudDocs/AI-Projects/AIDataEngineer/`.
+- Never copy the repository, `.git`, secrets, or source.
+- Verify destination SHA256 and `cmp`. Treat verification failure as a blocker.
+- Sync immediately on blocker, review, or failure. Cloud agents cannot write iCloud.

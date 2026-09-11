@@ -1,0 +1,17 @@
+---
+description: Session start — read governance, verify repo path, branch, commit, and Git status
+alwaysApply: true
+---
+
+# Session start
+
+Before changing anything:
+
+1. Read `.ai/MASTER.md`, `.ai/MASTER_WORKFLOW.md`, `.ai/PROJECT_CONTEXT.md`, `.ai/TASKS.md`, and `.ai/DECISIONS.md`.
+2. Read the specialist file for the task (`AUDIT.md`, `IMPLEMENT.md`, `BUGFIX.md`, `REFACTOR.md`, `SECURITY.md`, or `RELEASE.md`).
+3. Read `.ai/ARCHITECTURE.md`. If status is `NOT YET DESIGNED`, do not invent product architecture.
+4. Verify absolute path is `~/Developer/AIDataEngineer`. If the checkout is under Desktop, Documents, Downloads, iCloud Drive, or Dropbox, stop with `REVIEW_REQUIRED`.
+5. Verify branch, commit, and `git status`. Record them in the handoff.
+6. Respect the task contract: scope, exclusions, expected files, forbidden files, environment, Git authority, and deployment authority.
+
+The repository and verified evidence beat chat history. Mark unknowns as UNKNOWN.

@@ -1,0 +1,22 @@
+---
+description: Stop safely on blockers, review gates, and failures
+alwaysApply: true
+---
+
+# Blocker / review / failure
+
+Never represent unfinished or failed work as success.
+
+## REVIEW_REQUIRED
+
+Stop before the protected action. Document the exact human action. Do not continue until confirmed.
+
+## BLOCKED
+
+Scoped diagnostics only. Record the failed command, evidence, and last successful step. Wait for guidance.
+
+## FAILED
+
+Stop further changes. Preserve evidence. Do not commit or deploy failed work unless explicitly directed.
+
+Never include secrets or full sensitive logs.

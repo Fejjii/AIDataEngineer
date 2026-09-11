@@ -1,0 +1,136 @@
+# =============================================================================
+# AIDataEngineer .gitignore
+# Durable sanitized governance (.ai/*.md, .cursor/rules/) is tracked.
+# Private AI context, local coordination, generated handoffs, and secrets are not.
+# =============================================================================
+
+# --- OS metadata ---
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+Icon?
+._*
+
+# --- IDE / editor local state ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Track shared Cursor rules only. Ignore other Cursor local state.
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
+
+# --- Environment and secrets ---
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+id_rsa
+id_rsa.pub
+credentials.json
+service-account*.json
+secrets/
+*.secret
+
+# --- AI collaboration (generated / private / local) ---
+HANDOFF.md
+CHANGELOG_SESSION.md
+.ai/private/
+.ai/local/
+*.local.md
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+dist/
+build/
+pip-wheel-metadata/
+.venv/
+venv/
+env/
+ENV/
+.uv/
+.python-eggs/
+
+# --- Test / type / coverage caches ---
+.pytest_cache/
+.mypy_cache/
+.pytype/
+.pyre/
+.ruff_cache/
+.tox/
+.nox/
+.hypothesis/
+.cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+nosetests.xml
+
+# --- Node / frontend (when introduced) ---
+node_modules/
+.pnpm-store/
+.npm/
+.next/
+.nuxt/
+.turbo/
+.parcel-cache/
+out/
+.vite/
+*.tsbuildinfo
+
+# --- Docker / local compose overrides ---
+docker-compose.override.yml
+.docker/
+
+# --- Logs ---
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Runtime databases ---
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+
+# --- Temporary files ---
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.orig
+
+# --- Local build output ---
+*.whl
+site/
+public/build/
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- Tooling ---
+.direnv/
+.terraform/
+*.tfstate
+*.tfstate.*

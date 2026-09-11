@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.sofien.aidataengineer-handoff-sync</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/hallo/.local/bin/sync-aidataengineer-handoff.sh</string>
+    </array>
+
+    <key>WatchPaths</key>
+    <array>
+        <string>/Users/hallo/Developer/AIDataEngineer/HANDOFF.md</string>
+        <string>/Users/hallo/Developer/AIDataEngineer/CHANGELOG_SESSION.md</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StartInterval</key>
+    <integer>3600</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/hallo/Library/Logs/aidataengineer-handoff-sync.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/hallo/Library/Logs/aidataengineer-handoff-sync.err.log</string>
+</dict>
+</plist>

@@ -1,0 +1,12 @@
+---
+description: Secrets and security boundaries
+alwaysApply: true
+---
+
+# Secrets
+
+- Never print, log, commit, or put secrets in handoffs, prompts, or screenshots.
+- Reference environment-variable names only. Do not ask anyone to paste a token into chat.
+- Real `.env*` files are gitignored. Bootstrap sources stay in ignored `.ai/private/`.
+- Production data mutation, production deploys, and credential entry are human-gated (`REVIEW_REQUIRED`).
+- Least privilege. Fail closed on ambiguous permissions.

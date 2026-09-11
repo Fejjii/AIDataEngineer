@@ -1,0 +1,14 @@
+---
+description: Git and deployment authority
+alwaysApply: true
+---
+
+# Git and deployment authority
+
+- One writer per branch. Future product work uses `feat|fix|refactor|docs|ops/<DE000>_<scope>`.
+- `main` is canonical integrated code. Agents must not push `main` during normal development.
+- Do not commit, push, merge, rebase, force-push, rewrite history, drop stashes, or delete branches unless the current task explicitly authorizes that action.
+- Merges to `main` require human review. Do not bypass branch protection.
+- Git authority is not deployment authority. Do not deploy or mutate production config unless authorized.
+- Preserve unrelated work. Inspect the diff and scan for secrets before any approved Git write.
+- Tracked: sanitized `.ai/*.md` and `.cursor/rules/`. Ignored: `.ai/private/`, `.ai/local/`, `HANDOFF.md`, `CHANGELOG_SESSION.md`, `.env*`.

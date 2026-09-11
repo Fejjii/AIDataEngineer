@@ -1,0 +1,15 @@
+---
+description: Mandatory HANDOFF.md and CHANGELOG_SESSION.md regeneration
+alwaysApply: true
+---
+
+# Handoff
+
+Authoritative standard: `.ai/MASTER_WORKFLOW.md` and `.ai/HANDOFF_TEMPLATE.md`.
+
+- Regenerate root `HANDOFF.md` and `CHANGELOG_SESSION.md` after success, failure, blocker, partial completion, review requirement, context exhaustion, quota interruption, credential failure, or environment failure.
+- Statuses only: `IN_PROGRESS`, `REVIEW_REQUIRED`, `BLOCKED`, `FAILED`, `READY`. Never `DRAFT`.
+- `CHANGELOG_SESSION.md` is the current session only, not an infinite log.
+- Compute `Source File SHA256` with `grep -v '^Source File SHA256:' <file> | shasum -a 256`.
+- These two files are gitignored. Do not stage them into product commits.
+- On Local Mac, run `~/.local/bin/sync-aidataengineer-handoff.sh` and verify SHA256 + `cmp`.
