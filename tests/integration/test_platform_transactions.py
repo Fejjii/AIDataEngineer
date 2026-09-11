@@ -18,8 +18,8 @@ from aide.capabilities.spec import (
     ConnectorRequirement,
     RetryPolicy,
 )
+from aide.connectors.base.reconcile import EffectFound
 from aide.connectors.base.registry import ConnectorRegistry
-from aide.connectors.base.reconcile import EffectFound, NoEffect
 from aide.connectors.base.spec import (
     CapabilityImplementation,
     ConnectorKind,

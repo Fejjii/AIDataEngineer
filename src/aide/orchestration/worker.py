@@ -426,9 +426,10 @@ async def _lock_workflow_for_task(session: AsyncSession, task_id: UUID) -> Workf
     if workflow_id is None:
         return None
     await acquire_workflow_lock(session, workflow_id)
-    return await session.scalar(
+    workflow = await session.scalar(
         select(WorkflowModel).where(WorkflowModel.workflow_id == workflow_id).with_for_update()
     )
+    return workflow
 
 
 async def _audit_stale_result(

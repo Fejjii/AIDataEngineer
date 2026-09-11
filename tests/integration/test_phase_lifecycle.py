@@ -10,12 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tests.integration.helpers import seed_task
 
 from aide.domain.states import PhaseRunStatus, TaskState, WorkflowState
+from aide.orchestration.cancellation import request_cancellation
 from aide.orchestration.coordination import (
     NextPhase,
     propagate_required_dependency_failures,
     reduce_and_advance,
 )
-from aide.orchestration.cancellation import request_cancellation
 from aide.orchestration.materialization import (
     ConcurrentStateError,
     create_phase_occurrence,
