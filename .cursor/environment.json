@@ -1,0 +1,5 @@
+{
+  "name": "AIDataEngineer",
+  "install": "./scripts/verify_environment.sh --bootstrap",
+  "start": "./scripts/verify_environment.sh --start"
+}
