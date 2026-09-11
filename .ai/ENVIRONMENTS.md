@@ -57,6 +57,10 @@ merge `main`; modify live infrastructure.
 **Typical models:** Muse Spark 1.3 for multi-step Cloud work; Composer 2.5 for specified
 implementation; Grok 4.6 for difficult Cloud implementation.
 
+Product-task mapping for Wave 0 (authoritative: DE-ADR-020 and
+`docs/IMPLEMENTATION_PLAN.md` §3): **DE 002A is CURSOR_CLOUD**; **DE 002B and DE 002C
+are LOCAL**. Later Cloud-eligible tasks are listed per-task in the implementation plan.
+
 Cloud execution is ineligible when the task requires bootstrap sources, local `.env`,
 Mac LaunchAgents, or other ignored files.
 
