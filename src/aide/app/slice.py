@@ -5,15 +5,15 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from aide.app.events import EventBus
-from aide.app.parking import park_task
+from aide.app.parking import fail_closed_task, park_task
 from aide.app.plan_validation import validate_plan
 from aide.auth.grants import GrantAuthorizer, GrantForgeryError
 from aide.auth.session import digest_session_token, issue_session_token
@@ -23,6 +23,9 @@ from aide.capabilities.io import (
     ClassifySqlOutput,
     DiscoverAssetsInput,
     DiscoverAssetsOutput,
+    EmitWorkflowSummaryInput,
+    EvaluateExecutionPolicyInput,
+    EvaluateExecutionPolicyOutput,
     ExecuteQueryInput,
     ExecuteQueryOutput,
     GenerateSqlQueryInput,
@@ -35,7 +38,9 @@ from aide.capabilities.io import (
     SelectRelevantAssetsInput,
     SelectRelevantAssetsOutput,
     ValidateQueryInput,
+    ValidateResultInput,
     ValidationReport,
+    WorkflowSummary,
 )
 from aide.capabilities.registry import CapabilityRegistry
 from aide.connectors.base.health import ConnectorHealthSnapshot
@@ -47,8 +52,8 @@ from aide.domain.enums import TargetEnv
 from aide.domain.identity import canonical_json_bytes
 from aide.domain.permissions import PermissionLevel
 from aide.domain.principal import GrantAuthorization, PrincipalRef, Role
-from aide.domain.sql import SqlClassification
-from aide.domain.states import TaskState, WorkflowState
+from aide.domain.sql import AssetRef, SqlClassification, SqlText
+from aide.domain.states import LEGAL_TRANSITIONS, TaskState, WorkflowState
 from aide.domain.tasks import TaskTemplate
 from aide.domain.versions import CapabilityContractRef, ContractSnapshot
 from aide.orchestration.compatibility import evaluate_pinned_contract
@@ -89,8 +94,15 @@ SLICE_CAPABILITIES = {
     "generate_sql_query",
     "classify_sql",
     "validate_query",
+    "evaluate_execution_policy",
     "execute_query",
+    "validate_result",
+    "emit_workflow_summary",
     "create_dataset",
+}
+_SQL_POLICY_CAPABILITIES = {
+    "execute_query",
+    "evaluate_execution_policy",
 }
 
 
@@ -104,14 +116,18 @@ class SliceResult:
     catalogue: MetadataCatalog | None = None
     description_plan: Plan | None = None
     selection: SelectRelevantAssetsOutput | None = None
+    generation_plan: Plan | None = None
     generated_sql: GenerateSqlQueryOutput | None = None
     classification: SqlClassification | None = None
     execution: ExecuteQueryOutput | None = None
     query_tag: str | None = None
     provenance: ArtifactProvenance | None = None
     validation: ValidationReport | None = None
+    summary: WorkflowSummary | None = None
     parked: bool = False
     park_reason: str | None = None
+    failed: bool = False
+    fail_reason: str | None = None
     workflow_state: str = WorkflowState.RECEIVED.value
     events: tuple[str, ...] = ()
     extra: dict[str, Any] = field(default_factory=dict)
@@ -139,6 +155,7 @@ class OfflineSliceService:
         self._dev = snowflake_dev
         self._events = events
         self._authorizer = GrantAuthorizer()
+        self.force_scope_violation = False
 
     @property
     def events(self) -> EventBus:
@@ -152,7 +169,9 @@ class OfflineSliceService:
         client_supplied_effective: frozenset[PermissionLevel] | None = None,
         connector_unavailable: bool = False,
         pin_unknown_capability: bool = False,
+        force_scope_violation: bool = False,
     ) -> SliceResult:
+        self.force_scope_violation = force_scope_violation
         requested = requested_grants or frozenset({PermissionLevel.READ})
         principal = PrincipalRef(
             principal_id=uuid4(),
@@ -218,38 +237,41 @@ class OfflineSliceService:
             result.requirement.model_dump(mode="json"),
             capability_id="interpret_requirement",
         )
-        result.enumeration_plan = self._reasoner.plan_phase(
-            PlanPhaseInput(
-                workflow_context_ref=str(workflow_id),
-                phase=WorkflowState.DISCOVERY,
-                contract_snapshot_ref=str(snapshot.snapshot_id),
-                capability_catalogue=(),
-                constraints=PlanConstraints(
-                    max_tasks=50,
-                    effective_grants=tuple(sorted(item.value for item in authorization.effective)),
-                ),
+        planning_id = uuid4()
+        await self._create_phase(
+            result,
+            snapshot,
+            phase_run_id=planning_id,
+            phase=WorkflowState.PLANNING,
+            expected_generation=1,
+            templates=_planning_templates(
+                workflow_id,
+                snapshot.snapshot_id,
+                target_phase=WorkflowState.DISCOVERY,
                 occurrence="ENUMERATION",
-            )
+            ),
+            phase_exit_criteria=("planning_boundary",),
         )
-        enum_templates = validate_plan(
-            result.enumeration_plan, capabilities=self._capabilities, connectors=self._connectors
-        )
+        if await self._run_phase(result, phase_run_id=planning_id, snapshot=snapshot):
+            return await self._finalize_status(result)
+        assert result.enumeration_plan is not None
         discovery_id = uuid4()
-        async with self._sessions() as session, session.begin():
-            workflow_row = await session.get(WorkflowModel, workflow_id)
-            assert workflow_row is not None
-            await create_phase_occurrence(
-                session,
-                workflow_id=workflow_id,
+        if await self._advance(
+            result,
+            snapshot,
+            NextPhase(
                 phase_run_id=discovery_id,
                 phase=WorkflowState.DISCOVERY,
-                expected_workflow_version=workflow_row.version,
-                expected_generation=1,
                 contract_snapshot_id=snapshot.snapshot_id,
-                templates=enum_templates,
+                templates=validate_plan(
+                    result.enumeration_plan,
+                    capabilities=self._capabilities,
+                    connectors=self._connectors,
+                ),
                 phase_exit_criteria=result.enumeration_plan.phase_exit_criteria,
-            )
-        self._events.publish(workflow_id, "phase.created", {"phase": "DISCOVERY", "generation": 1})
+            ),
+        ):
+            return await self._finalize_status(result)
         if await self._run_phase(result, phase_run_id=discovery_id, snapshot=snapshot):
             return await self._finalize_status(result)
         assert result.catalogue is not None
@@ -258,18 +280,29 @@ class OfflineSliceService:
             raise RuntimeError("catalogue must be immutably sorted")
         if "asset_selection" in result.enumeration_plan.phase_exit_criteria:
             raise RuntimeError("enumeration exit criteria must be catalogue-only")
-        result.description_plan = self._reasoner.plan_phase(
-            PlanPhaseInput(
-                workflow_context_ref=str(workflow_id),
-                phase=WorkflowState.DISCOVERY,
-                contract_snapshot_ref=str(snapshot.snapshot_id),
-                capability_catalogue=(),
-                constraints=PlanConstraints(max_tasks=50),
-                occurrence="DESCRIPTION",
-                catalogue_snapshot_id=str(result.catalogue.snapshot_id),
+        description_plan_id = uuid4()
+        if await self._advance(
+            result,
+            snapshot,
+            NextPhase(
+                phase_run_id=description_plan_id,
+                phase=WorkflowState.PLANNING,
+                contract_snapshot_id=snapshot.snapshot_id,
+                templates=_planning_templates(
+                    workflow_id,
+                    snapshot.snapshot_id,
+                    target_phase=WorkflowState.DISCOVERY,
+                    occurrence="DESCRIPTION",
+                    catalogue_snapshot_id=str(result.catalogue.snapshot_id),
+                    catalogue_assets=result.catalogue.asset_refs(),
+                ),
+                phase_exit_criteria=("planning_boundary",),
             ),
-            catalogue_assets=result.catalogue.asset_refs(),
-        )
+        ):
+            return await self._finalize_status(result)
+        if await self._run_phase(result, phase_run_id=description_plan_id, snapshot=snapshot):
+            return await self._finalize_status(result)
+        assert result.description_plan is not None
         describe_ids = [
             task.local_id
             for task in result.description_plan.tasks
@@ -280,8 +313,8 @@ class OfflineSliceService:
         if any(task.capability_id == "describe_asset" for task in result.enumeration_plan.tasks):
             raise RuntimeError("description must not exist before the planning boundary")
         description_id = uuid4()
-        await self._advance_via_planning(
-            workflow_id,
+        if await self._advance(
+            result,
             snapshot,
             NextPhase(
                 phase_run_id=description_id,
@@ -294,138 +327,235 @@ class OfflineSliceService:
                 ),
                 phase_exit_criteria=result.description_plan.phase_exit_criteria,
             ),
-        )
+        ):
+            return await self._finalize_status(result)
         if await self._run_phase(result, phase_run_id=description_id, snapshot=snapshot):
             return await self._finalize_status(result)
-        sql_plan = self._reasoner.plan_phase(
-            PlanPhaseInput(
-                workflow_context_ref=str(workflow_id),
+        generation_plan_id = uuid4()
+        if await self._advance(
+            result,
+            snapshot,
+            NextPhase(
+                phase_run_id=generation_plan_id,
+                phase=WorkflowState.PLANNING,
+                contract_snapshot_id=snapshot.snapshot_id,
+                templates=_planning_templates(
+                    workflow_id,
+                    snapshot.snapshot_id,
+                    target_phase=WorkflowState.GENERATION,
+                    occurrence="SAFE_SQL",
+                ),
+                phase_exit_criteria=("planning_boundary",),
+            ),
+        ):
+            return await self._finalize_status(result)
+        if await self._run_phase(result, phase_run_id=generation_plan_id, snapshot=snapshot):
+            return await self._finalize_status(result)
+        assert result.generation_plan is not None
+        if any(task.capability_id == "execute_query" for task in result.generation_plan.tasks):
+            raise RuntimeError("execute_query must not run in GENERATION")
+        generation_id = uuid4()
+        if await self._advance(
+            result,
+            snapshot,
+            NextPhase(
+                phase_run_id=generation_id,
                 phase=WorkflowState.GENERATION,
-                contract_snapshot_ref=str(snapshot.snapshot_id),
-                capability_catalogue=(),
-                constraints=PlanConstraints(max_tasks=50),
-                occurrence="SAFE_SQL",
-            )
-        )
+                contract_snapshot_id=snapshot.snapshot_id,
+                templates=validate_plan(
+                    result.generation_plan,
+                    capabilities=self._capabilities,
+                    connectors=self._connectors,
+                ),
+                phase_exit_criteria=result.generation_plan.phase_exit_criteria,
+            ),
+        ):
+            return await self._finalize_status(result)
+        if await self._run_phase(result, phase_run_id=generation_id, snapshot=snapshot):
+            return await self._finalize_status(result)
+        policy_id = uuid4()
+        if await self._advance(
+            result,
+            snapshot,
+            NextPhase(
+                phase_run_id=policy_id,
+                phase=WorkflowState.POLICY_CHECK,
+                contract_snapshot_id=snapshot.snapshot_id,
+                templates=_policy_templates(),
+                phase_exit_criteria=("policy_allow_execute",),
+            ),
+        ):
+            return await self._finalize_status(result)
+        if await self._run_phase(result, phase_run_id=policy_id, snapshot=snapshot):
+            return await self._finalize_status(result)
         execution_id = uuid4()
-        await self._advance_via_planning(
-            workflow_id,
+        if await self._advance(
+            result,
             snapshot,
             NextPhase(
                 phase_run_id=execution_id,
                 phase=WorkflowState.EXECUTION,
                 contract_snapshot_id=snapshot.snapshot_id,
-                templates=validate_plan(
-                    sql_plan, capabilities=self._capabilities, connectors=self._connectors
-                ),
-                phase_exit_criteria=sql_plan.phase_exit_criteria,
+                templates=_execution_templates(),
+                phase_exit_criteria=("execution_result",),
             ),
-        )
+        ):
+            return await self._finalize_status(result)
         if await self._run_phase(result, phase_run_id=execution_id, snapshot=snapshot):
             return await self._finalize_status(result)
         if result.execution is None or result.generated_sql is None:
             raise RuntimeError("execution produced no validated output")
-        result.validation = validate_query_result(
-            result.execution, expected_columns=result.generated_sql.expected_columns
-        )
-        if not result.validation.passed:
+        validation_id = uuid4()
+        if await self._advance(
+            result,
+            snapshot,
+            NextPhase(
+                phase_run_id=validation_id,
+                phase=WorkflowState.VALIDATION,
+                contract_snapshot_id=snapshot.snapshot_id,
+                templates=_validation_templates(),
+                phase_exit_criteria=("validation_report",),
+            ),
+        ):
+            return await self._finalize_status(result)
+        if await self._run_phase(result, phase_run_id=validation_id, snapshot=snapshot):
+            return await self._finalize_status(result)
+        if result.validation is None or not result.validation.passed:
             raise RuntimeError("deterministic validation failed")
-        await self._store_artifact(
-            workflow_id,
-            "ValidationReport",
-            result.validation.model_dump(mode="json"),
-            capability_id="validate_query",
+        delivery_plan_id = uuid4()
+        if await self._advance(
+            result,
+            snapshot,
+            NextPhase(
+                phase_run_id=delivery_plan_id,
+                phase=WorkflowState.PLANNING,
+                contract_snapshot_id=snapshot.snapshot_id,
+                templates=_planning_templates(
+                    workflow_id,
+                    snapshot.snapshot_id,
+                    target_phase=WorkflowState.DELIVERY,
+                    occurrence="DELIVERY",
+                ),
+                phase_exit_criteria=("planning_boundary",),
+            ),
+        ):
+            return await self._finalize_status(result)
+        if await self._run_phase(result, phase_run_id=delivery_plan_id, snapshot=snapshot):
+            return await self._finalize_status(result)
+        delivery_id = uuid4()
+        delivery_plan = result.extra.get("delivery_plan")
+        delivery_templates = (
+            validate_plan(
+                delivery_plan,
+                capabilities=self._capabilities,
+                connectors=self._connectors,
+            )
+            if isinstance(delivery_plan, Plan)
+            else _delivery_templates()
         )
-        async with self._sessions() as session, session.begin():
-            workflow_row = await session.get(WorkflowModel, workflow_id)
-            assert workflow_row is not None
-            workflow_row.state = WorkflowState.COMPLETED.value
-            workflow_row.finished_at = _naive(datetime.now(UTC))
-            workflow_row.version += 1
+        if await self._advance(
+            result,
+            snapshot,
+            NextPhase(
+                phase_run_id=delivery_id,
+                phase=WorkflowState.DELIVERY,
+                contract_snapshot_id=snapshot.snapshot_id,
+                templates=delivery_templates,
+                phase_exit_criteria=("workflow_summary",),
+            ),
+        ):
+            return await self._finalize_status(result)
+        if await self._run_phase(result, phase_run_id=delivery_id, snapshot=snapshot):
+            return await self._finalize_status(result)
+        await self._reduce_current(result)
+        await self._complete_from_delivery(result)
         return await self._finalize_status(result)
 
-    async def _advance_via_planning(
-        self, workflow_id: UUID, snapshot: ContractSnapshot, target: NextPhase
+    async def _create_phase(
+        self,
+        result: SliceResult,
+        snapshot: ContractSnapshot,
+        *,
+        phase_run_id: UUID,
+        phase: WorkflowState,
+        expected_generation: int,
+        templates: tuple[TemplateSpec, ...],
+        phase_exit_criteria: tuple[str, ...],
     ) -> None:
-        planning_id = uuid4()
         async with self._sessions() as session, session.begin():
-            workflow_row = await session.get(WorkflowModel, workflow_id)
+            workflow_row = await session.get(WorkflowModel, result.workflow_id)
+            assert workflow_row is not None
+            _ensure_legal(workflow_row.state, phase)
+            await create_phase_occurrence(
+                session,
+                workflow_id=result.workflow_id,
+                phase_run_id=phase_run_id,
+                phase=phase,
+                expected_workflow_version=workflow_row.version,
+                expected_generation=expected_generation,
+                contract_snapshot_id=snapshot.snapshot_id,
+                templates=templates,
+                phase_exit_criteria=phase_exit_criteria,
+            )
+        self._events.publish(
+            result.workflow_id,
+            "phase.created",
+            {"phase": phase.value, "generation": expected_generation},
+        )
+
+    async def _advance(
+        self,
+        result: SliceResult,
+        snapshot: ContractSnapshot,
+        target: NextPhase,
+    ) -> bool:
+        del snapshot
+        async with self._sessions() as session, session.begin():
+            workflow_row = await session.get(WorkflowModel, result.workflow_id)
+            assert workflow_row is not None
+            phase_run = await session.get(PhaseRunModel, workflow_row.active_phase_run_id)
+            assert phase_run is not None
+            _ensure_legal(workflow_row.state, target.phase)
+            advanced = await reduce_and_advance(
+                session,
+                workflow_id=result.workflow_id,
+                expected_workflow_version=workflow_row.version,
+                expected_generation=phase_run.generation,
+                next_phase=target,
+            )
+        if advanced is None:
+            return result.parked or result.failed
+        self._events.publish(result.workflow_id, "phase.created", {"phase": target.phase.value})
+        return False
+
+    async def _reduce_current(self, result: SliceResult) -> None:
+        async with self._sessions() as session, session.begin():
+            workflow_row = await session.get(WorkflowModel, result.workflow_id)
             assert workflow_row is not None
             phase_run = await session.get(PhaseRunModel, workflow_row.active_phase_run_id)
             assert phase_run is not None
             await reduce_and_advance(
                 session,
-                workflow_id=workflow_id,
+                workflow_id=result.workflow_id,
                 expected_workflow_version=workflow_row.version,
                 expected_generation=phase_run.generation,
-                next_phase=NextPhase(
-                    phase_run_id=planning_id,
-                    phase=WorkflowState.PLANNING,
-                    contract_snapshot_id=snapshot.snapshot_id,
-                    templates=_planning_templates(workflow_id, snapshot.snapshot_id),
-                    phase_exit_criteria=("planning_boundary",),
-                ),
-            )
-        async with self._sessions() as session, session.begin():
-            await self._complete_control_phase(session, planning_id)
-            workflow_row = await session.get(WorkflowModel, workflow_id)
-            assert workflow_row is not None
-            phase_run = await session.get(PhaseRunModel, planning_id)
-            assert phase_run is not None
-            await reduce_and_advance(
-                session,
-                workflow_id=workflow_id,
-                expected_workflow_version=workflow_row.version,
-                expected_generation=phase_run.generation,
-                next_phase=target,
+                next_phase=None,
             )
 
-    async def _complete_control_phase(self, session: AsyncSession, phase_run_id: UUID) -> None:
-        templates = (
-            await session.scalars(
-                select(TaskTemplateModel).where(TaskTemplateModel.phase_run_id == phase_run_id)
-            )
-        ).all()
-        phase = await session.get(PhaseRunModel, phase_run_id)
-        assert phase is not None
-        for template_row in templates:
-            spec = self._capabilities.get(template_row.capability_id, 1)
-            payload = spec.input_schema.model_validate(template_row.unresolved_inputs)
-            template = TaskTemplate(
-                template_id=template_row.template_id,
-                phase_run_id=phase_run_id,
-                local_id=template_row.local_id,
-                capability_id=template_row.capability_id,
-                capability_contract_version=1,
-                connector_id=None,
-                unresolved_inputs=template_row.unresolved_inputs,
-                timeout_seconds=template_row.timeout_seconds,
-                max_attempts=template_row.max_attempts,
-            )
-            await persist_materialized_task(
+    async def _complete_from_delivery(self, result: SliceResult) -> None:
+        async with self._sessions() as session, session.begin():
+            workflow_row = await session.get(WorkflowModel, result.workflow_id)
+            assert workflow_row is not None
+            _ensure_legal(workflow_row.state, WorkflowState.COMPLETED)
+            workflow_row.state = WorkflowState.COMPLETED.value
+            workflow_row.finished_at = _naive(datetime.now(UTC))
+            workflow_row.version += 1
+            await append_audit_event(
                 session,
-                template=template,
-                task_id=uuid4(),
-                workflow_id=phase.workflow_id,
-                resolved_inputs=payload,
-                input_schema=spec.input_schema,
-                input_schema_version=1,
-                output_schema_version=1,
-                connector_id=None,
-                connector_version=None,
-                target_environment=TargetEnv.DEV,
-                required_permission=spec.required_permission,
-                risk=spec.risk,
+                workflow_id=result.workflow_id,
+                event_type="WORKFLOW_COMPLETED",
+                payload={"outcome": result.summary.outcome if result.summary else "NO_DELIVERY"},
             )
-        await session.execute(
-            update(MaterializedTaskModel)
-            .where(MaterializedTaskModel.phase_run_id == phase_run_id)
-            .values(
-                status=TaskState.SUCCEEDED.value,
-                outputs={"accepted": True},
-                output_digest="a" * 64,
-            )
-        )
 
     async def _run_phase(
         self, result: SliceResult, *, phase_run_id: UUID, snapshot: ContractSnapshot
@@ -438,6 +568,8 @@ class OfflineSliceService:
                     owner=OWNER,
                     now=_naive(datetime.now(UTC)),
                     lease_duration=timedelta(seconds=30),
+                    workflow_id=result.workflow_id,
+                    phase_run_id=phase_run_id,
                 )
             if claim is None:
                 async with self._sessions() as session:
@@ -446,6 +578,14 @@ class OfflineSliceService:
                             select(MaterializedTaskModel).where(
                                 MaterializedTaskModel.phase_run_id == phase_run_id,
                                 MaterializedTaskModel.status == TaskState.PARKED.value,
+                            )
+                        )
+                    ).all()
+                    failed_rows = (
+                        await session.scalars(
+                            select(MaterializedTaskModel).where(
+                                MaterializedTaskModel.phase_run_id == phase_run_id,
+                                MaterializedTaskModel.status == TaskState.FAILED.value,
                             )
                         )
                     ).all()
@@ -467,14 +607,22 @@ class OfflineSliceService:
                     result.parked = True
                     result.park_reason = parked_rows[0].disposition_reason
                     return True
+                if failed_rows:
+                    result.failed = True
+                    result.fail_reason = failed_rows[0].disposition_reason
+                    return True
                 if remaining:
                     continue
                 return False
-            if await self._execute_claim(result, claim, snapshot):
+            if await self._execute_claim(result, claim, snapshot, phase_run_id):
                 return True
 
     async def _execute_claim(
-        self, result: SliceResult, claim: TaskClaim, snapshot: ContractSnapshot
+        self,
+        result: SliceResult,
+        claim: TaskClaim,
+        snapshot: ContractSnapshot,
+        phase_run_id: UUID,
     ) -> bool:
         async with self._sessions() as session, session.begin():
             if any(
@@ -492,6 +640,8 @@ class OfflineSliceService:
                     return True
             task = await session.get(MaterializedTaskModel, claim.task_id)
             assert task is not None
+            if task.workflow_id != result.workflow_id or task.phase_run_id != phase_run_id:
+                raise RuntimeError("claim escaped the current workflow or phase")
             await mark_dispatched(session, claim)
             health = await self._ro.health() if task.connector_id == "snowflake_ro" else None
             if task.connector_id == "snowflake_dev":
@@ -507,8 +657,11 @@ class OfflineSliceService:
                 "attempt_number": claim.attempt_number,
                 "claim_epoch": claim.claim_epoch,
             }
+            sql_classification = (
+                result.classification if task.capability_id in _SQL_POLICY_CAPABILITIES else None
+            )
             try:
-                output, _decision = await self._tools.invoke(
+                output, decision = await self._tools.invoke(
                     session,
                     capability_id=task.capability_id,
                     payload=task.resolved_inputs,
@@ -517,23 +670,34 @@ class OfflineSliceService:
                     authorization=result.grants,
                     connector_id=task.connector_id,
                     connector_health=health,
-                    sql_classification=result.classification,
+                    sql_classification=sql_classification,
                 )
             except PolicyParked as exc:
                 reason = exc.decision.reasons[0].value if exc.decision.reasons else "PARKED"
                 await park_task(
-                    session, task_id=task.task_id, reason=reason, now=_naive(datetime.now(UTC))
+                    session,
+                    task_id=task.task_id,
+                    reason=reason,
+                    now=_naive(datetime.now(UTC)),
+                    routing=exc.decision.routing,
+                    reasons=tuple(item.value for item in exc.decision.reasons),
                 )
                 result.parked = True
                 result.park_reason = reason
                 return True
             except PolicyDenied as exc:
                 reason = exc.decision.reasons[0].value if exc.decision.reasons else "DENIED"
-                await park_task(
-                    session, task_id=task.task_id, reason=reason, now=_naive(datetime.now(UTC))
+                await fail_closed_task(
+                    session,
+                    task_id=task.task_id,
+                    reason=reason,
+                    now=_naive(datetime.now(UTC)),
+                    routing=exc.decision.routing,
+                    reasons=tuple(item.value for item in exc.decision.reasons),
                 )
-                task.status = TaskState.FAILED.value
-                raise
+                result.failed = True
+                result.fail_reason = reason
+                return True
             dumped = output.model_dump(mode="json")
             ok = await finalize_success(
                 session, claim=claim, output=dumped, now=_naive(datetime.now(UTC))
@@ -541,6 +705,31 @@ class OfflineSliceService:
             if not ok:
                 raise RuntimeError("ambiguous success cannot pass without validated output")
             self._absorb(result, task.capability_id, output, task)
+            artifact_type = {
+                "plan_phase": "Plan",
+                "validate_result": "ValidationReport",
+                "emit_workflow_summary": "WorkflowSummary",
+            }.get(task.capability_id)
+            if artifact_type is not None:
+                await ArtifactRepository(session).add(
+                    workflow_id=result.workflow_id,
+                    task_id=task.task_id,
+                    artifact_type=artifact_type,
+                    version=1,
+                    schema_version=1,
+                    sha256=hashlib.sha256(canonical_json_bytes(dumped)).hexdigest(),
+                    provenance=ArtifactProvenance(
+                        execution_mode=ExecutionMode.MOCK,
+                        connector_id=None,
+                        connector_version=None,
+                        capability_id=task.capability_id,
+                        capability_version=1,
+                        operation_idempotency_key=task.operation_idempotency_key,
+                        resolved_input_digest=task.resolved_input_digest,
+                    ),
+                    body=dumped,
+                )
+            del decision
         return False
 
     async def _materialize_ready(
@@ -611,6 +800,14 @@ class OfflineSliceService:
     def _resolved_payload(
         self, result: SliceResult, capability_id: str, raw: dict[str, Any]
     ) -> dict[str, Any]:
+        if capability_id == "plan_phase":
+            payload = dict(raw)
+            if result.catalogue is not None and payload.get("occurrence") == "DESCRIPTION":
+                payload["catalogue_snapshot_id"] = str(result.catalogue.snapshot_id)
+                payload["catalogue_assets"] = [
+                    item.model_dump(mode="json") for item in result.catalogue.asset_refs()
+                ]
+            return payload
         if capability_id == "discover_assets":
             if raw.get("scope"):
                 return raw
@@ -642,12 +839,34 @@ class OfflineSliceService:
             return ValidateQueryInput(sql=result.generated_sql.sql, mode="EXPLAIN").model_dump(
                 mode="json"
             )
+        if capability_id == "evaluate_execution_policy":
+            assert result.generated_sql is not None
+            return EvaluateExecutionPolicyInput(
+                target_capability_id="execute_query",
+                connector_id="snowflake_ro",
+                sql=result.generated_sql.sql,
+            ).model_dump(mode="json")
         if capability_id == "execute_query":
             assert result.generated_sql is not None
             return ExecuteQueryInput(
                 sql=result.generated_sql.sql,
                 budget=Budget(max_rows=100, max_bytes=65536, max_seconds=30),
                 result_mode="ROWS",
+            ).model_dump(mode="json")
+        if capability_id == "validate_result":
+            assert result.execution is not None
+            assert result.generated_sql is not None
+            return ValidateResultInput(
+                row_count=result.execution.row_count,
+                rows=result.execution.rows,
+                expected_columns=result.generated_sql.expected_columns,
+            ).model_dump(mode="json")
+        if capability_id == "emit_workflow_summary":
+            return EmitWorkflowSummaryInput(
+                outcome="NO_DELIVERY",
+                validation_passed=bool(result.validation and result.validation.passed),
+                row_count=result.execution.row_count if result.execution else 0,
+                sql_dialect=result.generated_sql.sql.dialect if result.generated_sql else None,
             ).model_dump(mode="json")
         return raw
 
@@ -658,7 +877,18 @@ class OfflineSliceService:
         output: BaseModel,
         task: MaterializedTaskModel,
     ) -> None:
-        if capability_id == "discover_assets":
+        if capability_id == "plan_phase":
+            plan = Plan.model_validate(output)
+            if plan.phase == WorkflowState.DISCOVERY:
+                if "asset_selection" in plan.phase_exit_criteria:
+                    result.description_plan = plan
+                else:
+                    result.enumeration_plan = plan
+            elif plan.phase == WorkflowState.GENERATION:
+                result.generation_plan = plan
+            elif plan.phase == WorkflowState.DELIVERY:
+                result.extra["delivery_plan"] = plan
+        elif capability_id == "discover_assets":
             dumped = DiscoverAssetsOutput.model_validate(output)
             result.catalogue = MetadataCatalog.from_assets(dumped.snapshot_id, dumped.assets)
             self._events.publish(
@@ -671,7 +901,17 @@ class OfflineSliceService:
                 if not result.catalogue.contains(item.asset):
                     raise RuntimeError("selection is not a subset of the immutable catalogue")
         elif capability_id == "generate_sql_query":
-            result.generated_sql = GenerateSqlQueryOutput.model_validate(output)
+            generated = GenerateSqlQueryOutput.model_validate(output)
+            if self.force_scope_violation:
+                generated = generated.model_copy(
+                    update={
+                        "sql": SqlText(
+                            dialect="snowflake",
+                            text="SELECT 1 FROM OTHER.SECRET.TABLE",
+                        )
+                    }
+                )
+            result.generated_sql = generated
         elif capability_id == "classify_sql":
             result.classification = ClassifySqlOutput.model_validate(output)
         elif capability_id == "execute_query":
@@ -682,6 +922,10 @@ class OfflineSliceService:
                 operation_idempotency_key=task.operation_idempotency_key,
                 resolved_input_digest=task.resolved_input_digest,
             )
+        elif capability_id == "validate_result":
+            result.validation = ValidationReport.model_validate(output)
+        elif capability_id == "emit_workflow_summary":
+            result.summary = WorkflowSummary.model_validate(output)
 
     async def _store_artifact(
         self, workflow_id: UUID, artifact_type: str, body: dict[str, Any], *, capability_id: str
@@ -761,14 +1005,30 @@ def _persistable_health(snapshot: ConnectorHealthSnapshot) -> ConnectorHealthSna
     )
 
 
-def _planning_templates(workflow_id: UUID, snapshot_id: UUID) -> tuple[TemplateSpec, ...]:
+def _ensure_legal(current: WorkflowState | str, target: WorkflowState) -> None:
+    source = current if isinstance(current, WorkflowState) else WorkflowState(current)
+    if (source, target) not in LEGAL_TRANSITIONS:
+        raise RuntimeError(f"illegal transition {source.value} -> {target.value}")
+
+
+def _planning_templates(
+    workflow_id: UUID,
+    snapshot_id: UUID,
+    *,
+    target_phase: WorkflowState,
+    occurrence: Literal["ENUMERATION", "DESCRIPTION", "SAFE_SQL", "DELIVERY"],
+    catalogue_snapshot_id: str | None = None,
+    catalogue_assets: tuple[AssetRef, ...] = (),
+) -> tuple[TemplateSpec, ...]:
     payload = PlanPhaseInput(
         workflow_context_ref=str(workflow_id),
-        phase=WorkflowState.PLANNING,
+        phase=target_phase,
         contract_snapshot_ref=str(snapshot_id),
         capability_catalogue=(),
         constraints=PlanConstraints(max_tasks=50),
-        occurrence="DESCRIPTION",
+        occurrence=occurrence,
+        catalogue_snapshot_id=catalogue_snapshot_id,
+        catalogue_assets=catalogue_assets,
     ).model_dump(mode="json")
     return (
         TemplateSpec(
@@ -785,8 +1045,106 @@ def _planning_templates(workflow_id: UUID, snapshot_id: UUID) -> tuple[TemplateS
     )
 
 
+def _policy_templates() -> tuple[TemplateSpec, ...]:
+    return (
+        TemplateSpec(
+            local_id="pc.01",
+            capability_id="evaluate_execution_policy",
+            capability_contract_version=1,
+            connector_id="snowflake_ro",
+            depends_on=(),
+            required_dependencies=(),
+            unresolved_inputs={},
+            timeout_seconds=30,
+            max_attempts=2,
+        ),
+    )
+
+
+def _execution_templates() -> tuple[TemplateSpec, ...]:
+    return (
+        TemplateSpec(
+            local_id="e1",
+            capability_id="execute_query",
+            capability_contract_version=1,
+            connector_id="snowflake_ro",
+            depends_on=(),
+            required_dependencies=(),
+            unresolved_inputs={},
+            timeout_seconds=30,
+            max_attempts=2,
+        ),
+    )
+
+
+def _validation_templates() -> tuple[TemplateSpec, ...]:
+    return (
+        TemplateSpec(
+            local_id="val.01",
+            capability_id="validate_result",
+            capability_contract_version=1,
+            connector_id=None,
+            depends_on=(),
+            required_dependencies=(),
+            unresolved_inputs={},
+            timeout_seconds=30,
+            max_attempts=1,
+        ),
+    )
+
+
+def _delivery_templates() -> tuple[TemplateSpec, ...]:
+    return (
+        TemplateSpec(
+            local_id="del.01",
+            capability_id="emit_workflow_summary",
+            capability_contract_version=1,
+            connector_id=None,
+            depends_on=(),
+            required_dependencies=(),
+            unresolved_inputs={"outcome": "NO_DELIVERY"},
+            timeout_seconds=30,
+            max_attempts=1,
+        ),
+    )
+
+
 def classify_sql_handler(payload: BaseModel, _context: dict[str, Any]) -> ClassifySqlOutput:
     assert isinstance(payload, ClassifySqlInput)
     return ClassifySqlOutput.model_validate(
         classify_sql_pure(payload.sql, connector_id="snowflake_ro").model_dump()
     )
+
+
+def evaluate_execution_policy_handler(
+    payload: BaseModel, _context: dict[str, Any]
+) -> EvaluateExecutionPolicyOutput:
+    assert isinstance(payload, EvaluateExecutionPolicyInput)
+    return EvaluateExecutionPolicyOutput(decision="ALLOW", routing="EXECUTE", reasons=())
+
+
+def validate_result_handler(payload: BaseModel, _context: dict[str, Any]) -> ValidationReport:
+    assert isinstance(payload, ValidateResultInput)
+    return validate_query_result(
+        ExecuteQueryOutput(
+            rows=payload.rows,
+            row_count=payload.row_count,
+            duration_ms=1,
+        ),
+        expected_columns=payload.expected_columns,
+    )
+
+
+def emit_workflow_summary_handler(payload: BaseModel, context: dict[str, Any]) -> WorkflowSummary:
+    assert isinstance(payload, EmitWorkflowSummaryInput)
+    return WorkflowSummary(
+        outcome=payload.outcome,
+        workflow_id=_as_uuid(context["workflow_id"]),
+        validation_passed=payload.validation_passed,
+        row_count=payload.row_count,
+        sql_dialect=payload.sql_dialect,
+    )
+
+
+def _as_uuid(value: UUID | str) -> UUID:
+    return value if isinstance(value, UUID) else UUID(str(value))

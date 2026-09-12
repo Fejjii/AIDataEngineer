@@ -56,20 +56,27 @@ async def claim_task(
     owner: str,
     now: datetime,
     lease_duration: timedelta,
+    workflow_id: UUID | None = None,
+    phase_run_id: UUID | None = None,
 ) -> TaskClaim | None:
     """Claim one runnable task with SKIP LOCKED and create exactly one attempt."""
+    filters = [
+        MaterializedTaskModel.status.in_([TaskState.READY.value, TaskState.RETRY_WAIT.value]),
+        or_(
+            MaterializedTaskModel.retry_not_before.is_(None),
+            MaterializedTaskModel.retry_not_before <= now,
+        ),
+        WorkflowModel.state.notin_(_CLAIM_FORBIDDEN_WORKFLOW_STATES),
+        MaterializedTaskModel.attempt_count < MaterializedTaskModel.max_attempts,
+    ]
+    if workflow_id is not None:
+        filters.append(MaterializedTaskModel.workflow_id == workflow_id)
+    if phase_run_id is not None:
+        filters.append(MaterializedTaskModel.phase_run_id == phase_run_id)
     task = await session.scalar(
         select(MaterializedTaskModel)
         .join(WorkflowModel, WorkflowModel.workflow_id == MaterializedTaskModel.workflow_id)
-        .where(
-            MaterializedTaskModel.status.in_([TaskState.READY.value, TaskState.RETRY_WAIT.value]),
-            or_(
-                MaterializedTaskModel.retry_not_before.is_(None),
-                MaterializedTaskModel.retry_not_before <= now,
-            ),
-            WorkflowModel.state.notin_(_CLAIM_FORBIDDEN_WORKFLOW_STATES),
-            MaterializedTaskModel.attempt_count < MaterializedTaskModel.max_attempts,
-        )
+        .where(*filters)
         .order_by(MaterializedTaskModel.created_at, MaterializedTaskModel.task_id)
         .with_for_update(skip_locked=True, of=MaterializedTaskModel)
         .limit(1)

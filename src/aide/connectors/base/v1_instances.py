@@ -21,6 +21,7 @@ _READ_CAPABILITIES = (
     "infer_relationships",
     "validate_query",
     "execute_query",
+    "evaluate_execution_policy",
     "get_execution_metrics",
     "get_cost_metrics",
 )

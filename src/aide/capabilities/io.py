@@ -230,7 +230,8 @@ class PlanPhaseInput(FrozenModel):
     constraints: PlanConstraints
     prior_summary: str | None = None
     catalogue_snapshot_id: str | None = None
-    occurrence: Literal["ENUMERATION", "DESCRIPTION", "SAFE_SQL"] | None = None
+    occurrence: Literal["ENUMERATION", "DESCRIPTION", "SAFE_SQL", "DELIVERY"] | None = None
+    catalogue_assets: tuple[AssetRef, ...] = ()
 
 
 class PlannedTask(FrozenModel):
@@ -305,3 +306,36 @@ class ValidationReport(FrozenModel):
     checks: tuple[QualityCheckResult, ...]
     row_count: int
     expected_columns: tuple[str, ...]
+
+
+class EvaluateExecutionPolicyInput(FrozenModel):
+    target_capability_id: str
+    connector_id: str
+    sql: SqlText
+
+
+class EvaluateExecutionPolicyOutput(FrozenModel):
+    decision: str
+    routing: str
+    reasons: tuple[str, ...] = ()
+
+
+class ValidateResultInput(FrozenModel):
+    row_count: int
+    rows: tuple[dict[str, Any], ...] | None
+    expected_columns: tuple[ExpectedColumn, ...]
+
+
+class WorkflowSummary(FrozenModel):
+    outcome: Literal["DELIVERED_STAGING", "DELIVERED_PR_ONLY", "NO_DELIVERY"]
+    workflow_id: UUID
+    validation_passed: bool
+    row_count: int
+    sql_dialect: str | None = None
+
+
+class EmitWorkflowSummaryInput(FrozenModel):
+    outcome: Literal["DELIVERED_STAGING", "DELIVERED_PR_ONLY", "NO_DELIVERY"] = "NO_DELIVERY"
+    validation_passed: bool
+    row_count: int
+    sql_dialect: str | None = None

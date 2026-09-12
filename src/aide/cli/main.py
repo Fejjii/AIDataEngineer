@@ -75,6 +75,7 @@ async def _run(url: str, requirement: str) -> dict[str, Any]:
         "sql": result.generated_sql.sql.text if result.generated_sql else None,
         "query_tag": result.query_tag,
         "validation_passed": result.validation.passed if result.validation else False,
+        "summary_outcome": result.summary.outcome if result.summary else None,
         "row_count": result.execution.row_count if result.execution else 0,
         "provenance_mode": result.provenance.execution_mode.value if result.provenance else None,
     }

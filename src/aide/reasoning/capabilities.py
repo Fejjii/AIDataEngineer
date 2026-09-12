@@ -41,12 +41,13 @@ class ReasoningCapabilities:
         *,
         catalogue_assets: tuple[AssetRef, ...] = (),
     ) -> Plan:
+        assets = catalogue_assets or payload.catalogue_assets
         extra: dict[str, Any] = {
             "occurrence": payload.occurrence or "ENUMERATION",
             "catalogue_snapshot_id": payload.catalogue_snapshot_id,
         }
-        if catalogue_assets:
-            extra["catalogue_assets"] = [item.model_dump(mode="json") for item in catalogue_assets]
+        if assets:
+            extra["catalogue_assets"] = [item.model_dump(mode="json") for item in assets]
         result = self._gateway.complete(
             "plan_phase",
             Plan,

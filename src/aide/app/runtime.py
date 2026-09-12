@@ -10,17 +10,26 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from aide.app.events import EventBus
-from aide.app.slice import OfflineSliceService, classify_sql_handler
+from aide.app.slice import (
+    OfflineSliceService,
+    classify_sql_handler,
+    emit_workflow_summary_handler,
+    evaluate_execution_policy_handler,
+    validate_result_handler,
+)
 from aide.capabilities.io import (
     CreateDatasetInput,
     DescribeAssetInput,
     DiscoverAssetsInput,
+    EmitWorkflowSummaryInput,
+    EvaluateExecutionPolicyInput,
     ExecuteQueryInput,
     GenerateSqlQueryInput,
     InterpretRequirementInput,
     PlanPhaseInput,
     SelectRelevantAssetsInput,
     ValidateQueryInput,
+    ValidateResultInput,
 )
 from aide.capabilities.v1_kernel import kernel_registry
 from aide.connectors.base.context import CallContext, RedactionPolicy
@@ -105,6 +114,18 @@ def build_offline_stack(
         assert isinstance(payload, GenerateSqlQueryInput)
         return reasoner.generate_sql_query(payload)
 
+    async def evaluate_policy(payload: BaseModel, context: dict[str, Any]) -> BaseModel:
+        assert isinstance(payload, EvaluateExecutionPolicyInput)
+        return evaluate_execution_policy_handler(payload, context)
+
+    async def validate_result(payload: BaseModel, context: dict[str, Any]) -> BaseModel:
+        assert isinstance(payload, ValidateResultInput)
+        return validate_result_handler(payload, context)
+
+    async def emit_summary(payload: BaseModel, context: dict[str, Any]) -> BaseModel:
+        assert isinstance(payload, EmitWorkflowSummaryInput)
+        return emit_workflow_summary_handler(payload, context)
+
     tools.register("discover_assets", discover)
     tools.register("describe_asset", describe)
     tools.register("validate_query", validate)
@@ -115,6 +136,9 @@ def build_offline_stack(
     tools.register("plan_phase", plan)
     tools.register("select_relevant_assets", select)
     tools.register("generate_sql_query", generate)
+    tools.register("evaluate_execution_policy", evaluate_policy)
+    tools.register("validate_result", validate_result)
+    tools.register("emit_workflow_summary", emit_summary)
     service = OfflineSliceService(
         session_factory,
         capabilities=capabilities,

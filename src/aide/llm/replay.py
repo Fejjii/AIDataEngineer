@@ -189,6 +189,22 @@ def _plan_payload(occurrence: str, extra: Mapping[str, Any]) -> dict[str, Any]:
             ],
             "assumptions": ["explicit sorted fan-out after planning boundary"],
         }
+    if occurrence == "DELIVERY":
+        return {
+            "phase": "DELIVERY",
+            "tasks": [
+                {
+                    "local_id": "del.01",
+                    "capability_id": "emit_workflow_summary",
+                    "connector_id": None,
+                    "depends_on": [],
+                    "inputs": {"outcome": "NO_DELIVERY"},
+                    "rationale": "Offline slice has no Git or staging delivery.",
+                }
+            ],
+            "phase_exit_criteria": ["workflow_summary"],
+            "assumptions": ["NO_DELIVERY terminal outcome"],
+        }
     return {
         "phase": "GENERATION",
         "tasks": [
@@ -216,18 +232,7 @@ def _plan_payload(occurrence: str, extra: Mapping[str, Any]) -> dict[str, Any]:
                 "inputs": {"mode": "EXPLAIN"},
                 "rationale": "EXPLAIN the classified statement.",
             },
-            {
-                "local_id": "e1",
-                "capability_id": "execute_query",
-                "connector_id": "snowflake_ro",
-                "depends_on": ["g3"],
-                "inputs": {
-                    "budget": {"max_rows": 100, "max_bytes": 65536, "max_seconds": 30},
-                    "result_mode": "ROWS",
-                },
-                "rationale": "Execute the validated read-only statement.",
-            },
         ],
-        "phase_exit_criteria": ["validated_query_result"],
+        "phase_exit_criteria": ["generation_validation"],
         "assumptions": ["READ binds snowflake_ro"],
     }
