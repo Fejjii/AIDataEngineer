@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from tests.connectors.contract.conftest import make_context
@@ -15,6 +15,41 @@ from aide.connectors.dbt.redaction import sanitize_text
 from aide.connectors.dbt.runner import build_controlled_env, run_isolated
 from aide.connectors.dbt.specs import FAKE_DBT_DEV
 from aide.connectors.dbt.workspace import project_dir
+
+
+def test_two_workflows_receive_different_snowflake_schemas(tmp_path: Path) -> None:
+    from aide.connectors.dbt.config import render_profiles_yaml, snowflake_dbt_settings
+    from aide.connectors.dbt.namespace import snowflake_workflow_schema
+    from aide.connectors.dbt.real import RealDbtConnector
+    from aide.connectors.dbt.specs import DBT_DEV
+    from aide.connectors.dbt.workspace import profiles_dir
+
+    workflow_a = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    workflow_b = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+    schema_a = snowflake_workflow_schema(workflow_a)
+    schema_b = snowflake_workflow_schema(workflow_b)
+    assert schema_a == "WFAAAAAA_DBT"
+    assert schema_b == "WFBBBBBB_DBT"
+    assert schema_a != schema_b
+
+    settings = snowflake_dbt_settings(tmp_path)
+    yaml_a = render_profiles_yaml(settings, workflow_id=workflow_a)
+    yaml_b = render_profiles_yaml(settings, workflow_id=workflow_b)
+    assert "database: AIDE_DEV" in yaml_a
+    assert "database: AIDE_DEV" in yaml_b
+    assert f"schema: {schema_a}" in yaml_a
+    assert f"schema: {schema_b}" in yaml_b
+    assert f"schema: {schema_b}" not in yaml_a
+    assert "schema: AIDE_DEV" not in yaml_a
+
+    connector = RealDbtConnector(DBT_DEV, settings)
+    connector._ensure_workspace(workflow_a)
+    connector._ensure_workspace(workflow_b)
+    on_disk_a = (profiles_dir(tmp_path, workflow_a) / "profiles.yml").read_text(encoding="utf-8")
+    on_disk_b = (profiles_dir(tmp_path, workflow_b) / "profiles.yml").read_text(encoding="utf-8")
+    assert f"schema: {schema_a}" in on_disk_a
+    assert f"schema: {schema_b}" in on_disk_b
+    assert on_disk_a != on_disk_b
 
 
 def test_workspace_path_is_workflow_isolated(tmp_path: Path) -> None:

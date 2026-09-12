@@ -25,6 +25,7 @@ async def test_snowflake_target_without_credentials_is_unavailable(tmp_path: Pat
     assert "SECRET_UNRESOLVED:SNOWFLAKE_USER_DEV" in joined
     assert "SECRET_UNRESOLVED:SNOWFLAKE_PRIVATE_KEY_DEV" in joined
     assert "SECRET_UNRESOLVED:SNOWFLAKE_ACCOUNT" in joined
+    assert "DBT_ADAPTER_UNAVAILABLE" not in joined
     for name in settings.required_secret_names():
         assert name in missing_secret_names(settings)
     with pytest.raises(DbtMappedError) as exc:

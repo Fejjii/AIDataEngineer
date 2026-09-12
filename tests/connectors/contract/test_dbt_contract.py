@@ -33,6 +33,8 @@ def test_dbt_advertisements_and_permissions() -> None:
     for capability_id in DBT_REQUIRED_PERMISSIONS:
         assert DBT_DEV.advertises(capability_id, 1)
         assert FAKE_DBT_DEV.advertises(capability_id, 1)
+    assert not DBT_DEV.advertises("deploy_staging", 1)
+    assert not FAKE_DBT_DEV.advertises("deploy_staging", 1)
     assert PermissionLevel.READ in DBT_DEV.allowed_permissions
     assert PermissionLevel.DEVELOPMENT_EXECUTE in DBT_DEV.allowed_permissions
     assert PermissionLevel.DEVELOPMENT_WRITE in DBT_DEV.allowed_permissions
@@ -40,11 +42,22 @@ def test_dbt_advertisements_and_permissions() -> None:
     assert DBT_DEV.kind.value == "transformation"
 
 
-def test_dbt_core_and_duckdb_are_importable() -> None:
+def test_dbt_staging_is_not_advertised() -> None:
+    import aide.connectors.dbt as dbt_pkg
+    import aide.connectors.dbt.specs as dbt_specs
+
+    assert not hasattr(dbt_specs, "DBT_STAGING")
+    assert "DBT_STAGING" not in getattr(dbt_pkg, "__all__", ())
+    assert not DBT_DEV.advertises("deploy_staging", 1)
+
+
+def test_dbt_core_and_adapters_are_importable() -> None:
     from importlib.metadata import version
 
     assert version("dbt-core").startswith("1.11.")
     assert version("dbt-duckdb").startswith("1.11.")
+    assert version("dbt-snowflake").startswith("1.11.")
+    assert version("snowflake-connector-python").startswith("4.")
 
 
 def test_fake_and_real_handler_parity() -> None:

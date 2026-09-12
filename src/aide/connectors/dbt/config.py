@@ -5,9 +5,11 @@ from __future__ import annotations
 import os
 from enum import Enum
 from pathlib import Path
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from aide.connectors.dbt.namespace import DEV_DATABASE, SCHEMA_SUFFIX, snowflake_workflow_schema
 from aide.secrets.refs import SecretRef, SecretScope
 
 SNOWFLAKE_DBT_SECRET_NAMES: tuple[str, ...] = (
@@ -47,8 +49,8 @@ class DbtSettings(BaseModel):
     snowflake_user: SecretRef | None = None
     snowflake_private_key: SecretRef | None = None
     snowflake_warehouse: SecretRef | None = None
-    snowflake_database: str = "AIDE_DEV"
-    snowflake_schema: str = "AIDE_DEV"
+    snowflake_database: str = DEV_DATABASE
+    snowflake_schema_suffix: str = SCHEMA_SUFFIX
     snowflake_role: str = "AIDE_DEV_RW"
 
     def required_secret_names(self) -> tuple[str, ...]:
@@ -85,7 +87,7 @@ def snowflake_dbt_settings(work_root: Path, *, project_template: Path | None = N
     )
 
 
-def render_profiles_yaml(settings: DbtSettings) -> str:
+def render_profiles_yaml(settings: DbtSettings, *, workflow_id: UUID) -> str:
     """Generate profiles.yml. Secrets are referenced by env var name only."""
     if settings.adapter is DbtAdapter.DUCKDB:
         return (
@@ -95,13 +97,14 @@ def render_profiles_yaml(settings: DbtSettings) -> str:
             f"    {settings.target_name}:\n"
             f"      type: duckdb\n"
             f"      path: \"{{{{ env_var('AIDE_DBT_DUCKDB_PATH') }}}}\"\n"
-            f"      schema: AIDE_DEV\n"
+            f"      schema: {DEV_DATABASE}\n"
             f"      threads: {settings.threads}\n"
         )
     account = (settings.snowflake_account or _ref("SNOWFLAKE_ACCOUNT")).name
     user = (settings.snowflake_user or _ref("SNOWFLAKE_USER_DEV")).name
     private_key = (settings.snowflake_private_key or _ref("SNOWFLAKE_PRIVATE_KEY_DEV")).name
     warehouse = (settings.snowflake_warehouse or _ref("SNOWFLAKE_WAREHOUSE_DEV")).name
+    schema = snowflake_workflow_schema(workflow_id, suffix=settings.snowflake_schema_suffix)
     return (
         f"{settings.profile_name}:\n"
         f"  target: {settings.target_name}\n"
@@ -113,7 +116,7 @@ def render_profiles_yaml(settings: DbtSettings) -> str:
         f"      private_key: \"{{{{ env_var('{private_key}') }}}}\"\n"
         f"      warehouse: \"{{{{ env_var('{warehouse}') }}}}\"\n"
         f"      database: {settings.snowflake_database}\n"
-        f"      schema: {settings.snowflake_schema}\n"
+        f"      schema: {schema}\n"
         f"      role: {settings.snowflake_role}\n"
         f"      threads: {settings.threads}\n"
         f"      client_session_keep_alive: False\n"

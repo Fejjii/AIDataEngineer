@@ -65,6 +65,7 @@ from aide.connectors.dbt.journal import (
     find_latest_journal_for_operation,
     utc_now_iso,
 )
+from aide.connectors.dbt.namespace import snowflake_workflow_schema
 from aide.connectors.dbt.reconcile import reconcile_create_transformation, reconcile_invocation
 from aide.connectors.dbt.runner import (
     IsolatedResult,
@@ -470,7 +471,7 @@ class RealDbtConnector:
         profiles = profiles_dir(self.settings.work_root, workflow_id)
         profiles.mkdir(parents=True, exist_ok=True)
         (profiles / "profiles.yml").write_text(
-            render_profiles_yaml(self.settings), encoding="utf-8"
+            render_profiles_yaml(self.settings, workflow_id=workflow_id), encoding="utf-8"
         )
         duck = duckdb_workspace_path(self.settings.work_root, workflow_id)
         if self.settings.adapter is DbtAdapter.DUCKDB and not duck.exists():
@@ -554,6 +555,10 @@ class RealDbtConnector:
                     "target": self.settings.target_name,
                     "threads": self.settings.threads,
                     "profile": self.settings.profile_name,
+                    "snowflake_database": self.settings.snowflake_database,
+                    "snowflake_schema": snowflake_workflow_schema(context.workflow_id)
+                    if self.settings.adapter is DbtAdapter.SNOWFLAKE
+                    else None,
                 },
                 dispatch_status=status,
                 adapter_response=adapter_response,

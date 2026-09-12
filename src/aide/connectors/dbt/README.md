@@ -16,16 +16,35 @@ store env var **names**, never secret values.
 | Instance | Identity | Permissions | Notes |
 |---|---|---|---|
 | `dbt_dev` | `DEVELOPMENT` | `READ`, `DEVELOPMENT_EXECUTE`, `DEVELOPMENT_WRITE` | compile/run/test, `create_transformation`, `get_lineage` |
-| `dbt_staging` | `STAGING_DEPLOY` | `STAGING_DEPLOY` | advertised only; deploy is not implemented in DE008A |
+
+`dbt_staging` / `deploy_staging` is **not advertised**. DE017 owns that handler.
+Connector advertisements must match real handlers.
+
+Connector-local transformation I/O in this package is DE008A scaffolding.
+Canonical Tool Registry wiring is a DE008B integration step and is not yet
+product-integrated.
+
+## Snowflake target isolation
+
+Database stays `AIDE_DEV`. The schema is unique per workflow:
+
+```text
+AIDE_DEV.WF<first-six-workflow-uuid-hex>_DBT
+```
+
+Example: workflow `aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa` → `AIDE_DEV.WFAAAAAA_DBT`.
+
+The dbt package computes this locally and does not import the Snowflake vendor
+connector for profile rendering.
 
 ## Offline Cloud target
 
 DE008A **adopted** real dbt Core `1.11.15` + `dbt-duckdb` 1.11.0 against Vantara
-tiny DuckDB fixtures. No Snowflake credentials are used.
+tiny DuckDB fixtures. No Snowflake credentials are used in Cloud.
 
-Live Snowflake `dbt` validation is out of this Cloud slice
-(`READY_FOR_LIVE_DBT_VALIDATION`). `dbt-snowflake` 1.10+ requires
-`snowflake-connector-python>=4`, which conflicts with the DE006 pin `<4`.
+`dbt-snowflake` 1.11.x is pinned with `snowflake-connector-python` 4.x so the
+adapter is installed. Live Snowflake `dbt` execution still requires LOCAL
+credentials and is not performed in Cloud.
 
 ## Required environment variable names (Snowflake target only)
 

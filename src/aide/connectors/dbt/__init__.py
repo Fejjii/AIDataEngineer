@@ -15,13 +15,13 @@ from aide.connectors.dbt.errors import (
     map_error,
 )
 from aide.connectors.dbt.fake import FakeDbtConnector
+from aide.connectors.dbt.namespace import snowflake_workflow_schema, workflow_short_id
 from aide.connectors.dbt.real import RealDbtConnector, build_real_duckdb
-from aide.connectors.dbt.specs import DBT_DEV, DBT_REQUIRED_PERMISSIONS, DBT_STAGING, FAKE_DBT_DEV
+from aide.connectors.dbt.specs import DBT_DEV, DBT_REQUIRED_PERMISSIONS, FAKE_DBT_DEV
 
 __all__ = [
     "DBT_DEV",
     "DBT_REQUIRED_PERMISSIONS",
-    "DBT_STAGING",
     "FAKE_DBT_DEV",
     "DbtAdapter",
     "DbtMappedError",
@@ -36,4 +36,6 @@ __all__ = [
     "map_error",
     "missing_secret_names",
     "snowflake_dbt_settings",
+    "snowflake_workflow_schema",
+    "workflow_short_id",
 ]

@@ -62,16 +62,5 @@ DBT_DEV = ConnectorSpec(
 
 FAKE_DBT_DEV = DBT_DEV.model_copy(update={"is_fake": True})
 
-DBT_STAGING = ConnectorSpec(
-    connector_id="dbt_staging",
-    kind=ConnectorKind.TRANSFORMATION,
-    vendor="dbt",
-    version="1.0.0",
-    target_environment=TargetEnv.STAGING,
-    identity_class=IdentityClass.STAGING_DEPLOY,
-    implementations=frozenset({_impl("deploy_staging")}),
-    allowed_permissions=frozenset({PermissionLevel.STAGING_DEPLOY}),
-    allow_list=ObjectAllowList(databases=frozenset({"AIDE_STAGING"})),
-    dialect="snowflake",
-    is_fake=False,
-)
+# ``deploy_staging`` / ``dbt_staging`` is owned by DE017. Do not advertise it
+# until a real handler exists. Connector advertisements must match handlers.

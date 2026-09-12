@@ -2,7 +2,8 @@
 
 Kernel capability registration lives in `aide.capabilities` and is owned by
 other tasks. DE008A implements the connector against these documented contracts
-without modifying the capability registry.
+without modifying the capability registry. Canonical Tool Registry wiring is a
+DE008B integration step and is not yet product-integrated.
 """
 
 from __future__ import annotations
