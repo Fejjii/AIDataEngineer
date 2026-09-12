@@ -36,7 +36,7 @@ build-backend = "hatchling.build"
 aide = "aide.cli.main:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/aide"]
+packages = ["src/aide", "synthetic"]
 force-include = { "src/aide/prompts" = "aide/prompts" }
 
 [tool.hatch.build.targets.wheel.sources]

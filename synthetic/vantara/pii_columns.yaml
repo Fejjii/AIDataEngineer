@@ -1,0 +1,28 @@
+# PII column metadata for Vantara synthetic fixtures (masking tests).
+version: 1
+company: vantara
+columns:
+  - schema: CRM
+    table: CONTACTS
+    column: EMAIL
+    pii_type: email
+  - schema: CRM
+    table: CONTACTS
+    column: PHONE
+    pii_type: phone
+  - schema: CRM
+    table: CONTACTS
+    column: FIRST_NAME
+    pii_type: name
+  - schema: CRM
+    table: CONTACTS
+    column: LAST_NAME
+    pii_type: name
+  - schema: CRM
+    table: ACCOUNTS
+    column: ACCOUNT_NAME
+    pii_type: organization
+  - schema: BILLING
+    table: CUSTOMERS
+    column: CUSTOMER_NAME
+    pii_type: organization
