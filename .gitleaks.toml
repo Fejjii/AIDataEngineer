@@ -14,3 +14,14 @@ description = "In-memory resolver unit-test placeholder secret values"
 paths = ['''tests/unit/secrets/test_secret_scopes\.py''']
 regexTarget = "match"
 regexes = ['''"(connector-secret|llm-secret)"''']
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "R1 ephemeral CI workflow CSRF fixture in commit 91dfbd1 only"
+commits = ["91dfbd170a11d02f95a2ee14fbf6df984327dc0f"]
+paths = ['''\.github/workflows/ci\.yml''']
+regexTarget = "line"
+condition = "AND"
+regexes = ['''AIDE_CSRF_SECRET:\s*ci-smoke-csrf-secret-at-least-32-characters-long''']

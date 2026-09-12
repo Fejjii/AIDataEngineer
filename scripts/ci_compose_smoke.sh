@@ -5,16 +5,22 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-export POSTGRES_DB="${POSTGRES_DB:-aide_dev}"
-export POSTGRES_USER="${POSTGRES_USER:-aide_ci}"
-export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-ci-smoke-password-not-a-production-secret}"
-export POSTGRES_PORT="${POSTGRES_PORT:-5432}"
-export AIDE_HTTP_PORT="${AIDE_HTTP_PORT:-8000}"
-export AIDE_CSRF_SECRET="${AIDE_CSRF_SECRET:-ci-smoke-csrf-secret-at-least-32-characters-long}"
-
-COMPOSE=(docker compose)
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-aide-ci-smoke}"
 COMPOSE=(docker compose -p "$PROJECT_NAME")
+
+# Ephemeral CI-only defaults derived at runtime; override via environment when needed.
+export POSTGRES_DB="${POSTGRES_DB:-aide_dev}"
+export POSTGRES_USER="${POSTGRES_USER:-aide_ci}"
+export POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+export AIDE_HTTP_PORT="${AIDE_HTTP_PORT:-8000}"
+if [[ -z "${POSTGRES_PASSWORD:-}" ]]; then
+  POSTGRES_PASSWORD="aide-ci-smoke-pg-$(printf '%s' "$PROJECT_NAME" | sha256sum | cut -c1-24)"
+  export POSTGRES_PASSWORD
+fi
+if [[ -z "${AIDE_CSRF_SECRET:-}" ]]; then
+  AIDE_CSRF_SECRET="aide-ci-smoke-csrf-$(printf '%s' "$PROJECT_NAME" | sha256sum | cut -c1-32)"
+  export AIDE_CSRF_SECRET
+fi
 
 log() { printf '%s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
