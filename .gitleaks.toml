@@ -10,10 +10,10 @@ regexTarget = "match"
 regexes = ['''token = "opaque-session-token"''']
 
 [[allowlists]]
-description = "In-memory resolver unit-test placeholder secret values"
-paths = ['''tests/unit/secrets/test_secret_scopes\.py''']
+description = "dbt connector log-redaction unit-test placeholder tokens"
+paths = ['''tests/connectors/contract/test_dbt_workspace\.py''']
 regexTarget = "match"
-regexes = ['''"(connector-secret|llm-secret)"''']
+regexes = ['''abcdef123456''']
 
 [[rules]]
 id = "generic-api-key"
@@ -28,3 +28,11 @@ paths = ['''\.github/workflows/ci\.yml''', '''docs/agent/runs/DE003/DE003-SESSIO
 regexTarget = "line"
 condition = "AND"
 regexes = ['''ci-smoke-csrf-secret-at-least-32-characters-long|ci-smoke-password-not-a-production-secret''']
+
+[[rules.allowlists]]
+description = "dbt connector log-redaction unit-test placeholder in DE008A history"
+commits = ["5555da6218d8bc4079afaf1c1c3d8ef037aa0ced"]
+paths = ['''tests/connectors/contract/test_dbt_workspace\.py''']
+regexTarget = "match"
+condition = "AND"
+regexes = ['''abcdef123456''']

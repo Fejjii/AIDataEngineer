@@ -16,6 +16,7 @@ import pytest
 from tests.connectors.contract.conftest import make_context
 from tests.connectors.dbt_support import build_tiny_v1_duckdb, unique_key
 
+from aide.connectors.base.context import CallContext
 from aide.connectors.dbt.artifacts import parse_manifest, parse_run_results
 from aide.connectors.dbt.contracts import (
     CompileTransformationInput,
@@ -61,7 +62,7 @@ def _count_model(duckdb_path: Path, model: str) -> int:
     raise AssertionError(f"model {model} not found in {duckdb_path}")
 
 
-def _offline_context(*, workflow_id: UUID, label: str):
+def _offline_context(*, workflow_id: UUID, label: str) -> CallContext:
     return make_context(
         workflow_id=workflow_id,
         operation_idempotency_key=unique_key(label),

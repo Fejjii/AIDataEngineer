@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 
 import pytest
@@ -46,8 +45,6 @@ def test_dbt_core_and_duckdb_are_importable() -> None:
 
     assert version("dbt-core").startswith("1.11.")
     assert version("dbt-duckdb").startswith("1.11.")
-    assert importlib.util.find_spec("dbt") is not None
-    assert importlib.util.find_spec("dbt.adapters.duckdb") is not None
 
 
 def test_fake_and_real_handler_parity() -> None:

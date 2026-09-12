@@ -74,7 +74,7 @@ def test_subprocess_timeout_kills_process(tmp_path: Path) -> None:
 
 def test_secret_redaction_strips_values_keeps_names() -> None:
     raw = (
-        "password=supersecretvalue99 token=abcdef123456 "
+        "password=supersecretvalue99 token=placeholder_token_value "
         "SNOWFLAKE_PRIVATE_KEY_DEV is the env var name"
     )
     cleaned = sanitize_text(raw, extra_secrets=("supersecretvalue99",))

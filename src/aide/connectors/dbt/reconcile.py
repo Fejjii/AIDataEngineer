@@ -108,7 +108,7 @@ def reconcile_invocation(
         if isinstance(item, dict) and item.get("unique_id")
     }
     if required_nodes:
-        missing_nodes = [node for node in required_nodes if node not in by_id]
+        missing_nodes = [node for node in required_nodes if not _result_covers_node(node, by_id)]
         if missing_nodes:
             return Unknown(
                 reason="run_results missing required nodes",
@@ -117,7 +117,7 @@ def reconcile_invocation(
         running = [
             node
             for node, item in by_id.items()
-            if node in required_nodes
+            if _selector_matches(node, required_nodes)
             and str(item.get("status", "")).lower() in {"running", "started"}
         ]
         if running:
@@ -132,3 +132,22 @@ def reconcile_invocation(
         "effect_semantics": journal.effect_semantics.value,
     }
     return EffectFound(output=output, external_ref=str(journal.attempt_id))
+
+
+def _selector_matches(unique_id: str, selectors: tuple[str, ...]) -> bool:
+    return any(_node_matches(selector, unique_id, {}) for selector in selectors)
+
+
+def _result_covers_node(selector: str, by_id: dict[str, Any]) -> bool:
+    if selector in by_id:
+        return True
+    return any(_node_matches(selector, unique_id, item) for unique_id, item in by_id.items())
+
+
+def _node_matches(selector: str, unique_id: str, item: dict[str, Any]) -> bool:
+    if selector == unique_id:
+        return True
+    if unique_id.endswith(f".{selector}"):
+        return True
+    name = item.get("name")
+    return isinstance(name, str) and name == selector

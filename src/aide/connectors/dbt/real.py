@@ -6,6 +6,8 @@ import asyncio
 import importlib.util
 import shutil
 from datetime import UTC, datetime, timedelta
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as distribution_version
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -88,6 +90,21 @@ from aide.domain.failures import FailureClass
 HEALTH_TTL = timedelta(minutes=5)
 
 
+def _distribution_installed(name: str) -> bool:
+    try:
+        distribution_version(name)
+        return True
+    except PackageNotFoundError:
+        return False
+
+
+def _module_available(name: str) -> bool:
+    try:
+        return importlib.util.find_spec(name) is not None
+    except ModuleNotFoundError:
+        return False
+
+
 class RealDbtConnector:
     """Subprocess dbt Core connector. DuckDB credentials/files only in Cloud."""
 
@@ -100,15 +117,15 @@ class RealDbtConnector:
     async def health(self) -> ConnectorHealthSnapshot:
         now = datetime.now(UTC).replace(tzinfo=None)
         reasons: list[str] = []
-        if importlib.util.find_spec("dbt") is None:
+        if not _distribution_installed("dbt-core") and not _module_available("dbt"):
             reasons.append("DBT_CORE_UNAVAILABLE")
         if self.settings.adapter is DbtAdapter.DUCKDB:
-            if importlib.util.find_spec("dbt.adapters.duckdb") is None:
+            if not _distribution_installed("dbt-duckdb"):
                 reasons.append("DBT_ADAPTER_UNAVAILABLE")
         else:
             missing = missing_secret_names(self.settings)
             reasons.extend(f"SECRET_UNRESOLVED:{name}" for name in missing)
-            if importlib.util.find_spec("dbt.adapters.snowflake") is None:
+            if not _distribution_installed("dbt-snowflake"):
                 reasons.append("DBT_ADAPTER_UNAVAILABLE")
         status = "UNAVAILABLE" if reasons else "AVAILABLE"
         return ConnectorHealthSnapshot(
@@ -205,9 +222,11 @@ class RealDbtConnector:
             selected=payload.select or (),
         )
         executed = self._execute_output(context, result, bundle, "run_pipeline")
-        tests = ()
-        if bundle.run_results_path is not None:
-            tests = test_results_from_run_results(parse_run_results(bundle.run_results_path))
+        tests = (
+            test_results_from_run_results(parse_run_results(bundle.run_results_path))
+            if bundle.run_results_path is not None
+            else ()
+        )
         ok = executed.ok and all(item.status in {"pass", "warn"} for item in tests)
         return RunPipelineOutput(
             ok=ok, results=executed.results, tests=tests, run_results_ref=executed.run_results_ref
@@ -229,9 +248,11 @@ class RealDbtConnector:
             effect=effect,
             selected=payload.select or (),
         )
-        tests = ()
-        if bundle.run_results_path is not None:
-            tests = test_results_from_run_results(parse_run_results(bundle.run_results_path))
+        tests = (
+            test_results_from_run_results(parse_run_results(bundle.run_results_path))
+            if bundle.run_results_path is not None
+            else ()
+        )
         provenance = self._provenance(context, "run_tests")
         ref = None
         if "run_results.json" in bundle.hashes:
@@ -426,9 +447,11 @@ class RealDbtConnector:
         capability: str,
     ) -> ExecuteTransformationOutput:
         provenance = self._provenance(context, capability)
-        results = ()
-        if bundle.run_results_path is not None:
-            results = node_results_from_run_results(parse_run_results(bundle.run_results_path))
+        results = (
+            node_results_from_run_results(parse_run_results(bundle.run_results_path))
+            if bundle.run_results_path is not None
+            else ()
+        )
         ref = None
         if "run_results.json" in bundle.hashes:
             ref = artifact_ref(

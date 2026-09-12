@@ -381,7 +381,7 @@ class FakeDbtConnector:
             required_nodes=required,
         )
 
-    def _run_models(
+    async def _run_models(
         self,
         context: CallContext,
         *,
@@ -410,9 +410,10 @@ class FakeDbtConnector:
         manifest, compiled = self._compile_project(project, select or None)
         self._write_manifest(project, manifest)
         results: list[dict[str, Any]] = []
-        for name, sql in compiled.items():
+        for name in self._execution_order(manifest, compiled):
             if select and name not in select and f"model.vantara_project.{name}" not in select:
                 continue
+            sql = compiled[name]
             started = datetime.now(UTC)
             try:
                 kind = "VIEW" if name.startswith("stg_") else "TABLE"
@@ -551,6 +552,31 @@ class FakeDbtConnector:
             raise DbtMappedError(FailureClass.DBT_COMPILE, "unresolved jinja")
         return sql.strip()
 
+    def _execution_order(self, manifest: dict[str, Any], compiled: dict[str, str]) -> list[str]:
+        nodes = manifest.get("nodes") if isinstance(manifest.get("nodes"), dict) else {}
+        remaining = set(compiled)
+        ordered: list[str] = []
+        while remaining:
+            ready: list[str] = []
+            for name in sorted(remaining):
+                uid = f"model.vantara_project.{name}"
+                node = nodes.get(uid) if isinstance(nodes, dict) else None
+                depends_raw = node.get("depends_on") if isinstance(node, dict) else {}
+                depends = depends_raw if isinstance(depends_raw, dict) else {}
+                refs = [
+                    str(dep).split(".")[-1]
+                    for dep in (depends.get("nodes") or [])
+                    if str(dep).startswith("model.")
+                ]
+                if all(dep not in remaining for dep in refs):
+                    ready.append(name)
+            if not ready:
+                ordered.extend(sorted(remaining))
+                break
+            ordered.extend(ready)
+            remaining -= set(ready)
+        return ordered
+
     def _execute_tests(
         self, project: Path, select: tuple[str, ...] | None
     ) -> tuple[Any, dict[str, Any]]:
@@ -616,7 +642,9 @@ class FakeDbtConnector:
         return ("fail" if failures else "pass"), failures
 
     def _install_fixtures(self) -> None:
-        self._conn.execute('CREATE SCHEMA IF NOT EXISTS "VANTARA_RAW"')
+        # DuckDB 1.5 treats a.b as catalog.schema. Attach an in-memory catalog so
+        # Snowflake-style "VANTARA_RAW"."BILLING"."TABLE" identifiers resolve.
+        self._conn.execute("ATTACH ':memory:' AS VANTARA_RAW")
         self._conn.execute('CREATE SCHEMA IF NOT EXISTS "VANTARA_RAW"."BILLING"')
         customers = self.csv_root / "billing" / "customers.csv"
         invoices = self.csv_root / "billing" / "invoices.csv"
