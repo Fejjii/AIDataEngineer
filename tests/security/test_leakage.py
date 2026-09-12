@@ -9,7 +9,12 @@ SECRET_PATTERNS = (
     re.compile(r"-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----"),
     re.compile(r"(?i)(api[_-]?key|secret|password|token)\s*[:=]\s*['\"][^'\"]{12,}['\"]"),
 )
-SKIP_PARTS = {".git", ".venv", "uv.lock", "__pycache__", "node_modules", "tests"}
+SKIP_PARTS = {".git", ".venv", "uv.lock", "__pycache__", "node_modules"}
+ALLOWED_FIXTURE_ASSIGNMENTS = frozenset(
+    {
+        'token = "opaque-session-token"',
+    }
+)
 
 
 def test_leakage_scan_detects_no_secrets() -> None:
@@ -21,6 +26,8 @@ def test_leakage_scan_detects_no_secrets() -> None:
             continue
         text = path.read_text(encoding="utf-8", errors="ignore")
         for pattern in SECRET_PATTERNS:
-            if pattern.search(text):
-                hits.append(f"{path.relative_to(ROOT)}: {pattern.pattern}")
+            for match in pattern.finditer(text):
+                if match.group(0) in ALLOWED_FIXTURE_ASSIGNMENTS:
+                    continue
+                hits.append(f"{path.relative_to(ROOT)}: {match.group(0)}")
     assert hits == []
