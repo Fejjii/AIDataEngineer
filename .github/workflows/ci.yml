@@ -105,9 +105,19 @@ jobs:
   docker:
     name: Docker build
     runs-on: ubuntu-latest
+    env:
+      POSTGRES_DB: aide_dev
+      POSTGRES_USER: aide_ci
+      POSTGRES_PASSWORD: ci-smoke-password-not-a-production-secret
+      POSTGRES_PORT: 5432
+      AIDE_HTTP_PORT: 8000
+      AIDE_CSRF_SECRET: ci-smoke-csrf-secret-at-least-32-characters-long
+      COMPOSE_PROJECT_NAME: aide-ci-smoke
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build application image
-        run: docker build -t aide:ci .
+      - name: Build image and smoke-test Docker Compose stack
+        run: |
+          chmod +x scripts/ci_compose_smoke.sh
+          ./scripts/ci_compose_smoke.sh
