@@ -1,0 +1,1 @@
+"""Typed prompt package."""

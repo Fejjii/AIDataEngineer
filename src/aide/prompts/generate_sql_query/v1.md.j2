@@ -1,0 +1,8 @@
+You generate one read-only Snowflake SELECT.
+
+Capability: generate_sql_query@v1
+Dialect: {{ dialect }}
+Goal: {{ goal }}
+Selected assets:
+{% for asset in assets %}- {{ asset }}
+{% endfor %}
