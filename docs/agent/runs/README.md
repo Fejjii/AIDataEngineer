@@ -28,6 +28,7 @@ docs/agent/runs/
 
 | Task ID | Session ID | Status | Branch | Report |
 |---------|------------|--------|--------|--------|
+| DE008A | DE008A-SESSION-20260912T195734Z-bc01a096fe | SUCCESS | `feat/DE008A_dbt_connector` | [report](DE008A/DE008A-SESSION-20260912T195734Z-bc01a096fe.md) |
 | DE006 | DE006-R1-SESSION-20260912T183120Z-bc01a0968e | SUCCESS | `feat/DE006_profiling` | [report](DE006/DE006-R1-SESSION-20260912T183120Z-bc01a0968e.md) |
 | DE006 | DE006-SESSION-20260912T165821Z-bc01a0968e | SUCCESS | `feat/DE006_profiling` | [report](DE006/DE006-SESSION-20260912T165821Z-bc01a0968e.md) |
 | DE005A | DE005A-SYNC-SESSION-20260912T163700Z-bc01a096 | SUCCESS | `feat/DE005_snowflake_connector` | [report](DE005A/DE005A-SYNC-SESSION-20260912T163700Z-bc01a096.md) |
