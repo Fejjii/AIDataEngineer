@@ -118,6 +118,10 @@ pnpm-debug.log*
 *.db
 *.db-journal
 
+# --- Synthetic fixtures (commit tiny only; demo/full are generated locally) ---
+synthetic/vantara/fixtures/demo/
+synthetic/vantara/fixtures/full/
+
 # --- Temporary files ---
 tmp/
 temp/

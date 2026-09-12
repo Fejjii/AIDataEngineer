@@ -1,0 +1,14 @@
+{
+  "billing.customers": 25600,
+  "billing.invoice_lines": 4100000,
+  "billing.invoices": 1240000,
+  "billing.subscriptions": 61000,
+  "crm.account_crosswalk": 24806,
+  "crm.accounts": 27500,
+  "crm.contacts": 82000,
+  "crm.opportunities": 41000,
+  "payments.payments": 1130000,
+  "payments.refunds": 38000,
+  "product.plans": 96,
+  "support.tickets": 310000
+}
