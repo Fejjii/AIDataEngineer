@@ -196,8 +196,9 @@ Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
 - Model Grok 4.6 · Reasoning Medium · Risk Medium · Duration 4–6 h · Token L.
 
 ## DE 007 — Modelling decision engine and design
-- `DE007` · P0 · TODO · Env CLOUD · Cloud yes (recorded LLM) · Branch `feat/DE007_modelling` · Deps DE 006
+- `DE007` · P0 · DONE (operator accepted R1 2026-09-12) · Env CLOUD · Cloud yes (recorded LLM) · Branch `feat/DE007_modelling` · Deps DE 006
 - Model Grok 4.6 · Reasoning High · Risk Medium · Duration 5–7 h · Token L.
+- PR 16 stacked on PR 14 (`feat/DE006_profiling`). Do not merge to `main` until PR 14 is integrated.
 
 ## DE 008 — dbt connector, generation and execution
 - `DE008` · P0 · TODO · Env LOCAL · Cloud no · Branch `feat/DE008_dbt_generation` · Deps DE 005, DE 007 (008a connector may start after DE 005)
