@@ -74,7 +74,7 @@ async def select_runnable_task(
         filters.append(MaterializedTaskModel.phase_run_id == phase_run_id)
     if task_id is not None:
         filters.append(MaterializedTaskModel.task_id == task_id)
-    return await session.scalar(
+    task: MaterializedTaskModel | None = await session.scalar(
         select(MaterializedTaskModel)
         .join(WorkflowModel, WorkflowModel.workflow_id == MaterializedTaskModel.workflow_id)
         .where(*filters)
@@ -82,6 +82,7 @@ async def select_runnable_task(
         .with_for_update(skip_locked=True, of=MaterializedTaskModel)
         .limit(1)
     )
+    return task
 
 
 async def claim_task(

@@ -12,17 +12,21 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from aide.app.events import EventBus
-from aide.app.sessions import (
+from aide.auth.context import (
+    ClientForgeryError,
+    TrustedAuthenticationContext,
+    reject_client_identity,
+)
+from aide.auth.csrf import CsrfValidationError
+from aide.auth.grants import GrantForgeryError
+from aide.auth.session import (
     CSRF_HEADER,
     SESSION_COOKIE,
-    LocalSessionService,
+    IssuedLocalSession,
+    SessionExpiredError,
     SessionInvalidError,
     SessionMissingError,
 )
-from aide.auth.context import ClientForgeryError, reject_client_identity
-from aide.auth.csrf import CsrfValidationError
-from aide.auth.grants import GrantForgeryError
-from aide.auth.session import SessionExpiredError
 from aide.domain.permissions import PermissionLevel
 from aide.domain.principal import PrincipalRef
 
@@ -41,6 +45,18 @@ class SliceRunner(Protocol):
     def events(self) -> EventBus: ...
 
 
+class SessionGate(Protocol):
+    async def issue(self) -> IssuedLocalSession: ...
+
+    async def authenticate(
+        self,
+        opaque_token: str | None,
+        *,
+        csrf_token: str | None,
+        method: str,
+    ) -> TrustedAuthenticationContext: ...
+
+
 class SubmitRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -53,7 +69,7 @@ def create_app(
     service: SliceRunner,
     events: EventBus | None = None,
     *,
-    sessions: LocalSessionService | None = None,
+    sessions: SessionGate | None = None,
 ) -> FastAPI:
     bus = events or service.events
     app = FastAPI(title="AIDataEngineer", version="0.1.0")

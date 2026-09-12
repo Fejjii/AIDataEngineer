@@ -7,14 +7,14 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient, Response
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from aide.api.app import CSRF_HEADER, SESSION_COOKIE, create_app
+from aide.api.app import create_app
 from aide.app.events import EventBus
 from aide.app.runtime import build_offline_stack
 from aide.app.sessions import LocalSessionService
-from aide.auth.session import digest_session_token
+from aide.auth.session import CSRF_HEADER, SESSION_COOKIE, digest_session_token
 from aide.domain.permissions import PermissionLevel
 from aide.domain.principal import PrincipalRef
 from aide.domain.states import WorkflowState
@@ -50,6 +50,12 @@ class _RecordingSlice:
         )
 
 
+def _cookie(response: Response) -> str:
+    value = response.cookies.get(SESSION_COOKIE)
+    assert value is not None
+    return value
+
+
 def _app(
     session_factory: async_sessionmaker[AsyncSession],
     service: Any,
@@ -69,10 +75,8 @@ async def test_session_creation_issues_opaque_non_constant_cookie(
         second = await client.post("/v1/sessions")
     assert first.status_code == 200
     assert second.status_code == 200
-    first_cookie = first.cookies.get(SESSION_COOKIE)
-    second_cookie = second.cookies.get(SESSION_COOKIE)
-    assert first_cookie
-    assert second_cookie
+    first_cookie = _cookie(first)
+    second_cookie = _cookie(second)
     assert first_cookie != "session"
     assert second_cookie != "session"
     assert first_cookie != second_cookie
@@ -148,7 +152,7 @@ async def test_missing_csrf_is_rejected(
         response = await client.post(
             "/v1/workflows",
             json={"requirement": _REQUEST},
-            cookies={SESSION_COOKIE: login.cookies.get(SESSION_COOKIE, "")},
+            cookies={SESSION_COOKIE: _cookie(login)},
         )
     assert response.status_code == 403
     assert response.json()["detail"] == "csrf required"
@@ -165,7 +169,7 @@ async def test_invalid_csrf_is_rejected(
         response = await client.post(
             "/v1/workflows",
             json={"requirement": _REQUEST},
-            cookies={SESSION_COOKIE: login.cookies.get(SESSION_COOKIE, "")},
+            cookies={SESSION_COOKIE: _cookie(login)},
             headers={CSRF_HEADER: "invalid-csrf-value"},
         )
     assert response.status_code == 403
@@ -184,7 +188,7 @@ async def test_client_supplied_effective_grants_are_rejected(
         response = await client.post(
             "/v1/workflows",
             json={"requirement": _REQUEST, "effective_grants": ["READ"]},
-            cookies={SESSION_COOKIE: login.cookies.get(SESSION_COOKIE, "")},
+            cookies={SESSION_COOKIE: _cookie(login)},
             headers={CSRF_HEADER: login.json()["csrf_token"]},
         )
     assert response.status_code == 400
@@ -208,7 +212,7 @@ async def test_client_supplied_principal_fields_are_rejected(
                 "roles": ["OPERATOR"],
                 "authentication_source": "LOCAL_SESSION",
             },
-            cookies={SESSION_COOKIE: login.cookies.get(SESSION_COOKIE, "")},
+            cookies={SESSION_COOKIE: _cookie(login)},
             headers={CSRF_HEADER: login.json()["csrf_token"]},
         )
     assert response.status_code == 422
@@ -224,7 +228,7 @@ async def test_valid_authenticated_workflow_uses_server_principal(
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         login = await client.post("/v1/sessions")
-        cookie = login.cookies.get(SESSION_COOKIE, "")
+        cookie = _cookie(login)
         response = await client.post(
             "/v1/workflows",
             json={"requirement": _REQUEST, "requested_grants": ["READ"]},
@@ -255,7 +259,7 @@ async def test_valid_authenticated_offline_workflow_completes(
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         login = await client.post("/v1/sessions")
-        cookie = login.cookies.get(SESSION_COOKIE, "")
+        cookie = _cookie(login)
         response = await client.post(
             "/v1/workflows",
             json={"requirement": _REQUEST, "requested_grants": ["READ"]},

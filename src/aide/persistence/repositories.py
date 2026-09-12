@@ -88,9 +88,10 @@ class SessionRepository:
         return row
 
     async def get_by_token_digest(self, opaque_token_digest: str) -> SessionModel | None:
-        return await self._session.scalar(
+        row: SessionModel | None = await self._session.scalar(
             select(SessionModel).where(SessionModel.opaque_token_digest == opaque_token_digest)
         )
+        return row
 
 
 class GrantRepository:

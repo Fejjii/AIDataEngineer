@@ -4,16 +4,40 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from aide.domain.principal import Role
+from aide.domain.principal import PrincipalRef, Role
+
+SESSION_COOKIE = "aide_session"
+CSRF_HEADER = "X-CSRF-Token"
 
 
 class SessionExpiredError(ValueError):
     pass
+
+
+class SessionAuthenticationError(PermissionError):
+    pass
+
+
+class SessionMissingError(SessionAuthenticationError):
+    pass
+
+
+class SessionInvalidError(SessionAuthenticationError):
+    pass
+
+
+@dataclass(frozen=True)
+class IssuedLocalSession:
+    opaque_token: str
+    csrf_token: str
+    principal: PrincipalRef
+    expires_at: datetime
 
 
 class OpaqueSession(BaseModel):
