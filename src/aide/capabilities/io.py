@@ -146,6 +146,151 @@ class CreateDatasetOutput(FrozenModel):
     row_count: int | None = None
 
 
+class DropDatasetInput(FrozenModel):
+    target: AssetRef
+    created_by_workflow: UUID
+
+
+class DropDatasetOutput(FrozenModel):
+    dropped: bool
+
+
+class DetectSchemaDriftInput(FrozenModel):
+    asset: AssetRef
+    baseline_snapshot_id: UUID
+    baseline_columns: tuple[ColumnSpec, ...] | None = None
+
+
+class ColumnTypeChange(FrozenModel):
+    name: str
+    from_type: str
+    to_type: str
+
+
+class RenamedColumnCandidate(FrozenModel):
+    from_name: str
+    to_name: str
+    confidence: float = Field(ge=0, le=1)
+
+
+class DetectSchemaDriftOutput(FrozenModel):
+    drifted: bool
+    added: tuple[ColumnSpec, ...]
+    removed: tuple[ColumnSpec, ...]
+    type_changed: tuple[ColumnTypeChange, ...]
+    renamed_candidates: tuple[RenamedColumnCandidate, ...]
+
+
+class TopValue(FrozenModel):
+    value_masked: str | None
+    count: int = Field(ge=0)
+
+
+class ProfileColumn(FrozenModel):
+    name: str
+    null_ratio: float = Field(ge=0, le=1)
+    distinct_ratio: float = Field(ge=0, le=1)
+    min: Any | None = None
+    max: Any | None = None
+    mean: float | None = None
+    top_values: tuple[TopValue, ...] = ()
+    inferred_semantic: Literal["ID", "DATE", "AMOUNT", "CODE", "TEXT", "FLAG"] | None = None
+
+
+class CandidateKey(FrozenModel):
+    columns: tuple[str, ...]
+    uniqueness_ratio: float = Field(ge=0, le=1)
+
+
+class ProfileDatasetInput(FrozenModel):
+    asset: AssetRef
+    columns: tuple[str, ...] | None = None
+    budget: Budget
+    sample_fraction: float | None = Field(default=None, ge=0, le=1)
+    top_k: int = Field(default=10, ge=1)
+
+
+class ProfileDatasetOutput(FrozenModel):
+    asset: AssetRef
+    row_count: int
+    sampled: bool
+    columns: tuple[ProfileColumn, ...]
+    candidate_keys: tuple[CandidateKey, ...]
+    duplicate_groups_estimate: int
+    profile_id: UUID
+
+
+class SampleDatasetInput(FrozenModel):
+    asset: AssetRef
+    columns: tuple[str, ...] | None = None
+    n: int = Field(ge=1, le=20)
+    where: SqlText | None = None
+
+
+class SampleDatasetOutput(FrozenModel):
+    rows: tuple[dict[str, Any], ...]
+    masked_columns: tuple[str, ...]
+    sample_id: UUID
+
+
+class InferRelationshipsInput(FrozenModel):
+    assets: tuple[AssetRef, ...]
+    profiles: tuple[UUID, ...] = ()
+    max_pairs: int = Field(ge=1)
+    budget: Budget
+
+
+class RelationshipCandidate(FrozenModel):
+    from_asset: AssetRef
+    from_columns: tuple[str, ...]
+    to_asset: AssetRef
+    to_columns: tuple[str, ...]
+    inclusion_ratio: float = Field(ge=0, le=1)
+    cardinality: Literal["1:1", "1:N", "N:M"]
+    confidence: float = Field(ge=0, le=1)
+
+
+class InferRelationshipsOutput(FrozenModel):
+    candidates: tuple[RelationshipCandidate, ...]
+    relationships_id: UUID
+
+
+class MetricsQueryInput(FrozenModel):
+    query_tag: str
+    since: datetime
+
+
+class QueryMetric(FrozenModel):
+    query_id: str
+    duration_ms: int
+    bytes_scanned: int | None = None
+    rows_produced: int | None = None
+    partitions_scanned: int | None = None
+    partitions_total: int | None = None
+    spilled_bytes: int | None = None
+    warehouse: str | None = None
+
+
+class GetExecutionMetricsOutput(FrozenModel):
+    queries: tuple[QueryMetric, ...]
+    as_of: datetime | None = None
+    complete: bool = True
+
+
+class TaskCostBreakdown(FrozenModel):
+    task_id: str
+    credits_used: float
+
+
+class GetCostMetricsOutput(FrozenModel):
+    credits_used: float
+    estimated_cost: float
+    currency: str = "USD"
+    breakdown_by_task: tuple[TaskCostBreakdown, ...] = ()
+    as_of: datetime | None = None
+    complete: bool = False
+
+
 class ClarificationPair(FrozenModel):
     question: str
     answer: str

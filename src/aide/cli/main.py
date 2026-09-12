@@ -16,7 +16,9 @@ from aide.domain.permissions import PermissionLevel
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 slice_app = typer.Typer(help="Offline DE 002C slice commands")
+connectors_app = typer.Typer(help="Connector health commands")
 app.add_typer(slice_app, name="slice")
+app.add_typer(connectors_app, name="connectors")
 
 
 def _database_url() -> str:
@@ -79,6 +81,42 @@ async def _run(url: str, requirement: str) -> dict[str, Any]:
         "row_count": result.execution.row_count if result.execution else 0,
         "provenance_mode": result.provenance.execution_mode.value if result.provenance else None,
     }
+
+
+@connectors_app.command("check")
+def connectors_check(
+    json_output: bool = typer.Option(True, "--json/--no-json"),
+) -> None:
+    """Report fake and real Snowflake health. Prints env var names, never secret values."""
+    payload = asyncio.run(_connector_health())
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+    for item in payload:
+        reasons = ",".join(item["reason_codes"]) if item["reason_codes"] else "-"
+        typer.echo(f"{item['connector_id']} fake={item['is_fake']} {item['status']} {reasons}")
+
+
+async def _connector_health() -> list[dict[str, Any]]:
+    from aide.connectors.snowflake.fake import build_fake_pair
+    from aide.connectors.snowflake.real import build_real_pair
+
+    reports: list[dict[str, Any]] = []
+    fake_ro, fake_dev = build_fake_pair()
+    real_ro, real_dev = build_real_pair()
+    for connector in (fake_ro, fake_dev, real_ro, real_dev):
+        snapshot = await connector.health()
+        reports.append(
+            {
+                "connector_id": snapshot.connector_id,
+                "identity_class": connector.spec.identity_class.value,
+                "is_fake": connector.spec.is_fake,
+                "status": snapshot.status,
+                "reason_codes": list(snapshot.reason_codes),
+            }
+        )
+        await connector.close()
+    return reports
 
 
 def main() -> None:

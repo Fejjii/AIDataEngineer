@@ -13,6 +13,8 @@ dependencies = [
     "pydantic>=2.10,<3",
     "sqlalchemy>=2,<3",
     "sqlglot>=26.0.0,<27",
+    "snowflake-connector-python>=3.12,<4",
+    "cryptography>=44.0.0,<47",
     "typer>=0.15,<1",
     "uvicorn[standard]>=0.34,<1",
 ]
@@ -81,7 +83,7 @@ warn_redundant_casts = true
 no_implicit_reexport = true
 
 [[tool.mypy.overrides]]
-module = ["sqlglot", "sqlglot.*", "duckdb", "duckdb.*"]
+module = ["sqlglot", "sqlglot.*", "duckdb", "duckdb.*", "snowflake", "snowflake.*"]
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]
@@ -94,6 +96,9 @@ testpaths = ["tests"]
 pythonpath = ["src", "."]
 asyncio_mode = "auto"
 addopts = "-q --strict-markers"
+markers = [
+    "snowflake_live: live Snowflake tests skipped when credentials are absent",
+]
 
 [tool.importlinter]
 root_packages = ["aide"]
