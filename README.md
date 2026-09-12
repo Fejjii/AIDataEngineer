@@ -12,7 +12,14 @@ Start here: `.ai/MASTER.md`
 ```bash
 uv sync --frozen --all-groups
 uv run ruff check .
-uv run mypy src tests
+uv run mypy src tests asgi.py
 uv run lint-imports
 uv run pytest
+```
+
+Local Docker stack (copy `.env.example` to `.env` first):
+
+```bash
+docker compose --env-file .env up --build
+curl -fsS http://127.0.0.1:${AIDE_HTTP_PORT:-8000}/healthz
 ```

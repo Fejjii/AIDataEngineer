@@ -1,0 +1,16 @@
+title = "AIDataEngineer gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Deterministic offline test fixture token assignment"
+paths = ['''tests/security/test_leakage\.py''']
+regexTarget = "match"
+regexes = ['''token = "opaque-session-token"''']
+
+[[allowlists]]
+description = "In-memory resolver unit-test placeholder secret values"
+paths = ['''tests/unit/secrets/test_secret_scopes\.py''']
+regexTarget = "match"
+regexes = ['''"(connector-secret|llm-secret)"''']

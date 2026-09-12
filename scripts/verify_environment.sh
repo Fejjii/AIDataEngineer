@@ -9,7 +9,7 @@ Usage: scripts/verify_environment.sh [--bootstrap|--start|--verify]
 
   --bootstrap  Install system packages, uv, and the locked Python environment.
   --start      Ensure PostgreSQL 16 is listening on localhost and a local role exists.
-  --verify     Run readiness checks (default).
+  --verify     Run readiness checks (default), including migration readiness when PostgreSQL is up.
 EOF
 }
 
@@ -352,6 +352,19 @@ assert_other_db_tcp_not_trusted() {
   fi
 }
 
+build_tooling_available() {
+  need_cmd gcc
+  need_cmd make
+}
+
+migration_readiness() {
+  need_cmd uv
+  export AIDE_DATABASE_URL="postgresql+psycopg://${DEV_ROLE}@127.0.0.1:5432/${DEV_DB}"
+  export AIDE_TEST_DATABASE_URL="$AIDE_DATABASE_URL"
+  uv run alembic upgrade head >/dev/null
+  uv run alembic check >/dev/null
+}
+
 verify() {
   local errors=0
   check() {
@@ -370,9 +383,13 @@ verify() {
   check "uv sync --frozen --all-groups" uv sync --frozen --all-groups
   check "PostgreSQL 16 available" postgres_is_16
   check "Git available" command -v git
+  check "build tooling available" build_tooling_available
   check "repository working tree visible" git rev-parse --is-inside-work-tree
   check "pyproject.toml present" test -f "$ROOT/pyproject.toml"
   check "uv.lock present" test -f "$ROOT/uv.lock"
+  check "alembic.ini present" test -f "$ROOT/alembic.ini"
+  check "Dockerfile present" test -f "$ROOT/Dockerfile"
+  check "docker-compose.yml present" test -f "$ROOT/docker-compose.yml"
 
   if pg_isready -h 127.0.0.1 -p 5432 >/dev/null 2>&1; then
     log "PASS  PostgreSQL reachable on 127.0.0.1:5432"
@@ -426,6 +443,17 @@ verify() {
     log "PASS  no required vendor secret is present"
   else
     errors=1
+  fi
+
+  if pg_isready -h 127.0.0.1 -p 5432 >/dev/null 2>&1; then
+    if migration_readiness; then
+      log "PASS  Alembic upgrade and drift check succeeded"
+    else
+      log "FAIL  Alembic upgrade and drift check succeeded"
+      errors=1
+    fi
+  else
+    log "SKIP  Alembic migration readiness (PostgreSQL not reachable)"
   fi
 
   if [[ "$errors" -ne 0 ]]; then
