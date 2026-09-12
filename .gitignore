@@ -135,6 +135,12 @@ temp/
 site/
 public/build/
 
+# --- Local workflow working copies and dbt artifacts ---
+.aide/
+dbt/**/target/
+dbt/**/dbt_packages/
+dbt/**/logs/
+
 # --- Jupyter ---
 .ipynb_checkpoints/
 

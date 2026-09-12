@@ -17,6 +17,8 @@ dependencies = [
     "cryptography>=44.0.0,<47",
     "typer>=0.15,<1",
     "uvicorn[standard]>=0.34,<1",
+    "dbt-core>=1.11.15,<1.12",
+    "dbt-duckdb>=1.11.0,<1.12",
 ]
 
 [project.optional-dependencies]
@@ -83,7 +85,22 @@ warn_redundant_casts = true
 no_implicit_reexport = true
 
 [[tool.mypy.overrides]]
-module = ["sqlglot", "sqlglot.*", "duckdb", "duckdb.*", "snowflake", "snowflake.*"]
+module = [
+    "sqlglot",
+    "sqlglot.*",
+    "duckdb",
+    "duckdb.*",
+    "snowflake",
+    "snowflake.*",
+    "dbt",
+    "dbt.*",
+    "dbt_common",
+    "dbt_common.*",
+    "dbt_adapters",
+    "dbt_adapters.*",
+    "yaml",
+    "yaml.*",
+]
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]
@@ -98,6 +115,7 @@ asyncio_mode = "auto"
 addopts = "-q --strict-markers"
 markers = [
     "snowflake_live: live Snowflake tests skipped when credentials are absent",
+    "dbt_offline: offline dbt Core + DuckDB tests; no Snowflake credentials",
 ]
 
 [tool.importlinter]
@@ -202,7 +220,19 @@ type = "forbidden"
 source_modules = ["aide.orchestration"]
 forbidden_modules = [
     "aide.connectors.snowflake",
+    "aide.connectors.dbt",
     "aide.llm",
+    "aide.api",
+    "aide.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "dbt connector stays below orchestration and modelling"
+type = "forbidden"
+source_modules = ["aide.connectors.dbt"]
+forbidden_modules = [
+    "aide.orchestration",
+    "aide.reasoning",
     "aide.api",
     "aide.cli",
 ]

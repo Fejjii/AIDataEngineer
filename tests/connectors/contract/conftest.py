@@ -24,17 +24,23 @@ RO_HANDLERS = (
 DEV_HANDLERS = ("create_dataset", "drop_dataset")
 
 
-def make_context(*, deadline_seconds: int = 30, workflow_id: UUID | None = None) -> CallContext:
+def make_context(
+    *,
+    deadline_seconds: int = 30,
+    workflow_id: UUID | None = None,
+    operation_idempotency_key: str | None = None,
+    attempt_number: int = 1,
+) -> CallContext:
     now = datetime.now(UTC)
     return CallContext(
         workflow_id=workflow_id or uuid4(),
         phase_run_id=uuid4(),
         task_id=uuid4(),
-        operation_idempotency_key="a" * 64,
+        operation_idempotency_key=operation_idempotency_key or "a" * 64,
         resolved_input_digest="b" * 64,
         contract_snapshot_id=uuid4(),
         attempt_id=uuid4(),
-        attempt_number=1,
+        attempt_number=attempt_number,
         claim_epoch=1,
         cancellation_epoch=0,
         deadline=now + timedelta(seconds=deadline_seconds),

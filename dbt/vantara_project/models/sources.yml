@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: vantara_raw
+    database: VANTARA_RAW
+    schema: BILLING
+    tables:
+      - name: customers
+        identifier: CUSTOMERS
+      - name: invoices
+        identifier: INVOICES
