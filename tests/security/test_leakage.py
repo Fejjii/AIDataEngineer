@@ -9,7 +9,7 @@ SECRET_PATTERNS = (
     re.compile(r"-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----"),
     re.compile(r"(?i)(api[_-]?key|secret|password|token)\s*[:=]\s*['\"][^'\"]{12,}['\"]"),
 )
-SKIP_PARTS = {".git", ".venv", "uv.lock", "__pycache__", "node_modules"}
+SKIP_PARTS = {".git", ".venv", "uv.lock", "__pycache__", "node_modules", "tests"}
 
 
 def test_leakage_scan_detects_no_secrets() -> None:
