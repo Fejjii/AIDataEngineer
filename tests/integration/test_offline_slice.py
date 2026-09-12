@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime, timedelta
+from uuid import UUID
 
 import pytest
 from sqlalchemy import select
@@ -12,7 +13,13 @@ from aide.app.runtime import build_offline_stack
 from aide.auth.grants import GrantForgeryError
 from aide.connectors.snowflake.query_tags import parse_query_tag
 from aide.domain.permissions import PermissionLevel
-from aide.domain.states import LEGAL_TRANSITIONS, AttemptOutcome, TaskState, WorkflowState
+from aide.domain.states import (
+    LEGAL_TRANSITIONS,
+    AttemptOutcome,
+    DispatchState,
+    TaskState,
+    WorkflowState,
+)
 from aide.orchestration.worker import claim_task
 from aide.persistence.models import (
     ArtifactModel,
@@ -293,6 +300,8 @@ async def test_unavailable_connector_parks_without_invalidating_plan(
         assert events
         assert events[0].payload.get("routing") == "PARK"
         assert "CONNECTOR_UNAVAILABLE" in events[0].payload.get("reasons", [])
+        attempts = await _attempts(session, task.task_id)
+        _assert_policy_disposition_is_terminal(task, session_attempts=attempts)
 
 
 @pytest.mark.asyncio
@@ -336,6 +345,8 @@ async def test_scope_violation_fail_closed_persists(
             )
         )
         assert parked is None
+        attempts = await _attempts(session, task.task_id)
+        _assert_policy_disposition_is_terminal(task, session_attempts=attempts)
 
 
 @pytest.mark.asyncio
@@ -350,6 +361,22 @@ async def test_contract_version_unavailable_parks(
     assert result.parked is True
     assert result.park_reason == "CONTRACT_VERSION_UNAVAILABLE"
     assert result.workflow_state == WorkflowState.BLOCKED.value
+    async with session_factory() as session:
+        task = await session.scalar(
+            select(MaterializedTaskModel).where(
+                MaterializedTaskModel.workflow_id == result.workflow_id,
+                MaterializedTaskModel.status == TaskState.PARKED.value,
+            )
+        )
+        assert task is not None
+        assert task.attempt_count == 0
+        assert task.active_attempt_id is None
+        assert task.lease_owner is None
+        assert task.lease_expires_at is None
+        assert task.recovery_owner is None
+        assert task.recovery_lease_expires_at is None
+        attempts = await _attempts(session, task.task_id)
+        assert attempts == []
 
 
 @pytest.mark.asyncio
@@ -422,3 +449,28 @@ async def test_run_phase_cannot_claim_another_phase_occurrence(
         assert leftover is not None
         assert leftover.status == TaskState.READY.value
         assert leftover.attempt_count == 0
+
+
+async def _attempts(session: AsyncSession, task_id: UUID) -> list[TaskAttemptModel]:
+    rows = (
+        await session.scalars(select(TaskAttemptModel).where(TaskAttemptModel.task_id == task_id))
+    ).all()
+    return list(rows)
+
+
+def _assert_policy_disposition_is_terminal(
+    task: MaterializedTaskModel,
+    *,
+    session_attempts: Sequence[TaskAttemptModel],
+) -> None:
+    assert task.active_attempt_id is None
+    assert task.lease_owner is None
+    assert task.lease_expires_at is None
+    assert task.recovery_owner is None
+    assert task.recovery_lease_expires_at is None
+    assert session_attempts
+    for attempt in session_attempts:
+        assert attempt.outcome == AttemptOutcome.FAILED.value
+        assert attempt.outcome != AttemptOutcome.STARTED.value
+        assert attempt.finished_at is not None
+        assert attempt.dispatch_state == DispatchState.NOT_DISPATCHED.value
