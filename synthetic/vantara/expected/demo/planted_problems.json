@@ -1,0 +1,16 @@
+{
+  "crosswalk_missing_rate_actual": 0.030859375,
+  "crosswalk_missing_rate_target": 0.031,
+  "duplicate_account_rate_actual": 0.07018181818181818,
+  "duplicate_account_rate_target": 0.07,
+  "duplicate_payment_rate_actual": 0.015,
+  "duplicate_payment_rate_target": 0.015,
+  "null_crm_account_id_rate_actual": 0.11171875,
+  "null_crm_account_id_rate_target": 0.12,
+  "null_due_date_rate_actual": 0.030129032258064518,
+  "null_due_date_rate_target": 0.03,
+  "orphan_contact_rate_actual": 0.02,
+  "orphan_contact_rate_target": 0.02,
+  "unknown_invoice_customer_rate_actual": 0.004,
+  "unknown_invoice_customer_rate_target": 0.004
+}

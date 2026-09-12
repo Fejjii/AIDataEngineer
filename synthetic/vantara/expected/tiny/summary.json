@@ -1,0 +1,83 @@
+{
+  "actual_total_rows": 35581,
+  "build_seconds": 0.997,
+  "file_hashes": {
+    "csv": {
+      "v1": {
+        "billing/customers.csv": "cc2dc40afca766804bb37f92de74842436c92048d34528dc5b02df3e0190c9c3",
+        "billing/invoice_lines.csv": "6a7f8c1c1ceb98deb1b89017c0fa539b619b3797ecee54f9dc886a6a3246dfca",
+        "billing/invoices.csv": "f42cc2dbc519d663d24a9c7bdbbd0d1c2b8b7fff14c0724b8a781ab831966537",
+        "billing/subscriptions.csv": "614dd4791bc4891725716e88db7273d62d85f9706450292e10ba716009636bc2",
+        "crm/account_crosswalk.csv": "9064ad672fa3e21860a4466996b9e7dce8482a2b33484d7adccba3d86521b8aa",
+        "crm/accounts.csv": "5540458733fb87332a7af049f030fe4039c5b67ae4a63e9e9f6f65bd4b2a69f4",
+        "crm/contacts.csv": "88d16771a4328a4c430f7fb63041f470387f82111de277c1d5850961b45a7c1a",
+        "crm/opportunities.csv": "6a1ce6c5a938722d7c57230c01090e6f0025ff1e006b9acb1fc662c70efb33f9",
+        "payments/payments.csv": "6d5532d9ed5a951de0c1e6023bb20de44d0122f1966e17d78d9482381dcda7e4",
+        "payments/refunds.csv": "c1163eccb4112b26fe5835348beab358b7fdce16b299731e86cecd670706b8d7",
+        "product/plans.csv": "c8eff371ad4a824b2f29a1959c2b344ea853df80f7b96f34e6385cf008b4dc76",
+        "support/tickets.csv": "d2fd1e6ffa13b277e553df7461182630a6d888def54012e742ead0cfea4ff861"
+      },
+      "v2": {
+        "billing/customers.csv": "cc2dc40afca766804bb37f92de74842436c92048d34528dc5b02df3e0190c9c3",
+        "billing/invoice_lines.csv": "6a7f8c1c1ceb98deb1b89017c0fa539b619b3797ecee54f9dc886a6a3246dfca",
+        "billing/invoices.csv": "6f9cee1b44a87ce778fa83d07305a8c5d046be14bb4454a0250b8499d64262a0",
+        "billing/subscriptions.csv": "614dd4791bc4891725716e88db7273d62d85f9706450292e10ba716009636bc2",
+        "crm/account_crosswalk.csv": "9064ad672fa3e21860a4466996b9e7dce8482a2b33484d7adccba3d86521b8aa",
+        "crm/accounts.csv": "5540458733fb87332a7af049f030fe4039c5b67ae4a63e9e9f6f65bd4b2a69f4",
+        "crm/contacts.csv": "88d16771a4328a4c430f7fb63041f470387f82111de277c1d5850961b45a7c1a",
+        "crm/opportunities.csv": "6a1ce6c5a938722d7c57230c01090e6f0025ff1e006b9acb1fc662c70efb33f9",
+        "payments/payments.csv": "6d5532d9ed5a951de0c1e6023bb20de44d0122f1966e17d78d9482381dcda7e4",
+        "payments/refunds.csv": "c1163eccb4112b26fe5835348beab358b7fdce16b299731e86cecd670706b8d7",
+        "product/plans.csv": "c8eff371ad4a824b2f29a1959c2b344ea853df80f7b96f34e6385cf008b4dc76",
+        "support/tickets.csv": "d2fd1e6ffa13b277e553df7461182630a6d888def54012e742ead0cfea4ff861"
+      }
+    },
+    "duckdb": {
+      "v1": "8fdf80e74020385b70b809af00bc833b80fa3948de37c97a7bf0b045add22169",
+      "v2": "8fdf80e74020385b70b809af00bc833b80fa3948de37c97a7bf0b045add22169"
+    }
+  },
+  "pii_columns_file": "pii_columns.yaml",
+  "planted_problems": {
+    "crosswalk_missing_rate_actual": 0.03125,
+    "crosswalk_missing_rate_target": 0.031,
+    "duplicate_account_rate_actual": 0.07246376811594203,
+    "duplicate_account_rate_target": 0.07,
+    "duplicate_payment_rate_actual": 0.01504424778761062,
+    "duplicate_payment_rate_target": 0.015,
+    "null_crm_account_id_rate_actual": 0.1484375,
+    "null_crm_account_id_rate_target": 0.12,
+    "null_due_date_rate_actual": 0.03064516129032258,
+    "null_due_date_rate_target": 0.03,
+    "orphan_contact_rate_actual": 0.01951219512195122,
+    "orphan_contact_rate_target": 0.02,
+    "unknown_invoice_customer_rate_actual": 0.004032258064516129,
+    "unknown_invoice_customer_rate_target": 0.004
+  },
+  "profile": "tiny",
+  "schema_drift": {
+    "drift_effective_date": "2026-07-01",
+    "failure_scenarios": [
+      "F1",
+      "F2"
+    ],
+    "v1_status_column": "INVOICE_STATUS",
+    "v2_status_column": "STATUS"
+  },
+  "seed": 20260401,
+  "table_row_counts": {
+    "billing.customers": 128,
+    "billing.invoice_lines": 20500,
+    "billing.invoices": 6200,
+    "billing.subscriptions": 305,
+    "crm.account_crosswalk": 124,
+    "crm.accounts": 138,
+    "crm.contacts": 410,
+    "crm.opportunities": 205,
+    "payments.payments": 5735,
+    "payments.refunds": 190,
+    "product.plans": 96,
+    "support.tickets": 1550
+  },
+  "target_total_rows": 35000
+}
