@@ -28,6 +28,7 @@ docs/agent/runs/
 
 | Task ID | Session ID | Status | Branch | Report |
 |---------|------------|--------|--------|--------|
+| DE005A | DE005A-R1-SESSION-20260912T154100Z-bc01a096 | REVIEW_REQUIRED | `feat/DE005_snowflake_connector` | [report](DE005A/DE005A-R1-SESSION-20260912T154100Z-bc01a096.md) |
 | DE005A | DE005A-SESSION-20260912T143632Z-bc01a096 | REVIEW_REQUIRED | `feat/DE005_snowflake_connector` | [report](DE005A/DE005A-SESSION-20260912T143632Z-bc01a096.md) |
 | DE003 | DE003-SESSION-20260912T093000Z-bc01a094 | SUCCESS | `ops/DE003_ci_docker` | [report](DE003/DE003-SESSION-20260912T093000Z-bc01a094.md) |
 | DE002A | DE002A-SESSION-20260911T160142Z | SUCCESS | `feat/DE002A_contract_kernel` | [report](DE002A/DE002A-SESSION-20260911T160142Z.md) |
