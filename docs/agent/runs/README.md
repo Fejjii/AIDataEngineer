@@ -28,5 +28,6 @@ docs/agent/runs/
 
 | Task ID | Session ID | Status | Branch | Report |
 |---------|------------|--------|--------|--------|
+| DE003 | DE003-SESSION-20260912T093000Z-bc01a094 | SUCCESS | `ops/DE003_ci_docker` | [report](DE003/DE003-SESSION-20260912T093000Z-bc01a094.md) |
 | DE002A | DE002A-SESSION-20260911T160142Z | SUCCESS | `feat/DE002A_contract_kernel` | [report](DE002A/DE002A-SESSION-20260911T160142Z.md) |
 | OPS001 | OPS001-SESSION-20260911T152424Z | SUCCESS | `ops/OPS001_unified_handoff` | [report](OPS001/OPS001-SESSION-20260911T152424Z.md) |

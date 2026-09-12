@@ -1,0 +1,30 @@
+title = "AIDataEngineer gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Deterministic offline test fixture token assignment"
+paths = ['''tests/security/test_leakage\.py''']
+regexTarget = "match"
+regexes = ['''token = "opaque-session-token"''']
+
+[[allowlists]]
+description = "In-memory resolver unit-test placeholder secret values"
+paths = ['''tests/unit/secrets/test_secret_scopes\.py''']
+regexTarget = "match"
+regexes = ['''"(connector-secret|llm-secret)"''']
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Superseded R1 CI fixture literals in workflow/report commits only"
+commits = [
+  "91dfbd170a11d02f95a2ee14fbf6df984327dc0f",
+  "e064e891d34a0fc1af88bf3ca06dd4f603ee4170",
+]
+paths = ['''\.github/workflows/ci\.yml''', '''docs/agent/runs/DE003/DE003-SESSION-20260912T093000Z-bc01a094\.md''']
+regexTarget = "line"
+condition = "AND"
+regexes = ['''ci-smoke-csrf-secret-at-least-32-characters-long|ci-smoke-password-not-a-production-secret''']

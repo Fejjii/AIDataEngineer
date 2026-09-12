@@ -150,16 +150,20 @@ Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
 - Recommended model: GPT 5.6 Sol · Reasoning High.
 
 ## DE 002C — First executable offline safe-SQL slice
-- `DE002C` · P0 · TODO · Env CLOUD · Cloud yes · **Unblocked** (DE 002B merged
-  2026-09-11) · Branch `feat/DE002C_safe_sql_slice`
+- `DE002C` · P0 · DONE (merged to `main`, 2026-09-12; PR #10; merge commit
+  `c2a415b459a7a975380d22d51623ae887a8aad98`) · Env CLOUD · Cloud yes · Branch
+  `cursor/de002c-safe-sql-slice-73a1`
 - Deps: DE 002B merged · Risk M · Parallel none
 - Goal: compose kernels into authenticated request → discovery enumeration → planning
   boundary → explicit descriptions → safe SQL → fake DEV execution → validation.
 - Exclusions: dbt, GitHub, repair, real Snowflake, frontend, production/staging execution.
 - Recommended model: Grok 4.6 · Reasoning High.
+- Completion evidence: run report
+  `docs/agent/runs/DE002C/DE002C-SESSION-20260912T065651Z-73a1.md`; Alembic revision
+  `d2c8e4f1a7b3`; 145 tests passed; 74 PostgreSQL integration tests passed.
 
 ## DE 003 — Docker and CI expansion
-- `DE003` · P0 · TODO · Env CLOUD · Cloud yes · Branch `ops/DE003_ci_docker` · Deps DE 002C
+- `DE003` · P0 · DONE · Env CLOUD · Cloud yes · Branch `ops/DE003_ci_docker` · Deps DE 002C
 - Goal: Expand DE 002A unit/static CI with PostgreSQL integration, gitleaks, Docker build, compose, pre-commit and environment verification.
 - Model Composer 2.5 · Reasoning Medium · Risk Low · Duration 2–3 h · Token M · Human gate: PR + branch-protection configuration by operator.
 
