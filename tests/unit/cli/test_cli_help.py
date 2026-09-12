@@ -17,3 +17,10 @@ def test_demo_build_fixtures_command_is_registered() -> None:
     result = runner.invoke(app, ["demo", "build-fixtures", "--help"])
     assert result.exit_code == 0
     assert "profile" in result.stdout.lower()
+
+
+def test_connectors_check_command_is_registered() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["connectors", "check", "--help"])
+    assert result.exit_code == 0
+    assert "health" in result.stdout.lower() or "json" in result.stdout.lower()

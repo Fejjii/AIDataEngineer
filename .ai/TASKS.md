@@ -168,16 +168,28 @@ Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
 - Model Composer 2.5 · Reasoning Medium · Risk Low · Duration 2–3 h · Token M · Human gate: PR + branch-protection configuration by operator.
 
 ## DE 004 — Synthetic enterprise generator and fixtures (Vantara)
-- `DE004` · P0 · TODO · Env CLOUD · Cloud yes · Branch `feat/DE004_synthetic_vantara` · Deps DE 002C (parallel Lane A with DE 005)
-- Goal: seeded generator, PostgreSQL DDL/load, DuckDB fixtures v1/v2, `expected/*.json`, `pii_columns.yaml`, Snowflake loader script.
+- `DE004` · P0 · DONE (merged to `main`, 2026-09-12; merge commit
+  `3813042f4e0b34889139c453dae70c9a507e853b`; PR #12) · Env CLOUD · Cloud yes · Branch
+  `feat/DE004_synthetic_vantara` · Deps DE 002C (parallel Lane A with DE 005)
+- Goal: seeded generator, PostgreSQL DDL/load, DuckDB fixtures v1/v2, `expected/*.json`,
+  `pii_columns.yaml`, Snowflake loader script.
 - **Prerequisite (settle in the task contract before start):** scale profiles `tiny` (≈ 0.5 %, CI), `demo` (≈ 10 %, local recruiter demonstration), `full` (100 %, Snowflake scale demonstration) with invariant planted-problem rates and per-profile `expected/` — `docs/DEMO_COMPANY.md` §11, `docs/IMPLEMENTATION_PLAN.md` §3 DE 004.
 - Model Composer 2.5 · Reasoning Medium · Risk Low · Duration 4–6 h · Token L · Files `synthetic/**`, tests.
+- Completion evidence: `docs/agent/runs/DE004/DE004-SESSION-20260912T144500Z-fe83.md` and
+  R1 `docs/agent/runs/DE004/DE004-SESSION-20260912T154500Z-r1.md`.
 
 ## DE 005 — Real Snowflake connector
-- `DE005` · P0 · IN_PROGRESS · Env LOCAL (live validation) / CURSOR_CLOUD (DE005A implementation) · Cloud yes for DE005A credential-free contracts · Branch `feat/DE005_snowflake_connector` · Deps DE 002C (parallel Lane B with DE 004)
+- `DE005` · P0 · IN_PROGRESS · Env LOCAL (live validation) / CURSOR_CLOUD (DE005A implementation) · Cloud yes for DE005A credential-free contracts · Branch `feat/DE005_snowflake_connector` · Deps DE 002C (parallel Lane B with DE 004; DE004 now merged on `main`)
 - Goal: real connector, identities `snowflake_ro`/`snowflake_dev`, error mapper w/ recorded fixtures, dialect, DEV namespace, `aide connectors check`, live contract tests.
 - Model Grok 4.6 · Reasoning High · Risk Medium · Duration 4–6 h · Token L · Human gate: `REVIEW_REQUIRED` for secret entry (env var names only: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER_RO`, `SNOWFLAKE_PRIVATE_KEY_RO`, `SNOWFLAKE_USER_DEV`, `SNOWFLAKE_PRIVATE_KEY_DEV`, `SNOWFLAKE_WAREHOUSE_DEV`).
-- **DE005A (Cloud, this phase):** implement real + fake Snowflake connector code and credential-free contract tests. Live vendor validation is **out of scope**. End state: `REVIEW_REQUIRED` for DE005B live validation. Do not depend on DE004 files.
+- **DE005A (Cloud, R1 accepted):** real + fake Snowflake connector and credential-free contract
+  tests. Distinct RO/DEV identity secrets; `CURRENT_ROLE()` health; RO allow list includes
+  `VANTARA_RAW`. Live vendor validation remains **out of scope**.
+- **DE005A SYNC:** `feat/DE005_snowflake_connector` synchronized with `main` at
+  `3813042f4e0b34889139c453dae70c9a507e853b` so DE004 synthetic fixtures and DE005A connector
+  contracts coexist. Do not execute DE005B in Cloud.
+- **DE005B (pending, LOCAL):** live Snowflake validation. Not started. Do not use Snowflake
+  credentials on Cloud.
 
 ## DE 006 — Profiling and relationship inference
 - `DE006` · P0 · TODO · Env CLOUD · Cloud yes · Branch `feat/DE006_profiling` · Deps DE 002C, DE 004
