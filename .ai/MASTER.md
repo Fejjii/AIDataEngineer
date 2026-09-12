@@ -40,7 +40,8 @@ The repository, Git history, and verified execution evidence have higher authori
    - `RELEASE.md` — release / deploy validation
 6. Read `MODEL_ROUTING.md` before selecting or escalating a model.
 7. Read `ENVIRONMENTS.md` before choosing Local vs Cloud vs CI.
-8. Read `ARCHITECTURE.md`. Status is `ACCEPTED`. DE 002A is Cloud-eligible; DE 002B and DE 002C are LOCAL.
+8. Read `ARCHITECTURE.md`. Status is `ACCEPTED`. DE 002A, DE 002B, and DE 002C are
+   Cloud-eligible (DE-ADR-020; OPS004 reclassification).
 
 ## Non-negotiable rules (summary)
 

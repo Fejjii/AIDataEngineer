@@ -141,13 +141,13 @@ Env CLOUD · Cloud yes · Model GPT 5.6 Sol or Grok 4.6 · Reasoning High · Bra
 ### DE 002B — Persistence, phase-run serialization and recovery primitives
 See §5.2. PostgreSQL models/migrations and deterministic scheduler/recovery/cancellation
 kernel with fake side effects; no planner/LLM or end-to-end product flow.
-Env LOCAL · Cloud no · Model GPT 5.6 Sol · Reasoning High · Branch
+Env CLOUD · Cloud yes · Model GPT 5.6 Sol · Reasoning High · Branch
 `feat/DE002B_recovery_kernel` · Deps DE 002A merged · Gate PR review · Risk H.
 
 ### DE 002C — First executable offline safe-SQL slice
 See §5.3. Compose the accepted kernels into the bounded request → discovery planning
 boundary → safe SQL → DEV fake execution → validation flow.
-Env LOCAL · Cloud no · Model Grok 4.6 · Reasoning High · Branch
+Env CLOUD · Cloud yes · Model Grok 4.6 · Reasoning High · Branch
 `feat/DE002C_safe_sql_slice` · Deps DE 002B merged · Gate PR review · Risk M.
 
 ### DE 003 — Docker and CI expansion
@@ -240,7 +240,7 @@ Env LOCAL (may read private context) · Cloud no · Model Claude Fable 5.1 Max, 
 ### 4.1 Waves and lanes
 
 ```text
-Wave 0  (sequential)               DE 002A [CLOUD] ─► DE 002B [LOCAL] ─► DE 002C [LOCAL] ─► DE 003 [CLOUD]
+Wave 0  (sequential)               DE 002A [CLOUD] ─► DE 002B [CLOUD] ─► DE 002C [CLOUD] ─► DE 003 [CLOUD]
 Wave 1  (2 agents)                 DE 004 [CLOUD]        ∥ DE 005 [LOCAL]
 Wave 2  (2 agents)                 DE 006 [CLOUD]        ∥ DE 008a dbt connector [LOCAL]
 Wave 3  (up to 3 agents)           DE 007 [CLOUD]        ∥ DE 008b generation/exec [LOCAL] ∥ DE 011 [CLOUD, security lane]
