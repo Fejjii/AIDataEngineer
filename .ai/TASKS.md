@@ -163,7 +163,7 @@ Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
   `d2c8e4f1a7b3`; 145 tests passed; 74 PostgreSQL integration tests passed.
 
 ## DE 003 — Docker and CI expansion
-- `DE003` · P0 · IN_PROGRESS · Env CLOUD · Cloud yes · Branch `ops/DE003_ci_docker` · Deps DE 002C
+- `DE003` · P0 · DONE · Env CLOUD · Cloud yes · Branch `ops/DE003_ci_docker` · Deps DE 002C
 - Goal: Expand DE 002A unit/static CI with PostgreSQL integration, gitleaks, Docker build, compose, pre-commit and environment verification.
 - Model Composer 2.5 · Reasoning Medium · Risk Low · Duration 2–3 h · Token M · Human gate: PR + branch-protection configuration by operator.
 
