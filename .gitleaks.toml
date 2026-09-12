@@ -27,12 +27,24 @@ commits = [
 paths = ['''\.github/workflows/ci\.yml''', '''docs/agent/runs/DE003/DE003-SESSION-20260912T093000Z-bc01a094\.md''']
 regexTarget = "line"
 condition = "AND"
+regexes = ['''ci-smoke-csrf-secret-at-least-32-characters-long|ci-smoke-password-not-a-production-secret''']
+
 [[rules.allowlists]]
 description = "DE008A dbt workspace contract test fixture token scanned from fetched branch history"
 commits = [
   "5555da6218d8bc4079afaf1c1c3d8ef037aa0ced",
 ]
 paths = ['''tests/connectors/contract/test_dbt_workspace\.py''']
+regexTarget = "line"
+condition = "AND"
+regexes = ['''token=abcdef123456''']
+
+[[rules.allowlists]]
+description = "DE007 run report quoted the DE008A gitleaks finding before redaction"
+commits = [
+  "2ef9b20a411594c7159bdda1696f26033190f4ef",
+]
+paths = ['''docs/agent/runs/DE007/DE007-SESSION-20260912T185800Z-bc01a096\.md''']
 regexTarget = "line"
 condition = "AND"
 regexes = ['''token=abcdef123456''']
