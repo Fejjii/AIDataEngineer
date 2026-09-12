@@ -62,6 +62,7 @@ class DatasetProfileArtifact(FrozenModel):
     duplicate_groups_estimate: int = Field(ge=0)
     masking: MaskingState
     numeric_ranges: tuple[NumericRange, ...] = ()
+    column_types: tuple[tuple[str, str], ...] = ()
 
 
 class RelationshipEvidence(FrozenModel):
@@ -70,7 +71,7 @@ class RelationshipEvidence(FrozenModel):
     missing_count: int = Field(ge=0)
     child_distinct: int = Field(ge=0)
     name_related: bool
-    known_pair: bool = False
+    measured: bool = False
 
 
 class SampleArtifact(FrozenModel):

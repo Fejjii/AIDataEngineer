@@ -45,6 +45,7 @@ SAMPLE_PRIORITY_ADDRESSES: tuple[tuple[str, str, str], ...] = (
 
 type AssetAddress = tuple[str, str, str]
 type RelationshipPair = tuple[AssetAddress, str, AssetAddress, str]
+# Evaluation / test baseline only. Production inference must not import this list.
 KNOWN_RELATIONSHIP_PAIRS: tuple[RelationshipPair, ...] = (
     (
         (SNOWFLAKE_DATABASE, "BILLING", "CUSTOMERS"),

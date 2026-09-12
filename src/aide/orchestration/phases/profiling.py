@@ -19,7 +19,12 @@ from aide.domain.tasks import TaskTemplate
 from aide.orchestration.materialization import TemplateSpec
 from aide.profiling.budgets import TINY_OFFLINE_BUDGET, ProfilingBudget
 from aide.profiling.engine import sample_assets_for
-from aide.profiling.fixtures import CONNECTOR_ID, DEMO_SELECTED_ADDRESSES, asset_slug
+from aide.profiling.fixtures import (
+    CONNECTOR_ID,
+    DEMO_SELECTED_ADDRESSES,
+    SAMPLE_PRIORITY_ADDRESSES,
+    asset_slug,
+)
 
 PROFILING_EXIT_CRITERIA: tuple[str, ...] = (
     "dataset_profiles",
@@ -57,6 +62,25 @@ def sample_local_id(asset: AssetRef) -> str:
     return f"s_{asset_slug(asset)}"
 
 
+def allocate_profiling_slots(
+    *,
+    asset_count: int,
+    max_tasks: int,
+    sample_asset_limit: int,
+) -> tuple[int, int]:
+    """Return (profile_count, sample_count). Always keeps >=1 profile when max_tasks>=2."""
+    if max_tasks < 2:
+        raise ValueError("PROFILING requires at least one profile task and infer_relationships")
+    sample_limit = min(sample_asset_limit, asset_count)
+    profile_slots = max_tasks - 1 - sample_limit
+    if profile_slots < 1:
+        sample_limit = max(0, max_tasks - 2)
+        profile_slots = max_tasks - 1 - sample_limit
+    profile_slots = max(1, min(profile_slots, asset_count))
+    sample_limit = min(sample_limit, max(0, max_tasks - 1 - profile_slots))
+    return profile_slots, sample_limit
+
+
 def _capability_timeout(capability_id: str) -> tuple[int, int]:
     spec = kernel_registry().get(capability_id, 1)
     return spec.timeout_seconds, spec.retry.max_attempts
@@ -72,15 +96,15 @@ def build_profiling_templates(
     """Create bounded, sorted PROFILING templates. Profiles selected assets only."""
     limits = budget or TINY_OFFLINE_BUDGET
     assets = tuple(sorted(selected, key=lambda item: item.address))
-    if max_tasks < 2:
-        raise ValueError("PROFILING requires at least one profile task and infer_relationships")
-    sample_limit = min(limits.sample_asset_limit, len(assets))
-    profile_slots = max_tasks - 1 - sample_limit
-    if profile_slots < 1:
-        sample_limit = max(0, max_tasks - 1)
-        profile_slots = max_tasks - 1 - sample_limit
+    profile_slots, sample_limit = allocate_profiling_slots(
+        asset_count=len(assets),
+        max_tasks=max_tasks,
+        sample_asset_limit=limits.sample_asset_limit,
+    )
     profile_assets = assets[:profile_slots]
-    sample_pool = sample_assets_for(profile_assets, limit=sample_limit)
+    sample_pool = sample_assets_for(
+        profile_assets, limit=sample_limit, priority=SAMPLE_PRIORITY_ADDRESSES
+    )
     profile_timeout, profile_attempts = _capability_timeout("profile_dataset")
     infer_timeout, infer_attempts = _capability_timeout("infer_relationships")
     sample_timeout, sample_attempts = _capability_timeout("sample_dataset")

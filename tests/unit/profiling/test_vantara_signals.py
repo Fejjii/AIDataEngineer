@@ -7,7 +7,12 @@ import pytest
 from aide.connectors.snowflake.fake import FakeSnowflakeConnector
 from aide.profiling.artifacts import ProfilingFact, ProfilingRunResult
 from aide.profiling.engine import profile_selected_assets
-from aide.profiling.fixtures import TINY_FIXTURE_ROOT, demo_selected_assets
+from aide.profiling.fixtures import (
+    KNOWN_RELATIONSHIP_PAIRS,
+    SAMPLE_PRIORITY_ADDRESSES,
+    TINY_FIXTURE_ROOT,
+    demo_selected_assets,
+)
 from aide.profiling.masking import looks_like_raw_email, looks_like_raw_phone
 
 
@@ -15,6 +20,15 @@ def _fact(result: ProfilingRunResult, fact_id: str) -> ProfilingFact:
     match = next((item for item in result.summary.facts if item.fact_id == fact_id), None)
     assert match is not None, f"missing fact {fact_id}"
     return match
+
+
+async def _run(connector: FakeSnowflakeConnector, version: str) -> ProfilingRunResult:
+    return await profile_selected_assets(
+        connector,
+        demo_selected_assets(),
+        fixture_version=version,
+        sample_priority=SAMPLE_PRIORITY_ADDRESSES,
+    )
 
 
 def _first_contact_pii() -> tuple[str, str]:
@@ -27,7 +41,7 @@ def _first_contact_pii() -> tuple[str, str]:
 
 @pytest.mark.asyncio
 async def test_p1_duplicate_domain_evidence(vantara_v2: FakeSnowflakeConnector) -> None:
-    result = await profile_selected_assets(vantara_v2, demo_selected_assets(), fixture_version="v2")
+    result = await _run(vantara_v2, "v2")
     fact = _fact(result, "P1_duplicate_accounts")
     assert isinstance(fact.value, float)
     assert fact.value < 1.0
@@ -44,16 +58,18 @@ async def test_p1_duplicate_domain_evidence(vantara_v2: FakeSnowflakeConnector) 
 
 @pytest.mark.asyncio
 async def test_p3_crosswalk_and_orphan_relationships(vantara_v2: FakeSnowflakeConnector) -> None:
-    result = await profile_selected_assets(vantara_v2, demo_selected_assets(), fixture_version="v2")
+    result = await _run(vantara_v2, "v2")
     p3 = _fact(result, "P3_crm_billing_crosswalk")
     assert isinstance(p3.value, float)
     assert 0.9 <= p3.value < 1.0
     crosswalk = next(
         item
         for item in result.relationships
-        if item.known_pair
+        if item.measured
         and item.candidate.from_asset.address == ("VANTARA_RAW", "CRM", "ACCOUNT_CROSSWALK")
+        and item.candidate.from_columns == ("BILLING_CUSTOMER_ID",)
         and item.candidate.to_asset.address == ("VANTARA_RAW", "BILLING", "CUSTOMERS")
+        and item.candidate.to_columns == ("CUSTOMER_ID",)
     )
     assert crosswalk.candidate.inclusion_ratio <= 1.0
     assert crosswalk.candidate.confidence >= crosswalk.candidate.inclusion_ratio
@@ -70,9 +86,8 @@ async def test_p3_crosswalk_and_orphan_relationships(vantara_v2: FakeSnowflakeCo
 async def test_p10_v1_unique_and_v2_duplicate_payments(
     vantara_v1: FakeSnowflakeConnector, vantara_v2: FakeSnowflakeConnector
 ) -> None:
-    selected = demo_selected_assets()
-    v1 = await profile_selected_assets(vantara_v1, selected, fixture_version="v1")
-    v2 = await profile_selected_assets(vantara_v2, selected, fixture_version="v2")
+    v1 = await _run(vantara_v1, "v1")
+    v2 = await _run(vantara_v2, "v2")
     grain_v1 = _fact(v1, "P10_payment_grain")
     grain_v2 = _fact(v2, "P10_payment_grain")
     assert grain_v1.value == 1.0
@@ -89,10 +104,18 @@ async def test_p10_v1_unique_and_v2_duplicate_payments(
         if item.columns == ("INVOICE_ID", "PAYMENT_REF")
     )
     assert dup.extra_row_estimate > 0
+    assert not any(
+        key.columns == ("INVOICE_ID", "PAYMENT_REF") for key in payments_v2.candidate_keys
+    )
     payments_v1 = next(
         item
         for item in v1.profiles
         if item.asset.address == ("VANTARA_RAW", "PAYMENTS", "PAYMENTS")
+    )
+    assert any(key.columns == ("INVOICE_ID", "PAYMENT_REF") for key in payments_v1.candidate_keys)
+    assert any(
+        item.columns == ("INVOICE_ID", "PAYMENT_REF") and item.is_candidate is False
+        for item in payments_v2.key_evidence
     )
     assert payments_v1.row_count < payments_v2.row_count
 
@@ -100,7 +123,7 @@ async def test_p10_v1_unique_and_v2_duplicate_payments(
 @pytest.mark.asyncio
 async def test_pii_is_masked_in_samples_and_top_values(vantara_v2: FakeSnowflakeConnector) -> None:
     email, phone = _first_contact_pii()
-    result = await profile_selected_assets(vantara_v2, demo_selected_assets(), fixture_version="v2")
+    result = await _run(vantara_v2, "v2")
     encoded = result.model_dump_json()
     assert email not in encoded
     assert phone not in encoded
@@ -124,7 +147,7 @@ async def test_pii_is_masked_in_samples_and_top_values(vantara_v2: FakeSnowflake
 async def test_candidate_keys_and_relationship_confidence(
     vantara_v2: FakeSnowflakeConnector,
 ) -> None:
-    result = await profile_selected_assets(vantara_v2, demo_selected_assets(), fixture_version="v2")
+    result = await _run(vantara_v2, "v2")
     invoices = next(
         item
         for item in result.profiles
@@ -135,14 +158,25 @@ async def test_candidate_keys_and_relationship_confidence(
         assert 0 <= item.candidate.confidence <= 1
         assert 0 <= item.candidate.inclusion_ratio <= 1
         assert item.reason
-    known = [item for item in result.relationships if item.known_pair]
-    assert known
-    assert all(item.candidate.confidence >= 0 for item in known)
+    measured = [item for item in result.relationships if item.measured]
+    assert measured
+    assert all(item.candidate.confidence >= 0 for item in measured)
+    discovered = {
+        (
+            item.candidate.from_asset.address,
+            item.candidate.from_columns[0],
+            item.candidate.to_asset.address,
+            item.candidate.to_columns[0],
+        )
+        for item in measured
+    }
+    for from_addr, from_col, to_addr, to_col in KNOWN_RELATIONSHIP_PAIRS:
+        assert (from_addr, from_col, to_addr, to_col) in discovered
 
 
 @pytest.mark.asyncio
 async def test_does_not_profile_excluded_assets(vantara_v2: FakeSnowflakeConnector) -> None:
-    result = await profile_selected_assets(vantara_v2, demo_selected_assets(), fixture_version="v2")
+    result = await _run(vantara_v2, "v2")
     profiled = {item.asset.address for item in result.profiles}
     assert ("VANTARA_RAW", "CRM", "OPPORTUNITIES") not in profiled
     assert ("VANTARA_RAW", "SUPPORT", "TICKETS") not in profiled
@@ -153,3 +187,4 @@ async def test_does_not_profile_excluded_assets(vantara_v2: FakeSnowflakeConnect
     assert ("VANTARA_RAW", "CRM", "CONTACTS") in sampled
     assert ("VANTARA_RAW", "PAYMENTS", "PAYMENTS") in sampled
     assert all(item.row_count <= 20 for item in result.samples)
+    assert result.summary.excluded_addresses == ()

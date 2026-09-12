@@ -40,14 +40,8 @@ from aide.profiling.budgets import (
     ProfilingBudget,
     ProfilingBudgetExceeded,
 )
-from aide.profiling.fixtures import (
-    DEMO_SELECTED_ADDRESSES,
-    EXCLUDED_DEMO_ADDRESSES,
-    KNOWN_RELATIONSHIP_PAIRS,
-    SAMPLE_PRIORITY_ADDRESSES,
-    grain_columns,
-    load_pii_columns,
-)
+from aide.profiling.fixtures import grain_columns, load_pii_columns
+from aide.profiling.join_candidates import INCLUSION_FLOOR, select_join_candidates_for_measurement
 from aide.profiling.masking import (
     column_is_sensitive,
     jsonable,
@@ -56,7 +50,6 @@ from aide.profiling.masking import (
     mask_profile_columns,
     mask_row,
 )
-from aide.profiling.semantics import names_related
 from aide.profiling.sql_templates import (
     composite_uniqueness_sql,
     duplicate_group_sql,
@@ -68,7 +61,6 @@ from aide.profiling.warehouse import WarehouseReadPort, upper_row
 
 PROFILE_NAMESPACE = UUID("6ba7b810-9dad-11d1-80b4-00000000de06")
 CANDIDATE_UNIQUENESS = 0.99
-DEMO_DATABASE = DEMO_SELECTED_ADDRESSES[0][0]
 
 
 def _stable_uuid(*parts: str) -> UUID:
@@ -131,11 +123,14 @@ def sample_assets_for(
     selected: tuple[AssetRef, ...],
     *,
     limit: int,
+    priority: tuple[tuple[str, ...], ...] = (),
 ) -> tuple[AssetRef, ...]:
+    if limit <= 0:
+        return ()
     selected_keys = {asset.address for asset in selected}
     ordered: list[AssetRef] = []
     by_address = {asset.address: asset for asset in selected}
-    for address in SAMPLE_PRIORITY_ADDRESSES:
+    for address in priority:
         if address in selected_keys:
             ordered.append(by_address[address])
         if len(ordered) >= limit:
@@ -157,6 +152,8 @@ class ProfilingEngine:
         budget: ProfilingBudget | None = None,
         connector_id: str = "snowflake_ro",
         context: CallContext | None = None,
+        excluded_addresses: tuple[tuple[str, ...], ...] = (),
+        sample_priority: tuple[tuple[str, ...], ...] = (),
     ) -> None:
         self._warehouse = warehouse
         self._fixture_version = fixture_version
@@ -166,6 +163,8 @@ class ProfilingEngine:
         self._tracker = BudgetTracker(self._budget)
         self._pii_columns = load_pii_columns()
         self._call_seq = 0
+        self._excluded_addresses = excluded_addresses
+        self._sample_priority = sample_priority
 
     async def run(self, selected: tuple[AssetRef, ...]) -> ProfilingRunResult:
         assets = tuple(sorted(selected, key=lambda item: item.address))
@@ -173,7 +172,9 @@ class ProfilingEngine:
         for asset in assets:
             profiles.append(await self._profile_asset(asset))
         relationships = await self._infer_relationships(assets, tuple(profiles))
-        sample_pool = sample_assets_for(assets, limit=self._budget.sample_asset_limit)
+        sample_pool = sample_assets_for(
+            assets, limit=self._budget.sample_asset_limit, priority=self._sample_priority
+        )
         samples = await self._sample_assets(sample_pool)
         facts = _facts(self._fixture_version, tuple(profiles), tuple(relationships))
         masking = MaskingState(
@@ -187,7 +188,7 @@ class ProfilingEngine:
             fixture_version=self._fixture_version,
             connector_id=self._connector_id,
             assets=assets,
-            excluded_addresses=EXCLUDED_DEMO_ADDRESSES,
+            excluded_addresses=self._excluded_addresses,
             facts=facts,
             relationship_count=len(relationships),
             sample_asset_count=len(samples),
@@ -278,7 +279,9 @@ class ProfilingEngine:
         columns = mask_profile_columns(profiled.columns, pii_columns=self._pii_columns)
         extras = await self._key_evidence(asset, columns)
         key_evidence, duplicate_evidence, extra_keys, extra_groups, ranges = extras
-        candidate_keys = _merge_candidate_keys(profiled.candidate_keys, extra_keys)
+        candidate_keys = _advertised_candidate_keys(
+            profiled.candidate_keys, extra_keys, key_evidence
+        )
         duplicate_groups = max(profiled.duplicate_groups_estimate, extra_groups)
         artifact = DatasetProfileArtifact(
             fixture_version=self._fixture_version,
@@ -300,6 +303,7 @@ class ProfilingEngine:
                 raw_pii_persisted=False,
             ),
             numeric_ranges=ranges,
+            column_types=tuple((spec.name, spec.data_type) for spec in described.columns),
         )
         return artifact
 
@@ -368,8 +372,8 @@ class ProfilingEngine:
             )
             if uniqueness >= CANDIDATE_UNIQUENESS:
                 extra_keys.append(CandidateKey(columns=grain, uniqueness_ratio=uniqueness))
-        if asset.address[1:] == ("PAYMENTS", "PAYMENTS"):
-            pair = ("INVOICE_ID", "PAYMENT_REF")
+        pair = ("INVOICE_ID", "PAYMENT_REF")
+        if all(name in by_name for name in pair):
             stats = await self._scalar(composite_uniqueness_sql(asset.address, pair))
             row_count = max(_as_int(stats.get("ROW_COUNT")), 1)
             distinct = _as_int(stats.get("DISTINCT_GROUPS"))
@@ -386,7 +390,8 @@ class ProfilingEngine:
                     reason="business payment grain INVOICE_ID+PAYMENT_REF",
                 )
             )
-            extra_keys.append(CandidateKey(columns=pair, uniqueness_ratio=uniqueness))
+            if uniqueness >= CANDIDATE_UNIQUENESS:
+                extra_keys.append(CandidateKey(columns=pair, uniqueness_ratio=uniqueness))
             duplicates.append(
                 DuplicateEvidence(
                     columns=pair,
@@ -454,7 +459,7 @@ class ProfilingEngine:
         profiles: tuple[DatasetProfileArtifact, ...],
     ) -> tuple[RelationshipEvidence, ...]:
         self._tracker.charge_query()
-        inferred = await self._warehouse.infer_relationships(
+        await self._warehouse.infer_relationships(
             InferRelationshipsInput(
                 assets=assets,
                 profiles=tuple(item.profile_id for item in profiles),
@@ -463,83 +468,64 @@ class ProfilingEngine:
             ),
             self._call_context(),
         )
-        profile_by_address = {item.asset.address: item for item in profiles}
-        selected = {asset.address for asset in assets}
-        evidence_by_key: dict[tuple[Any, ...], RelationshipEvidence] = {}
-        for candidate in inferred.candidates:
-            key = (
-                candidate.from_asset.address,
-                candidate.from_columns,
-                candidate.to_asset.address,
-                candidate.to_columns,
-            )
-            related = names_related(
-                candidate.from_columns[0] if candidate.from_columns else "",
-                candidate.to_columns[0] if candidate.to_columns else "",
-            )
-            evidence_by_key[key] = RelationshipEvidence(
-                candidate=candidate,
-                reason=(
-                    f"inclusion_ratio={candidate.inclusion_ratio:.4f} "
-                    f"cardinality={candidate.cardinality} "
-                    f"compatible ID/CODE columns"
-                ),
-                missing_count=0,
-                child_distinct=0,
-                name_related=related,
-                known_pair=False,
-            )
-        for from_addr, from_col, to_addr, to_col in KNOWN_RELATIONSHIP_PAIRS:
-            if from_addr not in selected or to_addr not in selected:
-                continue
+        evidence: list[RelationshipEvidence] = []
+        for spec in select_join_candidates_for_measurement(
+            profiles, max_pairs=self._budget.max_pairs
+        ):
             self._tracker.charge_pair()
-            stats = await self._scalar(inclusion_sql(from_addr, from_col, to_addr, to_col))
+            stats = await self._scalar(
+                inclusion_sql(
+                    spec.from_asset.address,
+                    spec.from_column,
+                    spec.to_asset.address,
+                    spec.to_column,
+                )
+            )
             child_distinct = _as_int(stats.get("CHILD_DISTINCT"))
             missing = _as_int(stats.get("MISSING_IN_PARENT"))
             if child_distinct == 0:
                 inclusion = 0.0
             else:
                 inclusion = max(0.0, (child_distinct - missing) / child_distinct)
-            from_asset = profile_by_address[from_addr].asset
-            to_asset = profile_by_address[to_addr].asset
-            from_profile = profile_by_address[from_addr]
-            uniqueness = 0.0
-            for key_ev in from_profile.key_evidence:
-                if key_ev.columns == (from_col,):
-                    uniqueness = key_ev.uniqueness_ratio
-                    break
+            if inclusion < INCLUSION_FLOOR and not spec.name_related:
+                continue
+            uniqueness = spec.from_uniqueness
             cardinality: str = "N:M"
             if inclusion >= 0.99 and uniqueness >= CANDIDATE_UNIQUENESS:
                 cardinality = "1:1"
             elif inclusion >= 0.99:
                 cardinality = "1:N"
-            related = names_related(from_col, to_col)
-            confidence = round(min(1.0, inclusion + (0.02 if related else 0.0)), 4)
+            bonus = 0.02 if spec.name_related else 0.0
+            if spec.to_uniqueness >= CANDIDATE_UNIQUENESS:
+                bonus += 0.01
+            confidence = round(min(1.0, inclusion + bonus), 4)
             candidate = RelationshipCandidate(
-                from_asset=from_asset,
-                from_columns=(from_col,),
-                to_asset=to_asset,
-                to_columns=(to_col,),
+                from_asset=spec.from_asset,
+                from_columns=(spec.from_column,),
+                to_asset=spec.to_asset,
+                to_columns=(spec.to_column,),
                 inclusion_ratio=round(inclusion, 6),
                 cardinality=cardinality,  # type: ignore[arg-type]
                 confidence=confidence,
             )
+            parent = ".".join(spec.to_asset.address)
             reason = (
-                f"inclusion_ratio={inclusion:.4f}; {missing} distinct {from_col} "
-                f"values missing from {'.'.join(to_addr)}.{to_col}"
+                f"inclusion_ratio={inclusion:.4f}; {missing} distinct {spec.from_column} "
+                f"values missing from {parent}.{spec.to_column}"
             )
-            key = (from_addr, (from_col,), to_addr, (to_col,))
-            evidence_by_key[key] = RelationshipEvidence(
-                candidate=candidate,
-                reason=reason,
-                missing_count=missing,
-                child_distinct=child_distinct,
-                name_related=related,
-                known_pair=True,
+            evidence.append(
+                RelationshipEvidence(
+                    candidate=candidate,
+                    reason=reason,
+                    missing_count=missing,
+                    child_distinct=child_distinct,
+                    name_related=spec.name_related,
+                    measured=True,
+                )
             )
-        ordered = tuple(
+        return tuple(
             sorted(
-                evidence_by_key.values(),
+                evidence,
                 key=lambda item: (
                     item.candidate.from_asset.address,
                     item.candidate.from_columns,
@@ -548,7 +534,6 @@ class ProfilingEngine:
                 ),
             )
         )
-        return ordered
 
     async def _sample_assets(self, assets: tuple[AssetRef, ...]) -> tuple[SampleArtifact, ...]:
         samples: list[SampleArtifact] = []
@@ -600,14 +585,43 @@ def _merge_candidate_keys(
     return tuple(sorted(seen.values(), key=lambda item: item.columns))
 
 
+def _advertised_candidate_keys(
+    base: tuple[CandidateKey, ...],
+    extra: tuple[CandidateKey, ...],
+    evidence: tuple[KeyEvidence, ...],
+) -> tuple[CandidateKey, ...]:
+    """Keep CandidateKey rows only when uniqueness meets the candidate threshold."""
+    merged = _merge_candidate_keys(base, extra)
+    evidence_by_cols = {item.columns: item for item in evidence}
+    advertised: list[CandidateKey] = []
+    for key in merged:
+        measured = evidence_by_cols.get(key.columns)
+        uniqueness = measured.uniqueness_ratio if measured is not None else key.uniqueness_ratio
+        is_candidate = (
+            measured.is_candidate if measured is not None else uniqueness >= CANDIDATE_UNIQUENESS
+        )
+        if not is_candidate or uniqueness < CANDIDATE_UNIQUENESS:
+            continue
+        advertised.append(key)
+    return tuple(advertised)
+
+
+def _profile_named(
+    profiles: tuple[DatasetProfileArtifact, ...], schema: str, table: str
+) -> DatasetProfileArtifact | None:
+    return next(
+        (item for item in profiles if item.asset.address[1:] == (schema, table)),
+        None,
+    )
+
+
 def _facts(
     fixture_version: str,
     profiles: tuple[DatasetProfileArtifact, ...],
     relationships: tuple[RelationshipEvidence, ...],
 ) -> tuple[ProfilingFact, ...]:
     facts: list[ProfilingFact] = []
-    by_address = {item.asset.address: item for item in profiles}
-    accounts = by_address.get((DEMO_DATABASE, "CRM", "ACCOUNTS"))
+    accounts = _profile_named(profiles, "CRM", "ACCOUNTS")
     if accounts is not None:
         domain = next(
             (item for item in accounts.duplicate_evidence if "WEBSITE_DOMAIN" in item.columns),
@@ -634,8 +648,8 @@ def _facts(
                 ),
             )
         )
-    customers = by_address.get((DEMO_DATABASE, "BILLING", "CUSTOMERS"))
-    contacts = by_address.get((DEMO_DATABASE, "CRM", "CONTACTS"))
+    customers = _profile_named(profiles, "BILLING", "CUSTOMERS")
+    contacts = _profile_named(profiles, "CRM", "CONTACTS")
     if customers is not None:
         crm_col = next((col for col in customers.columns if col.name == "CRM_ACCOUNT_ID"), None)
         facts.append(
@@ -652,9 +666,9 @@ def _facts(
         (
             item
             for item in relationships
-            if item.candidate.from_asset.address == (DEMO_DATABASE, "BILLING", "CUSTOMERS")
+            if item.candidate.from_asset.address[1:] == ("BILLING", "CUSTOMERS")
             and item.candidate.from_columns == ("CUSTOMER_ID",)
-            and item.candidate.to_asset.address == (DEMO_DATABASE, "CRM", "ACCOUNT_CROSSWALK")
+            and item.candidate.to_asset.address[1:] == ("CRM", "ACCOUNT_CROSSWALK")
         ),
         None,
     )
@@ -685,9 +699,9 @@ def _facts(
         (
             item
             for item in relationships
-            if item.candidate.from_asset.address == (DEMO_DATABASE, "BILLING", "INVOICES")
+            if item.candidate.from_asset.address[1:] == ("BILLING", "INVOICES")
             and item.candidate.from_columns == ("CUSTOMER_ID",)
-            and item.candidate.to_asset.address == (DEMO_DATABASE, "BILLING", "CUSTOMERS")
+            and item.candidate.to_asset.address[1:] == ("BILLING", "CUSTOMERS")
         ),
         None,
     )
@@ -702,7 +716,7 @@ def _facts(
                 detail=unknown.reason,
             )
         )
-    payments = by_address.get((DEMO_DATABASE, "PAYMENTS", "PAYMENTS"))
+    payments = _profile_named(profiles, "PAYMENTS", "PAYMENTS")
     if payments is not None:
         grain = next(
             (
@@ -746,10 +760,14 @@ async def profile_selected_assets(
     *,
     fixture_version: str,
     budget: ProfilingBudget | None = None,
+    excluded_addresses: tuple[tuple[str, ...], ...] = (),
+    sample_priority: tuple[tuple[str, ...], ...] = (),
 ) -> ProfilingRunResult:
     engine = ProfilingEngine(
         warehouse,
         fixture_version=fixture_version,
         budget=budget,
+        excluded_addresses=excluded_addresses,
+        sample_priority=sample_priority,
     )
     return await engine.run(selected)
