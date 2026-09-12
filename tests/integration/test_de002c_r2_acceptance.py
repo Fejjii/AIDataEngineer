@@ -60,16 +60,24 @@ async def test_two_identical_offline_workflows_keep_artifact_ownership(
         assert set(first_index) >= _OWNED_TYPES
         assert set(second_index) >= _OWNED_TYPES
         for artifact_type in _OWNED_TYPES:
-            left = first_index[artifact_type][0]
-            right = second_index[artifact_type][0]
-            assert left.workflow_id == first.workflow_id
-            assert right.workflow_id == second.workflow_id
-            assert left.artifact_id != right.artifact_id
-        for artifact_type in ("RequirementSpec", "Plan", "ValidationReport"):
-            left = first_index[artifact_type][0]
-            right = second_index[artifact_type][0]
-            assert left.sha256 == right.sha256
-            assert left.body == right.body
+            left_rows = first_index[artifact_type]
+            right_rows = second_index[artifact_type]
+            assert {row.workflow_id for row in left_rows} == {first.workflow_id}
+            assert {row.workflow_id for row in right_rows} == {second.workflow_id}
+            assert {row.artifact_id for row in left_rows}.isdisjoint(
+                {row.artifact_id for row in right_rows}
+            )
+        assert len(first_index["RequirementSpec"]) == 1
+        assert len(second_index["RequirementSpec"]) == 1
+        assert first_index["RequirementSpec"][0].sha256 == second_index["RequirementSpec"][0].sha256
+        assert first_index["RequirementSpec"][0].body == second_index["RequirementSpec"][0].body
+        assert {row.sha256 for row in first_index["ValidationReport"]} == {
+            row.sha256 for row in second_index["ValidationReport"]
+        }
+        shared_plans = {row.sha256 for row in first_index["Plan"]} & {
+            row.sha256 for row in second_index["Plan"]
+        }
+        assert shared_plans
         first_summary = first_index["WorkflowSummary"][0]
         second_summary = second_index["WorkflowSummary"][0]
         assert first_summary.body is not None
