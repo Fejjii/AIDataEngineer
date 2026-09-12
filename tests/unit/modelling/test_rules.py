@@ -100,6 +100,7 @@ def test_v2_misaligned_many_systems() -> None:
     decision = _decide(signals)
     assert decision.integration_layer.rule == "V2"
     assert decision.approval_required is True
+    assert "V2" in decision.approval_reasons
 
 
 def test_v3_otherwise_no_vault() -> None:
@@ -148,6 +149,8 @@ def test_p4_snowflake_schema_sets_approval() -> None:
     decision = _decide(signals, context=ctx)
     assert "P4" in decision.rule_ids
     assert decision.approval_required is True
+    assert "P4" in decision.approval_reasons
+    assert "cost_class" not in decision.approval_reasons
 
 
 def test_p5_unknown_consumers() -> None:

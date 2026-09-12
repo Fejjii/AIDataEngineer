@@ -48,3 +48,13 @@ paths = ['''docs/agent/runs/DE007/DE007-SESSION-20260912T185800Z-bc01a096\.md'''
 regexTarget = "line"
 condition = "AND"
 regexes = ['''token=abcdef123456''']
+
+[[rules.allowlists]]
+description = "DE008A R1 run report quoted a historical generic-api-key fixture"
+commits = [
+  "9c961285b6ebe4bb43b2fa35895a2b4ce7b06ca2",
+]
+paths = ['''docs/agent/runs/DE008A/DE008A-R1-SESSION-20260912T202736Z-bc01a096fe\.md''']
+regexTarget = "line"
+condition = "AND"
+regexes = ['''token=abcdef123456''']

@@ -128,6 +128,17 @@ def test_explicit_warehouse_cost_class_requires_approval() -> None:
     assert "cost_class" in decision.approval_reasons
 
 
+def test_explicit_warehouse_cost_class_xl_requires_approval() -> None:
+    from aide.modelling.vantara import vantara_modelling_context
+
+    ctx = vantara_modelling_context().model_copy(update={"estimated_warehouse_cost_class": "XL"})
+    decision = vantara_decision(context=ctx)
+    assert decision.estimated_cost_class == "XL"
+    assert decision.signals.volume_class == "M"
+    assert decision.approval_required is True
+    assert "cost_class" in decision.approval_reasons
+
+
 def test_medallion_naming_keeps_canonical_structure() -> None:
     from aide.modelling.context import OrgModellingConfig
     from aide.modelling.vantara import vantara_modelling_context
