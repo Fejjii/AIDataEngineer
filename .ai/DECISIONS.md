@@ -162,11 +162,11 @@ emitter, retry summary).
 - **Rejected:** prompt-eval frameworks as primary; LLM judges.
 
 ## DE-ADR-020 — Local vs Cloud development boundaries for product work
-- **Decision:** Cloud-eligible iff tracked state + fakes/fixtures suffice + no credentials + declared files + isolated branch. **DE 002A is CLOUD** (pure contracts + minimal CI; no credentials or local persistence). **DE 002B and DE 002C remain LOCAL.** Other LOCAL: DE 005, 008, 012-live, 017, 018, 019. Architecture fully in tracked `docs/`.
+- **Decision:** Cloud-eligible iff tracked state + fakes/fixtures suffice + no credentials + declared files + isolated branch. **DE 002A, DE 002B, and DE 002C are CLOUD** (DE 002B/C reclassified by OPS004 after OPS003 validated the saved Cloud environment with localhost PostgreSQL 16; no vendor credentials). Other LOCAL: DE 005, 008, 012-live, 017, 018, 019. Architecture fully in tracked `docs/`. Full record: `docs/adr/DE-ADR-020-local-vs-cloud-development.md`.
 
 ## DE-ADR-021 — Parallel development lanes and unlock milestones
 - **Decision:** Sequential foundation is DE 002A kernel+CI (CLOUD) → DE 002B recovery persistence
-  (LOCAL) → DE 002C slice (LOCAL) → DE 003 CI expansion (CLOUD). Two agents only after all merge.
+  (CLOUD) → DE 002C slice (CLOUD) → DE 003 CI expansion (CLOUD). Two agents only after all merge.
 
 ## DE-ADR-022 — In-process worker with PostgreSQL task queue
 - **Decision:** `SKIP LOCKED` plus renewable lease/claim epoch; owner+epoch finalization;
