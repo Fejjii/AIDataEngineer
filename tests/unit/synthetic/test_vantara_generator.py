@@ -10,7 +10,6 @@ from pathlib import Path
 
 import duckdb
 import pytest
-import yaml
 from synthetic.vantara.build import build_fixtures
 from synthetic.vantara.config import (
     DEFAULT_SEED,
@@ -114,9 +113,10 @@ def test_duplicate_account_rate(profile: Profile = Profile.TINY) -> None:
 
 def test_pii_metadata_file() -> None:
     assert PII_PATH.is_file()
-    payload = yaml.safe_load(PII_PATH.read_text(encoding="utf-8"))
-    assert payload["company"] == "vantara"
-    assert any(item["column"] == "EMAIL" for item in payload["columns"])
+    content = PII_PATH.read_text(encoding="utf-8")
+    assert "company: vantara" in content
+    assert "column: EMAIL" in content
+    assert "pii_type: email" in content
 
 
 def test_expected_metadata_files() -> None:
@@ -148,8 +148,9 @@ def test_csv_fixture_integrity() -> None:
         invoices_csv = root / "v1" / "csv" / "billing" / "invoices.csv"
         with invoices_csv.open(encoding="utf-8") as handle:
             reader = csv.DictReader(handle)
+            fieldnames: tuple[str, ...] = tuple(reader.fieldnames or ())
             rows = list(reader)
-            assert "INVOICE_STATUS" in reader.fieldnames
+            assert "INVOICE_STATUS" in fieldnames
             assert len(rows) > 0
         lines_csv = root / "v1" / "csv" / "billing" / "invoice_lines.csv"
         with lines_csv.open(encoding="utf-8") as handle:
