@@ -26,7 +26,7 @@ def _table_counts(dataset: GeneratedDataset) -> dict[str, int]:
         if key.endswith("_v2"):
             continue
         if key.endswith("_v1"):
-            counts["billing.invoices"] = len(rows)
+            counts[key.removesuffix("_v1")] = len(rows)
         else:
             counts[key] = len(rows)
     return counts
@@ -55,8 +55,9 @@ def build_expected_metadata(
         },
         "planted_problems": {
             "duplicate_account_rate_target": DUPLICATE_ACCOUNT_RATE,
-            "duplicate_account_rate_actual": float(dataset.metrics.get("duplicate_account_rows", 0))
-            / max(counts.get("crm.accounts", 1), 1),
+            "duplicate_account_rate_actual": dataset.metrics.get(
+                "normalized_domain_duplicate_rate"
+            ),
             "orphan_contact_rate_target": ORPHAN_CONTACT_RATE,
             "orphan_contact_rate_actual": dataset.metrics.get("orphan_contact_rate"),
             "crosswalk_missing_rate_target": CROSSWALK_MISSING_RATE,

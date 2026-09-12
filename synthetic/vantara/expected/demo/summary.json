@@ -1,40 +1,40 @@
 {
-  "actual_total_rows": 709782,
-  "build_seconds": 8.753,
+  "actual_total_rows": 708087,
+  "build_seconds": 8.976,
   "file_hashes": {
     "csv": {
       "v1": {
-        "billing/customers.csv": "a175aee4ea40e13fd559eb09f1b0309f6cadb735b7d3f03578134131a2fe56d0",
-        "billing/invoice_lines.csv": "e11803f9c387016f0807f17325d53114f28f74002a5b76704a1d2eede8729bdc",
-        "billing/invoices.csv": "42a22a54d2cadddbde7ece194ba74520b50f07f5a5009977d78a2dbd2089ead3",
-        "billing/subscriptions.csv": "d459842f01cd14a0f4356a453395b90d747fed2c9781814d1cc13e9be361f461",
-        "crm/account_crosswalk.csv": "507e71c0d277acd31bc3cd52321b5094c7f07e50d32000aab779e839df007f0a",
-        "crm/accounts.csv": "73768a1c2652d01b2fd09321b593956abc8d25a456eecc72368ac1e568b1bc43",
-        "crm/contacts.csv": "bd10e039eecf3515defb537183c29bb41e03a408d0e174ec0ff5bb9412d0433a",
-        "crm/opportunities.csv": "7a9dceca250f0f954a2c5549fffa6060d365ea19e8fbfd78064dd443666c60c2",
-        "payments/payments.csv": "410a51e6f9dfeca9add17fe57b76c6efecd1f9a1180bf5a4af54625f54ed95a7",
-        "payments/refunds.csv": "8cefc6141481f6835eb98da0366debf74702d8a4da4667bc52fac59410471b97",
+        "billing/customers.csv": "2ad65513ab9f7014c36ec74e89a19c7cd2aa1c6a57d14de6b2af115aa8d66d14",
+        "billing/invoice_lines.csv": "a1ea598d0d492e0b0ead6ac2aa479e8fa0180f1bcb802019ad72e86f8159bca9",
+        "billing/invoices.csv": "72aaf2489d1260de08da1969992fab0397e85106384c10ec306377d55faf72af",
+        "billing/subscriptions.csv": "6531b4ea2e9b5d4f39ef435323db6c2293b07dcb4e746ee24a5fd8c5f0db20af",
+        "crm/account_crosswalk.csv": "dd58365c1025f005928d52758865d09e67491b5946472242df987911cd002418",
+        "crm/accounts.csv": "0ef4c9a7225239e0726991559792fdd9e972d744fba7a529c361e70f8cb95fa4",
+        "crm/contacts.csv": "79768778f6f5def1c5948133f2e7fbeb84ea22757f3e16b555ab6f8659cc95aa",
+        "crm/opportunities.csv": "a953e3361623f6b36cdcbcdcca8eaf0042cab855376920a9b7fb85e51ede2a21",
+        "payments/payments.csv": "59efd03b31f13df992f6ccb86c32e7da9b95e0a437555b3d6ce866d5e55d2091",
+        "payments/refunds.csv": "5d2dd63d810adf2d81268c66a843a291f7df0a2b3d8c70aee1e45a64b8f85d68",
         "product/plans.csv": "c8eff371ad4a824b2f29a1959c2b344ea853df80f7b96f34e6385cf008b4dc76",
-        "support/tickets.csv": "11046e1c964790fe895e798418e426211f669199c1385b92532e37de7cfb0d3a"
+        "support/tickets.csv": "396151179e734a2b5c06008be789034a52a45fe40379af8400fa9815f1c99bf1"
       },
       "v2": {
-        "billing/customers.csv": "a175aee4ea40e13fd559eb09f1b0309f6cadb735b7d3f03578134131a2fe56d0",
-        "billing/invoice_lines.csv": "e11803f9c387016f0807f17325d53114f28f74002a5b76704a1d2eede8729bdc",
-        "billing/invoices.csv": "e550452c5b5c034c7ea4497192ffeb6b06cdf658a2ef9300b0943b4c9fd9010a",
-        "billing/subscriptions.csv": "d459842f01cd14a0f4356a453395b90d747fed2c9781814d1cc13e9be361f461",
-        "crm/account_crosswalk.csv": "507e71c0d277acd31bc3cd52321b5094c7f07e50d32000aab779e839df007f0a",
-        "crm/accounts.csv": "73768a1c2652d01b2fd09321b593956abc8d25a456eecc72368ac1e568b1bc43",
-        "crm/contacts.csv": "bd10e039eecf3515defb537183c29bb41e03a408d0e174ec0ff5bb9412d0433a",
-        "crm/opportunities.csv": "7a9dceca250f0f954a2c5549fffa6060d365ea19e8fbfd78064dd443666c60c2",
-        "payments/payments.csv": "410a51e6f9dfeca9add17fe57b76c6efecd1f9a1180bf5a4af54625f54ed95a7",
-        "payments/refunds.csv": "8cefc6141481f6835eb98da0366debf74702d8a4da4667bc52fac59410471b97",
+        "billing/customers.csv": "2ad65513ab9f7014c36ec74e89a19c7cd2aa1c6a57d14de6b2af115aa8d66d14",
+        "billing/invoice_lines.csv": "a1ea598d0d492e0b0ead6ac2aa479e8fa0180f1bcb802019ad72e86f8159bca9",
+        "billing/invoices.csv": "b898bdb503209aed91c65a0ddb96c394d187e2a5b48629010c727d022b13956e",
+        "billing/subscriptions.csv": "6531b4ea2e9b5d4f39ef435323db6c2293b07dcb4e746ee24a5fd8c5f0db20af",
+        "crm/account_crosswalk.csv": "dd58365c1025f005928d52758865d09e67491b5946472242df987911cd002418",
+        "crm/accounts.csv": "0ef4c9a7225239e0726991559792fdd9e972d744fba7a529c361e70f8cb95fa4",
+        "crm/contacts.csv": "79768778f6f5def1c5948133f2e7fbeb84ea22757f3e16b555ab6f8659cc95aa",
+        "crm/opportunities.csv": "a953e3361623f6b36cdcbcdcca8eaf0042cab855376920a9b7fb85e51ede2a21",
+        "payments/payments.csv": "33897a47c78bf76ccfec70860923a048f119798bc01c0816f1b5a676d222d2c9",
+        "payments/refunds.csv": "8e03439bb89eca386c3bc37aa6b7f47dbaf110e2110bc6ef0a4b60649930e89f",
         "product/plans.csv": "c8eff371ad4a824b2f29a1959c2b344ea853df80f7b96f34e6385cf008b4dc76",
-        "support/tickets.csv": "11046e1c964790fe895e798418e426211f669199c1385b92532e37de7cfb0d3a"
+        "support/tickets.csv": "396151179e734a2b5c06008be789034a52a45fe40379af8400fa9815f1c99bf1"
       }
     },
     "duckdb": {
-      "v1": "ecb529f3604a513a35689002611984e1b6b152027d2d6351268e30915faf96a9",
-      "v2": "ecb529f3604a513a35689002611984e1b6b152027d2d6351268e30915faf96a9"
+      "v1": "250073e56cd67e06a483356194cae42934103db0bf993eb08c2ef5a59b82a2e8",
+      "v2": "622a1dec549eb3bac05d359a5feeb96a47469bfa5722c1549d3e186a3494043a"
     }
   },
   "pii_columns_file": "pii_columns.yaml",
@@ -45,9 +45,9 @@
     "duplicate_account_rate_target": 0.07,
     "duplicate_payment_rate_actual": 0.015,
     "duplicate_payment_rate_target": 0.015,
-    "null_crm_account_id_rate_actual": 0.11171875,
+    "null_crm_account_id_rate_actual": 0.1125,
     "null_crm_account_id_rate_target": 0.12,
-    "null_due_date_rate_actual": 0.030129032258064518,
+    "null_due_date_rate_actual": 0.030145161290322582,
     "null_due_date_rate_target": 0.03,
     "orphan_contact_rate_actual": 0.02,
     "orphan_contact_rate_target": 0.02,
@@ -74,7 +74,7 @@
     "crm.accounts": 2750,
     "crm.contacts": 8200,
     "crm.opportunities": 4100,
-    "payments.payments": 114695,
+    "payments.payments": 113000,
     "payments.refunds": 3800,
     "product.plans": 96,
     "support.tickets": 31000

@@ -23,8 +23,16 @@ from synthetic.vantara.config import (
     Profile,
     profile_config,
 )
-from synthetic.vantara.export.duckdb_export import verify_duckdb_integrity
+from synthetic.vantara.export.duckdb_export import content_sha256, verify_duckdb_integrity
 from synthetic.vantara.generate import generate_dataset
+from synthetic.vantara.planted import (
+    duplicate_payment_rate_v2,
+    late_redelivery_duplicates,
+    normalized_domain_duplicate_rate,
+    normalized_domain_group_count,
+    payment_grain_groups,
+)
+from synthetic.vantara.rng import normalize_domain
 
 PACKAGE_ROOT = Path("synthetic/vantara")
 PII_PATH = PACKAGE_ROOT / "pii_columns.yaml"
@@ -42,6 +50,10 @@ def _rate(actual: int, total: int) -> float:
     return actual / total if total else 0.0
 
 
+def _assert_rate_close(actual: float, expected: float, tolerance: float, label: str) -> None:
+    assert abs(actual - expected) <= tolerance, f"{label}: {actual} vs {expected}"
+
+
 @pytest.mark.parametrize("profile", [Profile.TINY, Profile.DEMO, Profile.FULL])
 def test_profile_volume_within_five_percent(profile: Profile) -> None:
     config = profile_config(profile)
@@ -51,6 +63,20 @@ def test_profile_volume_within_five_percent(profile: Profile) -> None:
     lower = target * 0.95
     upper = target * 1.05
     assert lower <= total <= upper, f"{profile}: {total} not in [{lower}, {upper}]"
+
+
+@pytest.mark.parametrize("profile", [Profile.TINY, Profile.DEMO, Profile.FULL])
+def test_normalized_domain_duplicate_rate_from_rows(profile: Profile) -> None:
+    config = profile_config(profile)
+    dataset = generate_dataset(config)
+    accounts = dataset.tables["crm.accounts"]
+    rate = normalized_domain_duplicate_rate(accounts)
+    _assert_rate_close(rate, DUPLICATE_ACCOUNT_RATE, 0.015, f"{profile.value} duplicate rate")
+    assert normalized_domain_group_count(accounts) >= 1
+    for row in accounts:
+        domain = row.get("WEBSITE_DOMAIN")
+        assert domain
+        assert normalize_domain(str(domain))
 
 
 def test_same_seed_same_hashes() -> None:
@@ -80,6 +106,63 @@ def test_v1_v2_schema_drift_columns() -> None:
             conn.close()
 
 
+def test_v1_v2_different_duckdb_fingerprints() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        result = build_fixtures(Profile.TINY, output_root=root)
+        assert result.duckdb_hashes["v1"] != result.duckdb_hashes["v2"]
+        v1_fp = content_sha256(root / "v1" / "vantara_raw.duckdb")
+        v2_fp = content_sha256(root / "v2" / "vantara_raw.duckdb")
+        assert v1_fp != v2_fp
+        assert v1_fp == result.duckdb_hashes["v1"]
+        assert v2_fp == result.duckdb_hashes["v2"]
+
+
+def test_same_version_duckdb_fingerprint_is_stable() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        build_fixtures(Profile.TINY, output_root=root)
+        v1_first = content_sha256(root / "v1" / "vantara_raw.duckdb")
+        v1_second = content_sha256(root / "v1" / "vantara_raw.duckdb")
+        assert v1_first == v1_second
+
+
+def test_v1_has_no_late_payment_redelivery_duplicates() -> None:
+    for profile in Profile:
+        dataset = generate_dataset(profile_config(profile))
+        payments_v1 = dataset.tables["payments.payments_v1"]
+        assert late_redelivery_duplicates(payments_v1) == []
+        groups = payment_grain_groups(payments_v1)
+        assert all(len(rows) == 1 for rows in groups.values())
+
+
+def test_v2_has_expected_duplicate_payment_groups() -> None:
+    for profile in Profile:
+        config = profile_config(profile)
+        dataset = generate_dataset(config)
+        payments_v1 = dataset.tables["payments.payments_v1"]
+        payments_v2 = dataset.tables["payments.payments_v2"]
+        assert len(payments_v2) > len(payments_v1)
+        duplicate_rows = late_redelivery_duplicates(payments_v2)
+        assert duplicate_rows
+        groups = payment_grain_groups(payments_v2)
+        duplicate_groups = [rows for rows in groups.values() if len(rows) > 1]
+        assert duplicate_groups
+        for rows in duplicate_groups:
+            assert len({row["INVOICE_ID"] for row in rows}) == 1
+            assert len({row["PAYMENT_REF"] for row in rows}) == 1
+            loaded_times = [row["_LOADED_AT"] for row in rows]
+            assert len(set(loaded_times)) == len(loaded_times)
+            assert max(loaded_times) > min(loaded_times)
+        base_grains = len(payment_grain_groups(payments_v1))
+        _assert_rate_close(
+            duplicate_payment_rate_v2(payments_v2),
+            DUPLICATE_PAYMENT_RATE,
+            0.002 if base_grains >= 100 else 0.02,
+            f"{profile.value} v2 duplicate payment rate",
+        )
+
+
 def test_duplicate_payment_rate_invariant() -> None:
     for profile in Profile:
         config = profile_config(profile)
@@ -101,14 +184,6 @@ def test_null_and_orphan_rates(profile: Profile = Profile.TINY) -> None:
 
     null_due_rate = float(dataset.metrics["null_due_date_rate"])
     assert abs(null_due_rate - NULL_DUE_DATE_RATE) <= 0.01
-
-
-def test_duplicate_account_rate(profile: Profile = Profile.TINY) -> None:
-    config = profile_config(profile)
-    dataset = generate_dataset(config)
-    accounts = len(dataset.tables["crm.accounts"])
-    dup_rows = int(dataset.metrics["duplicate_account_rows"])
-    assert abs(_rate(dup_rows, accounts) - DUPLICATE_ACCOUNT_RATE) <= 0.01
 
 
 def test_pii_metadata_file() -> None:
@@ -139,6 +214,20 @@ def test_duckdb_fixture_integrity() -> None:
             assert counts["billing.invoices"] > 0
             status_key = "has_invoice_status" if version == "v1" else "has_status"
             assert counts[status_key] == 1
+        v1_payments = duckdb.connect(str(root / "v1" / "vantara_raw.duckdb"), read_only=True)
+        v2_payments = duckdb.connect(str(root / "v2" / "vantara_raw.duckdb"), read_only=True)
+        v1_row = v1_payments.execute(
+            'SELECT COUNT(*) FROM "VANTARA_RAW"."PAYMENTS"."PAYMENTS"'
+        ).fetchone()
+        v2_row = v2_payments.execute(
+            'SELECT COUNT(*) FROM "VANTARA_RAW"."PAYMENTS"."PAYMENTS"'
+        ).fetchone()
+        assert v1_row is not None and v2_row is not None
+        v1_count = int(v1_row[0])
+        v2_count = int(v2_row[0])
+        assert v2_count > v1_count
+        v1_payments.close()
+        v2_payments.close()
 
 
 def test_csv_fixture_integrity() -> None:

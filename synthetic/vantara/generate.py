@@ -20,8 +20,10 @@ from synthetic.vantara.config import (
     UNKNOWN_INVOICE_CUSTOMER_RATE,
     ProfileConfig,
 )
+from synthetic.vantara.planted import normalized_domain_duplicate_rate
 from synthetic.vantara.rng import (
     deterministic_uuid,
+    domain_surface_variant,
     fake_company_name,
     fake_domain,
     fake_email,
@@ -137,19 +139,17 @@ def generate_dataset(config: ProfileConfig) -> GeneratedDataset:
         )
 
     for dup_idx in range(duplicate_target):
-        base_domain = domain_groups[dup_idx % len(domain_groups)]
+        canonical_domain = domain_groups[dup_idx % len(domain_groups)]
         suffix = pick(rng, (" Inc", " Ltd", " LLC", " GmbH"))
-        base_label = base_domain.split(".")[0]
-        tld = base_domain.split(".")[-1]
-        variant_domain = f"{base_label}{suffix.lower().replace(' ', '')}.{tld}"
+        canonical_account = accounts[dup_idx % canonical_count]
         created = random_datetime(rng, start, end)
         accounts.append(
             {
                 "ACCOUNT_ID": deterministic_uuid(f"account-dup:{dup_idx}"),
-                "ACCOUNT_NAME": f"{accounts[dup_idx % canonical_count]['ACCOUNT_NAME']}{suffix}",
-                "WEBSITE_DOMAIN": variant_domain,
-                "INDUSTRY": accounts[dup_idx % canonical_count]["INDUSTRY"],
-                "COUNTRY": accounts[dup_idx % canonical_count]["COUNTRY"],
+                "ACCOUNT_NAME": f"{canonical_account['ACCOUNT_NAME']}{suffix}",
+                "WEBSITE_DOMAIN": domain_surface_variant(rng, canonical_domain, dup_idx),
+                "INDUSTRY": pick(rng, INDUSTRIES),
+                "COUNTRY": canonical_account["COUNTRY"],
                 "OWNER_ID": deterministic_uuid(f"owner-dup:{dup_idx}"),
                 "CREATED_AT": created.isoformat(),
                 "UPDATED_AT": created.isoformat(),
@@ -159,11 +159,8 @@ def generate_dataset(config: ProfileConfig) -> GeneratedDataset:
         )
     dataset.tables["crm.accounts"] = accounts
 
-    duplicate_groups = len({normalize_domain(a["WEBSITE_DOMAIN"]) for a in accounts}) < len(
-        accounts
-    )
     dataset.metrics["duplicate_account_rows"] = duplicate_target
-    dataset.metrics["duplicate_domain_groups"] = int(duplicate_groups)
+    dataset.metrics["normalized_domain_duplicate_rate"] = normalized_domain_duplicate_rate(accounts)
 
     # --- Billing customers (P2 null CRM_ACCOUNT_ID) ---
     customer_count = volumes["billing.customers"]
@@ -377,53 +374,74 @@ def generate_dataset(config: ProfileConfig) -> GeneratedDataset:
         line_id += 1
     dataset.tables["billing.invoice_lines"] = invoice_lines
 
-    # --- Payments with duplicate re-deliveries (P10 / F2) ---
+    # --- Payments: v1 pre-drift (no late re-deliveries), v2 post-drift (F2 dupes) ---
     payment_count = volumes["payments.payments"]
     duplicate_count = max(1, round(payment_count * DUPLICATE_PAYMENT_RATE))
-    payments: list[dict[str, Any]] = []
+    payments_v1: list[dict[str, Any]] = []
     payment_id = 1
     for idx in range(payment_count):
         invoice = invoices_v1[idx % len(invoices_v1)]
         paid_at = random_datetime(rng, date.fromisoformat(invoice["ISSUE_DATE"]), end)
         ref = f"PAY-{idx + 1:08d}"
-        row = {
-            "PAYMENT_ID": payment_id,
-            "INVOICE_ID": invoice["INVOICE_ID"],
-            "PAYMENT_REF": ref,
-            "AMOUNT": round(float(invoice["TOTAL_AMOUNT"]) * rng.uniform(0.5, 1.0), 2),
-            "PAID_AT": paid_at.isoformat(),
-            **_metadata(rng, extract_date, f"payments/payments_{extract_date}.csv"),
-        }
-        payments.append(row)
+        payments_v1.append(
+            {
+                "PAYMENT_ID": payment_id,
+                "INVOICE_ID": invoice["INVOICE_ID"],
+                "PAYMENT_REF": ref,
+                "AMOUNT": round(float(invoice["TOTAL_AMOUNT"]) * rng.uniform(0.5, 1.0), 2),
+                "PAID_AT": paid_at.isoformat(),
+                **_metadata(rng, extract_date, f"payments/payments_{extract_date}.csv"),
+            }
+        )
         payment_id += 1
-        if idx < duplicate_count:
-            late_loaded = datetime.fromisoformat(row["_LOADED_AT"]).replace(tzinfo=UTC)
-            late_loaded = late_loaded.replace(day=min(28, late_loaded.day + 2))
-            dup = dict(row)
-            dup["PAYMENT_ID"] = payment_id
-            dup["_LOADED_AT"] = late_loaded.isoformat()
-            dup["_SOURCE_FILE"] = f"payments/payments_redelivery_{extract_date}.csv"
-            payments.append(dup)
-            payment_id += 1
-    dataset.tables["payments.payments"] = payments
+
+    payments_v2 = [dict(row) for row in payments_v1]
+    for idx in range(duplicate_count):
+        source = payments_v1[idx]
+        late_loaded = datetime.fromisoformat(source["_LOADED_AT"]).replace(tzinfo=UTC)
+        late_loaded = late_loaded.replace(day=min(28, late_loaded.day + 2))
+        payments_v2.append(
+            {
+                **source,
+                "PAYMENT_ID": payment_id,
+                "_LOADED_AT": late_loaded.isoformat(),
+                "_SOURCE_FILE": f"payments/payments_redelivery_{extract_date}.csv",
+            }
+        )
+        payment_id += 1
+
+    dataset.tables["payments.payments_v1"] = payments_v1
+    dataset.tables["payments.payments_v2"] = payments_v2
     dataset.metrics["duplicate_payment_rows"] = duplicate_count
     dataset.metrics["duplicate_payment_rate"] = duplicate_count / payment_count
 
-    # --- Refunds ---
+    # --- Refunds (version-specific payment references) ---
     refund_count = volumes["payments.refunds"]
-    refunds: list[dict[str, Any]] = []
+    refunds_v1: list[dict[str, Any]] = []
+    refunds_v2: list[dict[str, Any]] = []
     for idx in range(refund_count):
-        payment = payments[idx % len(payments)]
-        refunds.append(
+        payment_v1 = payments_v1[idx % len(payments_v1)]
+        payment_v2 = payments_v2[idx % len(payments_v2)]
+        refunds_v1.append(
             {
                 "REFUND_ID": idx + 1,
-                "PAYMENT_ID": payment["PAYMENT_ID"],
-                "AMOUNT": round(float(payment["AMOUNT"]) * rng.uniform(0.05, 0.5), 2),
+                "PAYMENT_ID": payment_v1["PAYMENT_ID"],
+                "AMOUNT": round(float(payment_v1["AMOUNT"]) * rng.uniform(0.05, 0.5), 2),
                 "REFUNDED_AT": random_datetime(rng, start, end).isoformat(),
                 **_metadata(rng, extract_date, f"payments/refunds_{extract_date}.csv"),
             }
         )
-    dataset.tables["payments.refunds"] = refunds
+        refunds_v2.append(
+            {
+                "REFUND_ID": idx + 1,
+                "PAYMENT_ID": payment_v2["PAYMENT_ID"],
+                "AMOUNT": round(float(payment_v2["AMOUNT"]) * rng.uniform(0.05, 0.5), 2),
+                "REFUNDED_AT": random_datetime(rng, start, end).isoformat(),
+                **_metadata(rng, extract_date, f"payments/refunds_{extract_date}.csv"),
+            }
+        )
+    dataset.tables["payments.refunds_v1"] = refunds_v1
+    dataset.tables["payments.refunds_v2"] = refunds_v2
 
     # --- Support tickets ---
     ticket_count = volumes["support.tickets"]

@@ -72,8 +72,13 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _schema_signature(conn: duckdb.DuckDBPyConnection, ident: str) -> str:
+    cols = conn.execute(f"PRAGMA table_info({ident})").fetchall()
+    return "|".join(f"{row[1]}:{row[2]}" for row in cols)
+
+
 def content_sha256(path: Path) -> str:
-    """Deterministic hash of loaded table contents (not DuckDB file bytes)."""
+    """Schema-aware deterministic hash of DuckDB fixture contents."""
     conn = duckdb.connect(str(path), read_only=True)
     digest = hashlib.sha256()
     try:
@@ -83,12 +88,15 @@ def content_sha256(path: Path) -> str:
         for table_key in table_keys:
             table = TABLES[table_key if table_key != "billing.invoices" else "billing.invoices"]
             ident = f'"{SNOWFLAKE_DATABASE}"."{table.schema}"."{table.name}"'
+            schema_sig = _schema_signature(conn, ident)
             fetched = conn.execute(
                 f"SELECT COUNT(*) AS row_count, SUM(hash(COLUMNS(*))) AS row_hash FROM {ident}"
             ).fetchone()
             row_count = int(fetched[0]) if fetched is not None else 0
             row_hash = fetched[1] if fetched is not None else 0
-            digest.update(f"{table_key}:{row_count}:{row_hash}".encode())
+            digest.update(
+                f"{table_key}:schema={schema_sig}:rows={row_count}:hash={row_hash}".encode()
+            )
     finally:
         conn.close()
     return digest.hexdigest()

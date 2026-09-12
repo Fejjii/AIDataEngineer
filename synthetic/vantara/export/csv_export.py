@@ -42,6 +42,17 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _rows_for_version(
+    dataset: GeneratedDataset,
+    table_key: str,
+    version: str,
+) -> list[dict[str, Any]]:
+    versioned_key = f"{table_key}_{version}"
+    if versioned_key in dataset.tables:
+        return dataset.tables[versioned_key]
+    return dataset.tables.get(table_key, [])
+
+
 def export_csv_fixtures(
     dataset: GeneratedDataset,
     config: ProfileConfig,
@@ -54,7 +65,7 @@ def export_csv_fixtures(
     for table_key, table_def in TABLES.items():
         if table_key.startswith("billing.invoices"):
             continue
-        rows = dataset.tables.get(table_key, [])
+        rows = _rows_for_version(dataset, table_key, version)
         columns = tuple(col.name for col in table_def.columns)
         if table_key == "billing.invoice_lines" and version == "v1":
             # Bad extract day stores AMOUNT as VARCHAR (P8 / F1 companion).

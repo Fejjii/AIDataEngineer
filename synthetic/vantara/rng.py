@@ -68,8 +68,20 @@ def fake_company_name(rng: random.Random, index: int) -> str:
 def fake_domain(rng: random.Random, company: str, index: int) -> str:
     base = company.lower().replace(" ", "")
     tlds = ("com", "io", "co.uk", "de", "fr")
-    return f"{base}{index % 17}.{pick(rng, tlds)}"
+    return f"{base}-{index}.{pick(rng, tlds)}"
 
 
 def normalize_domain(domain: str) -> str:
     return domain.lower().strip().removeprefix("www.")
+
+
+def domain_surface_variant(rng: random.Random, canonical_domain: str, variant_index: int) -> str:
+    """Return a WEBSITE_DOMAIN string that normalizes to ``canonical_domain``."""
+    variants = (
+        canonical_domain.upper(),
+        f"WWW.{canonical_domain}",
+        f"  {canonical_domain}  ",
+        "".join(ch.upper() if index % 2 else ch for index, ch in enumerate(canonical_domain)),
+        f"{canonical_domain.split('.')[0].title()}.{'.'.join(canonical_domain.split('.')[1:])}",
+    )
+    return variants[variant_index % len(variants)]
