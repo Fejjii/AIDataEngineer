@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from aide.llm.prompts import render_prompt
+from aide.llm.prompts import prompt_root, render_prompt
 
 PROMPT_VERSION = 1
 
@@ -26,6 +27,10 @@ def replay_structured(
     """Render a versioned prompt, then validate a recorded structured payload."""
     prompt = render_prompt(capability_id, PROMPT_VERSION, **prompt_values)
     if "interpret_requirement@v1" not in prompt and capability_id == "interpret_requirement":
+        raise ReplayError("prompt artifact was not rendered")
+    if capability_id == "propose_model_design" and (
+        "ArchitectureDecision is immutable" not in prompt
+    ):
         raise ReplayError("prompt artifact was not rendered")
     payload = recorded_payload(capability_id, extra or {})
     try:
@@ -111,7 +116,21 @@ def recorded_payload(capability_id: str, extra: Mapping[str, Any]) -> dict[str, 
             "expected_grain": ["CUSTOMER_ID"],
             "assumptions": ["AMOUNT is the order value"],
         }
+    if capability_id == "propose_model_design":
+        digest = str(extra.get("architecture_decision_digest", "0" * 64))
+        return _recorded_vantara_design(digest)
     raise ReplayError(f"no recorded response for {capability_id}")
+
+
+def _recorded_vantara_design(digest: str) -> dict[str, Any]:
+    path = prompt_root() / "propose_model_design" / "recorded_vantara.json"
+    if not path.is_file():
+        raise ReplayError(f"recorded ModelDesign fixture missing: {path}")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ReplayError("recorded ModelDesign fixture must be an object")
+    payload["architecture_decision_digest"] = digest
+    return payload
 
 
 def _asset_dump(asset: object) -> dict[str, Any]:

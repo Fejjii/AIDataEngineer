@@ -8,8 +8,10 @@ from aide.capabilities.io import (
     GenerateSqlQueryInput,
     GenerateSqlQueryOutput,
     InterpretRequirementInput,
+    ModelDesign,
     Plan,
     PlanPhaseInput,
+    ProposeModelDesignInput,
     RequirementSpec,
     SelectRelevantAssetsInput,
     SelectRelevantAssetsOutput,
@@ -103,3 +105,8 @@ class ReasoningCapabilities:
         )
         assert isinstance(result, GenerateSqlQueryOutput)
         return result
+
+    def propose_model_design(self, payload: ProposeModelDesignInput) -> ModelDesign:
+        from aide.reasoning.propose_model_design import propose_model_design as impl
+
+        return impl(payload, gateway=self._gateway)
