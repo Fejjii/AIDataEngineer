@@ -294,4 +294,7 @@ def locked_design(decision: ArchitectureDecision) -> ModelDesign:
     from aide.domain.identity import compute_resolved_input_digest
 
     digest = compute_resolved_input_digest(decision)
-    return vantara_model_design(architecture_decision_digest=digest)
+    return vantara_model_design(
+        architecture_decision_digest=digest,
+        naming=decision.naming,
+    )

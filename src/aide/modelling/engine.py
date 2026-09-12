@@ -113,7 +113,7 @@ class ModellingDecisionEngine:
             integration=integration,
             extras=extras,
             estimated_model_count=estimated,
-            estimated_cost_class=resolved.volume_class,
+            estimated_cost_class=ctx.estimated_warehouse_cost_class,
         )
         recommendations = list(fact_recommendations)
         if integration.recommendation:
@@ -153,7 +153,7 @@ class ModellingDecisionEngine:
             approval_reasons=approval_reasons,
             rule_ids=rule_ids,
             estimated_model_count=estimated,
-            estimated_cost_class=resolved.volume_class,
+            estimated_cost_class=ctx.estimated_warehouse_cost_class,
         )
 
 

@@ -13,6 +13,8 @@ from aide.capabilities.io import (
     ModelDesign,
     ModelDesignUnit,
     RelationshipCandidate,
+    canonical_model_layers,
+    physical_layer_names,
 )
 from aide.domain.identity import compute_resolved_input_digest
 from aide.domain.sql import AssetRef
@@ -123,13 +125,30 @@ def _architecture_invariants(
                 ),
             )
         )
-    expected_layers = _layers_for(decision)
+    expected_layers = canonical_model_layers(decision.layering.decision)
     if tuple(design.layers) != expected_layers:
         violations.append(
             DesignViolation(
                 code="PRESENTATION_CLASS_CONTRADICTED",
                 message="ModelDesign layers contradict ArchitectureDecision",
                 details=tuple(design.layers),
+            )
+        )
+    expected_physical = physical_layer_names(decision.naming, decision.layering.decision)
+    actual_physical = design.physical_layer_names or tuple((name, name) for name in design.layers)
+    if actual_physical != expected_physical:
+        violations.append(
+            DesignViolation(
+                code="PHYSICAL_LAYER_MAPPING_INVALID",
+                message="physical layer names contradict ArchitectureDecision naming",
+                details=tuple(f"{src}->{dst}" for src, dst in actual_physical),
+            )
+        )
+    if any(item.layer not in {"staging", "intermediate", "marts"} for item in design.models):
+        violations.append(
+            DesignViolation(
+                code="PHYSICAL_LAYER_MAPPING_INVALID",
+                message="ModelDesignUnit.layer must stay canonical staging/intermediate/marts",
             )
         )
     if decision.presentation.decision == "STAR_SCHEMA" and any(
@@ -160,18 +179,6 @@ def _architecture_invariants(
             )
         )
     return violations
-
-
-def _layers_for(decision: ArchitectureDecision) -> tuple[str, ...]:
-    if decision.naming == "MEDALLION":
-        return ("bronze", "silver", "gold")
-    if decision.layering.decision == "STAGING_INTERMEDIATE_MARTS":
-        return ("staging", "intermediate", "marts")
-    if decision.layering.decision == "TESTS_ONLY":
-        return ()
-    if decision.layering.decision == "EPHEMERAL_QUERIES":
-        return ()
-    return ("staging", "intermediate", "marts")
 
 
 def _source_references(

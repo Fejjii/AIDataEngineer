@@ -4,17 +4,14 @@ from __future__ import annotations
 
 import json
 
-from aide.capabilities.io import ModelDesign, ProposeModelDesignInput
+from aide.capabilities.io import (
+    ModelDesign,
+    ProposeModelDesignInput,
+    canonical_model_layers,
+    physical_layer_names,
+)
 from aide.domain.identity import compute_resolved_input_digest
 from aide.llm.gateway import LlmGateway
-
-
-def _layers_from_decision(layering: str, naming: str) -> tuple[str, ...]:
-    if naming == "MEDALLION":
-        return ("bronze", "silver", "gold")
-    if layering == "STAGING_INTERMEDIATE_MARTS":
-        return ("staging", "intermediate", "marts")
-    return ()
 
 
 def propose_model_design(
@@ -24,9 +21,10 @@ def propose_model_design(
 ) -> ModelDesign:
     client = gateway or LlmGateway()
     digest = compute_resolved_input_digest(payload.architecture_decision)
-    layers = _layers_from_decision(
-        payload.architecture_decision.layering.decision,
+    layers = canonical_model_layers(payload.architecture_decision.layering.decision)
+    mapping = physical_layer_names(
         payload.architecture_decision.naming,
+        payload.architecture_decision.layering.decision,
     )
     result = client.complete(
         "propose_model_design",
@@ -60,6 +58,7 @@ def propose_model_design(
         update={
             "architecture_decision_digest": digest,
             "layers": layers or result.layers,
+            "physical_layer_names": mapping,
         }
     )
     return locked

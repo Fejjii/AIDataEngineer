@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from aide.capabilities.io import AuditabilitySignal, CostSensitivity, NamingConvention
+from aide.capabilities.io import AuditabilitySignal, CostSensitivity, NamingConvention, VolumeClass
 from aide.domain.sql import AssetRef
 
 
@@ -36,3 +36,4 @@ class ModellingContext(BaseModel):
     selected_assets: tuple[AssetRef, ...] = ()
     low_value_scd1_attributes: tuple[tuple[str, str], ...] = ()
     require_demo_models: bool = False
+    estimated_warehouse_cost_class: VolumeClass = "UNKNOWN"

@@ -435,7 +435,8 @@ def test_m6_marts_are_tables_for_daily() -> None:
 def test_m7_clustering_recommendation() -> None:
     decision = _decide(make_signals(volume_class="L", cost_sensitivity="HIGH"))
     assert any(item.rule == "M7" for item in decision.materialization)
-    assert decision.approval_required is True
+    assert decision.approval_required is False
+    assert "cost_class" not in decision.approval_reasons
 
 
 def test_conformance_misaligned_without_crosswalk_blocks() -> None:

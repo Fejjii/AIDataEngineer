@@ -551,6 +551,29 @@ ModelKind = Literal[
     "SATELLITE",
 ]
 ModelLayer = Literal["staging", "intermediate", "marts"]
+CANONICAL_MODEL_LAYERS: tuple[str, ...] = ("staging", "intermediate", "marts")
+MEDALLION_PHYSICAL_LAYERS: tuple[tuple[str, str], ...] = (
+    ("staging", "bronze"),
+    ("intermediate", "silver"),
+    ("marts", "gold"),
+)
+
+
+def canonical_model_layers(layering: LayeringClass) -> tuple[str, ...]:
+    if layering in {"TESTS_ONLY", "EPHEMERAL_QUERIES"}:
+        return ()
+    return CANONICAL_MODEL_LAYERS
+
+
+def physical_layer_names(
+    naming: NamingConvention, layering: LayeringClass
+) -> tuple[tuple[str, str], ...]:
+    layers = canonical_model_layers(layering)
+    if not layers:
+        return ()
+    if naming == "MEDALLION":
+        return MEDALLION_PHYSICAL_LAYERS
+    return tuple((name, name) for name in layers)
 
 
 class PlatformCapabilities(FrozenModel):
@@ -774,6 +797,7 @@ class ModelDesignUnit(FrozenModel):
 
 class ModelDesign(FrozenModel):
     layers: tuple[str, ...]
+    physical_layer_names: tuple[tuple[str, str], ...] = ()
     models: tuple[ModelDesignUnit, ...]
     relationships: tuple[str, ...] = ()
     tests: tuple[str, ...] = ()

@@ -10,6 +10,11 @@ The ArchitectureDecision is immutable. You must not change:
 - history class chosen by deterministic rules
 - approval_required
 
+Canonical model layers are always staging, intermediate, and marts.
+If naming is MEDALLION, physical folder names map staging→bronze, intermediate→silver,
+marts→gold. That mapping is naming only; ModelDesignUnit.layer must stay canonical.
+Do not emit bronze, silver, or gold as ModelDesignUnit.layer.
+
 You may propose only:
 - business entity mapping
 - model names

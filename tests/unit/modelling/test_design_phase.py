@@ -12,7 +12,11 @@ from tests.unit.modelling.factories import (
 
 from aide.capabilities.io import DesignValidationReport
 from aide.domain.states import LEGAL_TRANSITIONS, WorkflowState
-from aide.modelling.service import design_approval_subject, recommended_workflow_state
+from aide.modelling.service import (
+    design_approval_subject,
+    maybe_design_approval,
+    recommended_workflow_state,
+)
 from aide.modelling.validators import validate_model_design
 from aide.modelling.vantara import vantara_modelling_context
 from aide.orchestration.phases.design import (
@@ -72,6 +76,53 @@ def test_approval_flag_path_exposes_design_approval_boundary() -> None:
     assert subject.kind == "DESIGN"
     assert subject.design_artifact_hash
     assert "STAR_SCHEMA" in subject.invariant_hashes
+    actionable = maybe_design_approval(
+        locked_design(decision),
+        report,
+        decision,
+        as_of=datetime(2026, 9, 12, tzinfo=UTC),
+    )
+    assert actionable is not None
+
+
+def test_failed_or_blocked_designs_have_no_approval_subject() -> None:
+    decision = vantara_decision(
+        signals=make_signals(
+            auditability="HIGH",
+            source_system_count=4,
+            history_requirements="FULL_HISTORY",
+            change_frequency="HIGH",
+        )
+    )
+    assert decision.approval_required is True
+    failed = DesignValidationReport(passed=False, violations=())
+    assert (
+        maybe_design_approval(
+            locked_design(decision),
+            failed,
+            decision,
+            as_of=datetime(2026, 9, 12, tzinfo=UTC),
+        )
+        is None
+    )
+    blocking = vantara_decision(
+        signals=make_signals(history_requirements="UNKNOWN"),
+        context=vantara_modelling_context().model_copy(
+            update={"estimated_warehouse_cost_class": "L"}
+        ),
+    )
+    assert blocking.approval_required is True
+    passed = DesignValidationReport(passed=True, violations=())
+    assert recommended_workflow_state(blocking, passed) is WorkflowState.CLARIFICATION_REQUIRED
+    assert (
+        maybe_design_approval(
+            locked_design(blocking),
+            passed,
+            blocking,
+            as_of=datetime(2026, 9, 12, tzinfo=UTC),
+        )
+        is None
+    )
 
 
 def test_clarification_path_for_blocking_questions() -> None:

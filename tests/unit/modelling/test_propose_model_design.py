@@ -45,6 +45,49 @@ def test_recorded_replay_returns_typed_model_design() -> None:
     assert "dim_customer" in names
     assert "fct_invoice_line" in names
     assert design.layers == ("staging", "intermediate", "marts")
+    assert design.physical_layer_names == (
+        ("staging", "staging"),
+        ("intermediate", "intermediate"),
+        ("marts", "marts"),
+    )
+
+
+def test_medallion_end_to_end_keeps_canonical_unit_layers() -> None:
+    from aide.modelling.context import OrgModellingConfig
+    from aide.modelling.validators import validate_model_design
+    from aide.modelling.vantara import vantara_modelling_context
+
+    ctx = vantara_modelling_context().model_copy(
+        update={"org": OrgModellingConfig(auditability="LOW", naming_convention="MEDALLION")}
+    )
+    decision = vantara_decision(context=ctx)
+    payload = ProposeModelDesignInput(
+        requirement=vantara_demo_requirement(),
+        architecture_decision=decision,
+        selected_assets=demo_selected_assets(),
+        profiling_summary=ProfilingEvidenceSummary(masking_applied=True),
+        profile_evidence=vantara_profiles(),
+        relationship_evidence=vantara_relationships(),
+        duplicate_evidence=vantara_duplicates(),
+    )
+    design = propose_model_design(payload, gateway=LlmGateway())
+    assert decision.naming == "MEDALLION"
+    assert design.layers == ("staging", "intermediate", "marts")
+    assert design.physical_layer_names == (
+        ("staging", "bronze"),
+        ("intermediate", "silver"),
+        ("marts", "gold"),
+    )
+    assert all(item.layer in {"staging", "intermediate", "marts"} for item in design.models)
+    report = validate_model_design(
+        design,
+        decision,
+        selected=demo_selected_assets(),
+        profiles=vantara_profiles(),
+        duplicates=vantara_duplicates(),
+        context=ctx,
+    )
+    assert report.passed, tuple(item.code for item in report.violations)
 
 
 def test_reasoner_locks_architecture_decision_digest() -> None:

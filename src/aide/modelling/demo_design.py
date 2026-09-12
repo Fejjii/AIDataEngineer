@@ -10,6 +10,8 @@ from aide.capabilities.io import (
     ModelColumn,
     ModelDesign,
     ModelDesignUnit,
+    NamingConvention,
+    physical_layer_names,
 )
 from aide.domain.sql import AssetKind, AssetRef
 
@@ -64,7 +66,11 @@ def _d(
     )
 
 
-def vantara_model_design(*, architecture_decision_digest: str = PLACEHOLDER_DIGEST) -> ModelDesign:
+def vantara_model_design(
+    *,
+    architecture_decision_digest: str = PLACEHOLDER_DIGEST,
+    naming: NamingConvention = "DBT_DEFAULT",
+) -> ModelDesign:
     crm_accounts = _asset("CRM", "ACCOUNTS")
     crm_contacts = _asset("CRM", "CONTACTS")
     crm_crosswalk = _asset("CRM", "ACCOUNT_CROSSWALK")
@@ -489,6 +495,7 @@ def vantara_model_design(*, architecture_decision_digest: str = PLACEHOLDER_DIGE
     )
     return ModelDesign(
         layers=("staging", "intermediate", "marts"),
+        physical_layer_names=physical_layer_names(naming, "STAGING_INTERMEDIATE_MARTS"),
         models=models,
         relationships=(
             "fct_invoice_line.customer_sk -> dim_customer.customer_sk",

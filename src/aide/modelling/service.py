@@ -67,6 +67,21 @@ def recommended_workflow_state(
     return WorkflowState.PLANNING
 
 
+def maybe_design_approval(
+    design: ModelDesign | None,
+    validation: DesignValidationReport,
+    decision: ArchitectureDecision,
+    *,
+    as_of: datetime,
+    ttl: timedelta = timedelta(days=7),
+) -> DesignApproval | None:
+    if design is None:
+        return None
+    if recommended_workflow_state(decision, validation) is not WorkflowState.APPROVAL_REQUIRED:
+        return None
+    return design_approval_subject(design, validation, decision, as_of=as_of, ttl=ttl)
+
+
 def design_approval_subject(
     design: ModelDesign,
     validation: DesignValidationReport,
@@ -111,15 +126,13 @@ def run_design_phase(
         context=context,
     )
     next_state = recommended_workflow_state(decision, validation)
-    approval = None
     now = as_of or datetime.now(UTC)
-    if decision.approval_required:
-        approval = design_approval_subject(design, validation, decision, as_of=now)
+    approval = maybe_design_approval(design, validation, decision, as_of=now)
     return DesignPhaseResult(
         architecture_decision=decision,
         model_design=design,
         validation=validation,
         recommended_next_state=next_state,
-        approval_required=decision.approval_required,
+        approval_required=next_state is WorkflowState.APPROVAL_REQUIRED,
         design_approval=approval,
     )

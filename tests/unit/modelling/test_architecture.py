@@ -105,3 +105,36 @@ def test_data_vault_recommendation_sets_approval() -> None:
     assert decision.integration_layer.rule == "V1"
     assert decision.approval_required is True
     assert decision.presentation.decision == "STAR_SCHEMA"
+
+
+def test_large_volume_alone_does_not_set_cost_class_approval() -> None:
+    from tests.unit.modelling.factories import make_signals
+
+    decision = vantara_decision(signals=make_signals(volume_class="XL"))
+    assert decision.signals.volume_class == "XL"
+    assert decision.estimated_cost_class == "UNKNOWN"
+    assert "cost_class" not in decision.approval_reasons
+    assert decision.approval_required is False
+
+
+def test_explicit_warehouse_cost_class_requires_approval() -> None:
+    from aide.modelling.vantara import vantara_modelling_context
+
+    ctx = vantara_modelling_context().model_copy(update={"estimated_warehouse_cost_class": "L"})
+    decision = vantara_decision(context=ctx)
+    assert decision.estimated_cost_class == "L"
+    assert decision.signals.volume_class == "M"
+    assert decision.approval_required is True
+    assert "cost_class" in decision.approval_reasons
+
+
+def test_medallion_naming_keeps_canonical_structure() -> None:
+    from aide.modelling.context import OrgModellingConfig
+    from aide.modelling.vantara import vantara_modelling_context
+
+    ctx = vantara_modelling_context().model_copy(
+        update={"org": OrgModellingConfig(auditability="LOW", naming_convention="MEDALLION")}
+    )
+    decision = vantara_decision(context=ctx)
+    assert decision.naming == "MEDALLION"
+    assert decision.layering.decision == "STAGING_INTERMEDIATE_MARTS"
