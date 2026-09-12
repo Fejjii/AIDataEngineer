@@ -200,7 +200,8 @@ If PostgreSQL is down after a snapshot boot, run `--start` (or rely on Cursor `s
 - Warm-fork git checkouts can be stale; agents that need a named SHA must `git fetch`.
 - Canonical Mac path `~/Developer/AIDataEngineer` does not apply; Cloud worktrees use `/workspace`.
 - iCloud / `.ai/private/` are absent (expected).
-- DE 002B and DE 002C remain **LOCAL** in `.ai/TASKS.md` until a later governance task.
+- DE 002B and DE 002C are **CLOUD** in `.ai/TASKS.md` (OPS004 reclassification; DE 002B
+  merged 2026-09-11 via PR #8).
 
 ---
 
@@ -230,6 +231,7 @@ Dashboard Save and environment activation cannot be performed by the agent.
    - `./scripts/verify_environment.sh`
 5. After merge, new agents read `.cursor/environment.json` from Git (highest precedence). Confirm `install`/`start` still succeed on a fresh boot.
 6. Do **not** attach Snowflake or staging secrets to this environment.
-7. A later governance task (not this one) may retarget DE 002B / DE 002C to CLOUD after the operator accepts this environment.
+7. OPS004 reclassified DE 002B / DE 002C to CLOUD after the operator saved this environment;
+   OPS005 recorded DE 002B merge and confirmed DE 002C is unblocked.
 
 If Save is skipped, this branch still documents the recipe, but follow-up Cloud agents may boot the previous snapshot **without** `uv` / PostgreSQL 16.

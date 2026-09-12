@@ -140,7 +140,9 @@ Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
 - Recommended model: GPT 5.6 Sol or Grok 4.6 · Reasoning High.
 
 ## DE 002B — Persistence and recovery primitives
-- `DE002B` · P0 · TODO · Env CLOUD · Cloud yes · Branch `feat/DE002B_recovery_kernel`
+- `DE002B` · P0 · DONE (merged to `main`, 2026-09-11; PR #8; merge commit
+  `58bbf8ce19826cf047e20f0ba90de34b5d2b0da9`) · Env CLOUD · Cloud yes · Branch
+  `feat/DE002B_recovery_kernel`
 - Deps: DE 002A merged · Risk H · Parallel none
 - Goal: PostgreSQL phase runs/materialization, serialized reducer, fencing/heartbeats,
   all-path reconciliation, cancellation, transactional audit and budget ledger with
@@ -148,7 +150,8 @@ Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
 - Recommended model: GPT 5.6 Sol · Reasoning High.
 
 ## DE 002C — First executable offline safe-SQL slice
-- `DE002C` · P0 · TODO · Env CLOUD · Cloud yes · Branch `feat/DE002C_safe_sql_slice`
+- `DE002C` · P0 · TODO · Env CLOUD · Cloud yes · **Unblocked** (DE 002B merged
+  2026-09-11) · Branch `feat/DE002C_safe_sql_slice`
 - Deps: DE 002B merged · Risk M · Parallel none
 - Goal: compose kernels into authenticated request → discovery enumeration → planning
   boundary → explicit descriptions → safe SQL → fake DEV execution → validation.

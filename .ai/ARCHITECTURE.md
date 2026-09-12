@@ -95,8 +95,8 @@ connector and LLM provider adapters; transitive REAL/MOCK artifact provenance bl
 evidence from real Git/deploy; redaction before logs/audit/prompts/artifacts.
 
 **Contract baseline is sequenced:** DE 002A pure kernel + minimal CI (**CLOUD**); DE 002B
-PostgreSQL phase-run/fencing/recovery/cancellation primitives (**LOCAL**); DE 002C first
-offline safe-SQL slice (**LOCAL**); DE 003 expands Docker/integration CI (**CLOUD**).
+PostgreSQL phase-run/fencing/recovery/cancellation primitives (**CLOUD**); DE 002C first
+offline safe-SQL slice (**CLOUD**); DE 003 expands Docker/integration CI (**CLOUD**).
 No phase baselines semantics before its deterministic
 tests pass. Baseline includes principal/grants, materialization identity, versions, typed
 health/reconciliation, approvals, policy aggregation, provenance, audit and budget ledger.
