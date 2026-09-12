@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -9,13 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from aide.capabilities.registry import CapabilityRegistry
 from aide.connectors.base.registry import ConnectorRegistry
-from aide.domain.states import TaskState, WorkflowState
+from aide.domain.states import AttemptOutcome, TaskState, WorkflowState
 from aide.domain.versions import ContractSnapshot
 from aide.persistence.audit import append_audit_event
 from aide.persistence.models import (
     ContractSnapshotModel,
     MaterializedTaskModel,
     PhaseRunModel,
+    TaskAttemptModel,
     WorkflowModel,
 )
 from aide.policy.versions import emit_contract_version_unavailable
@@ -63,6 +65,11 @@ async def evaluate_pinned_contract(
             task.status = TaskState.READY.value
             task.failure_classification = None
             task.disposition_reason = None
+            task.lease_owner = None
+            task.lease_expires_at = None
+            task.active_attempt_id = None
+            task.recovery_owner = None
+            task.recovery_lease_expires_at = None
             workflow.state = phase_run.phase
             workflow.blocked_from_phase = None
             workflow.version += 1
@@ -76,9 +83,21 @@ async def evaluate_pinned_contract(
             )
         await session.flush()
         return True
+    attempt_id = task.active_attempt_id
     task.status = TaskState.PARKED.value
     task.failure_classification = "POLICY_DENIED"
     task.disposition_reason = reason.value
+    task.lease_owner = None
+    task.lease_expires_at = None
+    task.active_attempt_id = None
+    task.recovery_owner = None
+    task.recovery_lease_expires_at = None
+    if attempt_id is not None:
+        attempt = await session.get(TaskAttemptModel, attempt_id, with_for_update=True)
+        if attempt is not None and attempt.finished_at is None:
+            attempt.outcome = AttemptOutcome.FAILED.value
+            attempt.failure_classification = "POLICY_DENIED"
+            attempt.finished_at = datetime.now(UTC).replace(tzinfo=None)
     workflow.blocked_from_phase = phase_run.phase
     workflow.state = WorkflowState.BLOCKED.value
     workflow.version += 1

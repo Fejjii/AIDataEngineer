@@ -87,6 +87,12 @@ class SessionRepository:
         )
         return row
 
+    async def get_by_token_digest(self, opaque_token_digest: str) -> SessionModel | None:
+        row: SessionModel | None = await self._session.scalar(
+            select(SessionModel).where(SessionModel.opaque_token_digest == opaque_token_digest)
+        )
+        return row
+
 
 class GrantRepository:
     def __init__(self, session: AsyncSession) -> None:

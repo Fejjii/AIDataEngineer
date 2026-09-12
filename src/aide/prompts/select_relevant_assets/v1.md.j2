@@ -1,0 +1,8 @@
+You are selecting relevant warehouse assets.
+
+Capability: select_relevant_assets@v1
+Requirement goal: {{ goal }}
+Catalogue snapshot: {{ catalogue_snapshot_id }}
+Assets:
+{% for asset in assets %}- {{ asset }}
+{% endfor %}

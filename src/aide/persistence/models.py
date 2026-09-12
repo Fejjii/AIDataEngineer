@@ -325,7 +325,13 @@ class ApprovalModel(Base):
 class ArtifactModel(Base):
     __tablename__ = "artifacts"
     __table_args__ = (
-        UniqueConstraint("sha256", "artifact_type", "version", name="uq_artifact_content_version"),
+        UniqueConstraint(
+            "workflow_id",
+            "sha256",
+            "artifact_type",
+            "version",
+            name="uq_artifact_workflow_content_version",
+        ),
     )
 
     artifact_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)

@@ -6,10 +6,14 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic>=1.16,<2",
+    "duckdb>=1.2,<2",
+    "fastapi>=0.115,<1",
+    "jinja2>=3.1,<4",
     "psycopg[binary]>=3.2,<4",
     "pydantic>=2.10,<3",
     "sqlalchemy>=2,<3",
     "sqlglot>=26.0.0,<27",
+    "typer>=0.15,<1",
 ]
 
 [project.optional-dependencies]
@@ -20,14 +24,19 @@ dev = [
     "pytest-asyncio>=0.25.0",
     "hypothesis>=6.122.0",
     "import-linter>=2.1",
+    "httpx>=0.28,<1",
 ]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[project.scripts]
+aide = "aide.cli.main:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/aide"]
+force-include = { "src/aide/prompts" = "aide/prompts" }
 
 [tool.hatch.build.targets.wheel.sources]
 "src/aide" = "aide"
@@ -43,6 +52,7 @@ dev = [
     "pytest-asyncio>=0.25.0",
     "hypothesis>=6.122.0",
     "import-linter>=2.1",
+    "httpx>=0.28,<1",
 ]
 
 [tool.ruff]
@@ -70,7 +80,7 @@ warn_redundant_casts = true
 no_implicit_reexport = true
 
 [[tool.mypy.overrides]]
-module = ["sqlglot", "sqlglot.*"]
+module = ["sqlglot", "sqlglot.*", "duckdb", "duckdb.*"]
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]
@@ -91,10 +101,12 @@ root_packages = ["aide"]
 name = "Layered modular monolith"
 type = "layers"
 layers = [
+    "aide.api | aide.cli",
+    "aide.app",
     "aide.orchestration",
-    "aide.persistence | aide.approvals",
-    "aide.policy",
-    "aide.capabilities | aide.connectors.base | aide.secrets | aide.auth",
+    "aide.tools | aide.persistence | aide.approvals | aide.quality | aide.discovery",
+    "aide.policy | aide.reasoning",
+    "aide.capabilities | aide.connectors.base | aide.secrets | aide.auth | aide.llm",
     "aide.domain",
 ]
 
@@ -164,4 +176,27 @@ forbidden_modules = [
     "aide.capabilities",
     "aide.connectors",
     "aide.secrets",
+]
+
+[[tool.importlinter.contracts]]
+name = "API never imports persistence, connectors, tools, or LLM"
+type = "forbidden"
+source_modules = ["aide.api"]
+forbidden_modules = [
+    "aide.persistence",
+    "aide.connectors",
+    "aide.tools",
+    "aide.llm",
+    "aide.orchestration",
+]
+
+[[tool.importlinter.contracts]]
+name = "Orchestration never imports vendor connectors or LLM providers"
+type = "forbidden"
+source_modules = ["aide.orchestration"]
+forbidden_modules = [
+    "aide.connectors.snowflake",
+    "aide.llm",
+    "aide.api",
+    "aide.cli",
 ]
