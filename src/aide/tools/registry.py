@@ -67,6 +67,7 @@ class ToolRegistry:
         connector_health: ConnectorHealthSnapshot | None,
         sql_classification: SqlClassification | None = None,
         provenance: tuple[ArtifactProvenance, ...] = (),
+        on_policy_allow: Callable[[], Awaitable[None]] | None = None,
     ) -> tuple[BaseModel, PolicyDecision]:
         spec = self._capabilities.get(capability_id, 1)
         validated_input = (
@@ -112,6 +113,8 @@ class ToolRegistry:
             raise PolicyParked(decision)
         if decision.decision != "ALLOW":
             raise PolicyDenied(decision)
+        if on_policy_allow is not None:
+            await on_policy_allow()
         handler = self._handlers[capability_id]
         output = await handler(validated_input, context)
         try:

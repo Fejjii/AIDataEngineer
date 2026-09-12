@@ -63,7 +63,13 @@ from aide.orchestration.materialization import (
     create_phase_occurrence,
     persist_materialized_task,
 )
-from aide.orchestration.worker import TaskClaim, claim_task, finalize_success, mark_dispatched
+from aide.orchestration.worker import (
+    TaskClaim,
+    claim_task,
+    finalize_success,
+    mark_dispatched,
+    select_runnable_task,
+)
 from aide.persistence.audit import append_audit_event
 from aide.persistence.models import (
     MaterializedTaskModel,
@@ -170,20 +176,22 @@ class OfflineSliceService:
         connector_unavailable: bool = False,
         pin_unknown_capability: bool = False,
         force_scope_violation: bool = False,
+        principal: PrincipalRef | None = None,
+        persist_bootstrap_session: bool = True,
     ) -> SliceResult:
         self.force_scope_violation = force_scope_violation
         requested = requested_grants or frozenset({PermissionLevel.READ})
-        principal = PrincipalRef(
+        now = datetime.now(UTC)
+        actor = principal or PrincipalRef(
             principal_id=uuid4(),
             authentication_source="LOCAL_SESSION",
             roles=frozenset({Role.OPERATOR, Role.APPROVER}),
             session_id=uuid4(),
         )
-        now = datetime.now(UTC)
         if client_supplied_effective is not None:
             raise GrantForgeryError("client supplied effective grants are not trusted")
         authorization = self._authorizer.authorize(
-            principal,
+            actor,
             requested,
             target_environment=TargetEnv.DEV,
             decided_at=_naive(now),
@@ -192,12 +200,13 @@ class OfflineSliceService:
             self._ro.force_health("UNAVAILABLE")
         snapshot = self._snapshot(pin_unknown_capability=pin_unknown_capability)
         async with self._sessions() as session, session.begin():
-            await SessionRepository(session).add(
-                principal=principal,
-                opaque_token_digest=digest_session_token(issue_session_token()),
-                csrf_token_digest=digest_session_token("csrf"),
-                expires_at=_naive(now + timedelta(hours=8)),
-            )
+            if persist_bootstrap_session and principal is None:
+                await SessionRepository(session).add(
+                    principal=actor,
+                    opaque_token_digest=digest_session_token(issue_session_token()),
+                    csrf_token_digest=digest_session_token(issue_session_token()),
+                    expires_at=_naive(now + timedelta(hours=8)),
+                )
             workflow = await WorkflowRepository(session).add(state=WorkflowState.RECEIVED)
             await GrantRepository(session).persist(
                 workflow_id=workflow.workflow_id, authorization=authorization
@@ -217,8 +226,8 @@ class OfflineSliceService:
                 },
                 actor={
                     "kind": "PRINCIPAL",
-                    "principal_id": str(principal.principal_id),
-                    "session_id": str(principal.session_id),
+                    "principal_id": str(actor.principal_id),
+                    "session_id": str(actor.session_id),
                 },
             )
         workflow_id = workflow.workflow_id
@@ -227,7 +236,7 @@ class OfflineSliceService:
             "workflow.created",
             {"grants": sorted(item.value for item in authorization.effective)},
         )
-        result = SliceResult(workflow_id=workflow_id, principal=principal, grants=authorization)
+        result = SliceResult(workflow_id=workflow_id, principal=actor, grants=authorization)
         result.requirement = self._reasoner.interpret_requirement(
             InterpretRequirementInput(text=requirement_text)
         )
@@ -249,6 +258,7 @@ class OfflineSliceService:
                 snapshot.snapshot_id,
                 target_phase=WorkflowState.DISCOVERY,
                 occurrence="ENUMERATION",
+                effective_grants=authorization.effective,
             ),
             phase_exit_criteria=("planning_boundary",),
         )
@@ -267,6 +277,7 @@ class OfflineSliceService:
                     result.enumeration_plan,
                     capabilities=self._capabilities,
                     connectors=self._connectors,
+                    effective_grants=result.grants.effective,
                 ),
                 phase_exit_criteria=result.enumeration_plan.phase_exit_criteria,
             ),
@@ -295,6 +306,7 @@ class OfflineSliceService:
                     occurrence="DESCRIPTION",
                     catalogue_snapshot_id=str(result.catalogue.snapshot_id),
                     catalogue_assets=result.catalogue.asset_refs(),
+                    effective_grants=result.grants.effective,
                 ),
                 phase_exit_criteria=("planning_boundary",),
             ),
@@ -324,6 +336,7 @@ class OfflineSliceService:
                     result.description_plan,
                     capabilities=self._capabilities,
                     connectors=self._connectors,
+                    effective_grants=result.grants.effective,
                 ),
                 phase_exit_criteria=result.description_plan.phase_exit_criteria,
             ),
@@ -344,6 +357,7 @@ class OfflineSliceService:
                     snapshot.snapshot_id,
                     target_phase=WorkflowState.GENERATION,
                     occurrence="SAFE_SQL",
+                    effective_grants=result.grants.effective,
                 ),
                 phase_exit_criteria=("planning_boundary",),
             ),
@@ -366,6 +380,7 @@ class OfflineSliceService:
                     result.generation_plan,
                     capabilities=self._capabilities,
                     connectors=self._connectors,
+                    effective_grants=result.grants.effective,
                 ),
                 phase_exit_criteria=result.generation_plan.phase_exit_criteria,
             ),
@@ -435,6 +450,7 @@ class OfflineSliceService:
                     snapshot.snapshot_id,
                     target_phase=WorkflowState.DELIVERY,
                     occurrence="DELIVERY",
+                    effective_grants=result.grants.effective,
                 ),
                 phase_exit_criteria=("planning_boundary",),
             ),
@@ -449,6 +465,7 @@ class OfflineSliceService:
                 delivery_plan,
                 capabilities=self._capabilities,
                 connectors=self._connectors,
+                effective_grants=result.grants.effective,
             )
             if isinstance(delivery_plan, Plan)
             else _delivery_templates()
@@ -562,15 +579,41 @@ class OfflineSliceService:
     ) -> bool:
         while True:
             await self._materialize_ready(result, phase_run_id=phase_run_id, snapshot=snapshot)
+            parked_by_contract = False
             async with self._sessions() as session, session.begin():
-                claim = await claim_task(
+                now = _naive(datetime.now(UTC))
+                candidate = await select_runnable_task(
                     session,
-                    owner=OWNER,
-                    now=_naive(datetime.now(UTC)),
-                    lease_duration=timedelta(seconds=30),
+                    now=now,
                     workflow_id=result.workflow_id,
                     phase_run_id=phase_run_id,
                 )
+                if candidate is None:
+                    claim = None
+                else:
+                    compatible = await evaluate_pinned_contract(
+                        session,
+                        task_id=candidate.task_id,
+                        capabilities=self._capabilities,
+                        connectors=self._connectors,
+                    )
+                    if not compatible:
+                        parked_by_contract = True
+                        claim = None
+                    else:
+                        claim = await claim_task(
+                            session,
+                            owner=OWNER,
+                            now=now,
+                            lease_duration=timedelta(seconds=30),
+                            workflow_id=result.workflow_id,
+                            phase_run_id=phase_run_id,
+                            task_id=candidate.task_id,
+                        )
+            if parked_by_contract:
+                result.parked = True
+                result.park_reason = "CONTRACT_VERSION_UNAVAILABLE"
+                return True
             if claim is None:
                 async with self._sessions() as session:
                     parked_rows = (
@@ -625,24 +668,10 @@ class OfflineSliceService:
         phase_run_id: UUID,
     ) -> bool:
         async with self._sessions() as session, session.begin():
-            if any(
-                item.capability_id == "missing_capability" for item in snapshot.capability_contracts
-            ):
-                ok = await evaluate_pinned_contract(
-                    session,
-                    task_id=claim.task_id,
-                    capabilities=self._capabilities,
-                    connectors=self._connectors,
-                )
-                if not ok:
-                    result.parked = True
-                    result.park_reason = "CONTRACT_VERSION_UNAVAILABLE"
-                    return True
             task = await session.get(MaterializedTaskModel, claim.task_id)
             assert task is not None
             if task.workflow_id != result.workflow_id or task.phase_run_id != phase_run_id:
                 raise RuntimeError("claim escaped the current workflow or phase")
-            await mark_dispatched(session, claim)
             health = await self._ro.health() if task.connector_id == "snowflake_ro" else None
             if task.connector_id == "snowflake_dev":
                 health = await self._dev.health()
@@ -660,6 +689,12 @@ class OfflineSliceService:
             sql_classification = (
                 result.classification if task.capability_id in _SQL_POLICY_CAPABILITIES else None
             )
+
+            async def _dispatch() -> None:
+                dispatched = await mark_dispatched(session, claim)
+                if not dispatched:
+                    raise RuntimeError("lost claim before policy-allowed dispatch")
+
             try:
                 output, decision = await self._tools.invoke(
                     session,
@@ -671,6 +706,7 @@ class OfflineSliceService:
                     connector_id=task.connector_id,
                     connector_health=health,
                     sql_classification=sql_classification,
+                    on_policy_allow=_dispatch,
                 )
             except PolicyParked as exc:
                 reason = exc.decision.reasons[0].value if exc.decision.reasons else "PARKED"
@@ -1017,6 +1053,7 @@ def _planning_templates(
     *,
     target_phase: WorkflowState,
     occurrence: Literal["ENUMERATION", "DESCRIPTION", "SAFE_SQL", "DELIVERY"],
+    effective_grants: frozenset[PermissionLevel],
     catalogue_snapshot_id: str | None = None,
     catalogue_assets: tuple[AssetRef, ...] = (),
 ) -> tuple[TemplateSpec, ...]:
@@ -1025,7 +1062,10 @@ def _planning_templates(
         phase=target_phase,
         contract_snapshot_ref=str(snapshot_id),
         capability_catalogue=(),
-        constraints=PlanConstraints(max_tasks=50),
+        constraints=PlanConstraints(
+            max_tasks=50,
+            effective_grants=tuple(sorted(item.value for item in effective_grants)),
+        ),
         occurrence=occurrence,
         catalogue_snapshot_id=catalogue_snapshot_id,
         catalogue_assets=catalogue_assets,

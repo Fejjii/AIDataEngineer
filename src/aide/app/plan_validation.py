@@ -6,6 +6,7 @@ from aide.capabilities.io import Plan, PlannedTask
 from aide.capabilities.registry import CapabilityRegistry
 from aide.connectors.base.registry import ConnectorRegistry
 from aide.connectors.base.spec import IdentityClass
+from aide.domain.permissions import PermissionLevel
 from aide.orchestration.materialization import TemplateSpec
 
 
@@ -19,6 +20,7 @@ def validate_plan(
     capabilities: CapabilityRegistry,
     connectors: ConnectorRegistry,
     max_tasks: int = 50,
+    effective_grants: frozenset[PermissionLevel] | None = None,
 ) -> tuple[TemplateSpec, ...]:
     if len(plan.tasks) > max_tasks:
         raise PlanValidationError("plan exceeds max_tasks")
@@ -30,6 +32,11 @@ def validate_plan(
         if not set(task.depends_on).issubset(known):
             raise PlanValidationError("cross-phase or unknown dependency is forbidden")
         spec = capabilities.get(task.capability_id, 1)
+        if effective_grants is not None and spec.required_permission not in effective_grants:
+            raise PlanValidationError(
+                f"{task.capability_id} requires {spec.required_permission.value} "
+                "which is not in the effective workflow grants"
+            )
         if spec.connector_requirement.required:
             if task.connector_id is None:
                 raise PlanValidationError(f"{task.capability_id} requires a connector")

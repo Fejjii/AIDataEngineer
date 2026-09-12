@@ -43,9 +43,18 @@ async def park_task(
     task.failure_classification = "POLICY_DENIED"
     task.disposition_reason = reason
     task.finished_at = now
+    attempt_id = task.active_attempt_id
     task.lease_owner = None
     task.lease_expires_at = None
     task.active_attempt_id = None
+    task.recovery_owner = None
+    task.recovery_lease_expires_at = None
+    if attempt_id is not None:
+        attempt = await session.get(TaskAttemptModel, attempt_id, with_for_update=True)
+        if attempt is not None:
+            attempt.outcome = AttemptOutcome.FAILED.value
+            attempt.failure_classification = "POLICY_DENIED"
+            attempt.finished_at = now
     workflow.state = WorkflowState.BLOCKED.value
     workflow.blocked_from_phase = phase_run.phase if phase_run is not None else workflow.state
     workflow.version += 1
@@ -54,6 +63,7 @@ async def park_task(
         workflow_id=task.workflow_id,
         phase_run_id=task.phase_run_id,
         task_id=task.task_id,
+        attempt_id=attempt_id,
         operation_idempotency_key=task.operation_idempotency_key,
         event_type="TASK_PARKED",
         payload={"reason": reason, "routing": routing, "reasons": list(reasons)},
@@ -88,6 +98,8 @@ async def fail_closed_task(
     task.lease_owner = None
     task.lease_expires_at = None
     task.active_attempt_id = None
+    task.recovery_owner = None
+    task.recovery_lease_expires_at = None
     if attempt_id is not None:
         attempt = await session.get(TaskAttemptModel, attempt_id, with_for_update=True)
         if attempt is not None:

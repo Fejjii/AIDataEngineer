@@ -50,16 +50,15 @@ class RecoveryClaim:
     lease_expires_at: datetime
 
 
-async def claim_task(
+async def select_runnable_task(
     session: AsyncSession,
     *,
-    owner: str,
     now: datetime,
-    lease_duration: timedelta,
     workflow_id: UUID | None = None,
     phase_run_id: UUID | None = None,
-) -> TaskClaim | None:
-    """Claim one runnable task with SKIP LOCKED and create exactly one attempt."""
+    task_id: UUID | None = None,
+) -> MaterializedTaskModel | None:
+    """Lock one runnable task without creating an attempt or lease."""
     filters = [
         MaterializedTaskModel.status.in_([TaskState.READY.value, TaskState.RETRY_WAIT.value]),
         or_(
@@ -73,13 +72,35 @@ async def claim_task(
         filters.append(MaterializedTaskModel.workflow_id == workflow_id)
     if phase_run_id is not None:
         filters.append(MaterializedTaskModel.phase_run_id == phase_run_id)
-    task = await session.scalar(
+    if task_id is not None:
+        filters.append(MaterializedTaskModel.task_id == task_id)
+    return await session.scalar(
         select(MaterializedTaskModel)
         .join(WorkflowModel, WorkflowModel.workflow_id == MaterializedTaskModel.workflow_id)
         .where(*filters)
         .order_by(MaterializedTaskModel.created_at, MaterializedTaskModel.task_id)
         .with_for_update(skip_locked=True, of=MaterializedTaskModel)
         .limit(1)
+    )
+
+
+async def claim_task(
+    session: AsyncSession,
+    *,
+    owner: str,
+    now: datetime,
+    lease_duration: timedelta,
+    workflow_id: UUID | None = None,
+    phase_run_id: UUID | None = None,
+    task_id: UUID | None = None,
+) -> TaskClaim | None:
+    """Claim one runnable task with SKIP LOCKED and create exactly one attempt."""
+    task = await select_runnable_task(
+        session,
+        now=now,
+        workflow_id=workflow_id,
+        phase_run_id=phase_run_id,
+        task_id=task_id,
     )
     if task is None:
         return None
