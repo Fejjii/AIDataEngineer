@@ -47,7 +47,7 @@ SNOWFLAKE_RO = ConnectorSpec(
     identity_class=IdentityClass.READ_ONLY,
     implementations=frozenset(_impl(cid) for cid in _READ_CAPABILITIES),
     allowed_permissions=frozenset({PermissionLevel.READ}),
-    allow_list=ObjectAllowList(databases=frozenset({"RAW", "AIDE_DEV"})),
+    allow_list=ObjectAllowList(databases=frozenset({"VANTARA_RAW", "RAW", "AIDE_DEV"})),
     dialect="snowflake",
     is_fake=False,
 )

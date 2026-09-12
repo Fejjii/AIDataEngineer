@@ -176,7 +176,7 @@ Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
 ## DE 005 — Real Snowflake connector
 - `DE005` · P0 · IN_PROGRESS · Env LOCAL (live validation) / CURSOR_CLOUD (DE005A implementation) · Cloud yes for DE005A credential-free contracts · Branch `feat/DE005_snowflake_connector` · Deps DE 002C (parallel Lane B with DE 004)
 - Goal: real connector, identities `snowflake_ro`/`snowflake_dev`, error mapper w/ recorded fixtures, dialect, DEV namespace, `aide connectors check`, live contract tests.
-- Model Grok 4.6 · Reasoning High · Risk Medium · Duration 4–6 h · Token L · Human gate: `REVIEW_REQUIRED` for secret entry (env var names only: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER_DEV`, `SNOWFLAKE_PRIVATE_KEY_DEV`, `SNOWFLAKE_WAREHOUSE_DEV`).
+- Model Grok 4.6 · Reasoning High · Risk Medium · Duration 4–6 h · Token L · Human gate: `REVIEW_REQUIRED` for secret entry (env var names only: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER_RO`, `SNOWFLAKE_PRIVATE_KEY_RO`, `SNOWFLAKE_USER_DEV`, `SNOWFLAKE_PRIVATE_KEY_DEV`, `SNOWFLAKE_WAREHOUSE_DEV`).
 - **DE005A (Cloud, this phase):** implement real + fake Snowflake connector code and credential-free contract tests. Live vendor validation is **out of scope**. End state: `REVIEW_REQUIRED` for DE005B live validation. Do not depend on DE004 files.
 
 ## DE 006 — Profiling and relationship inference

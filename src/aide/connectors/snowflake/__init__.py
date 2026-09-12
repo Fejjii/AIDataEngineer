@@ -1,10 +1,16 @@
 """Snowflake connector package: real + fake, same handler set."""
 
 from aide.connectors.snowflake.config import (
+    DEV_IDENTITY_SECRET_NAMES,
     REQUIRED_SECRET_NAMES,
+    RO_IDENTITY_SECRET_NAMES,
+    ROLE_DEVELOPMENT,
+    ROLE_READ_ONLY,
+    SHARED_SECRET_NAMES,
     FakeSnowflakeSettings,
     SnowflakeSettings,
     missing_secret_names,
+    required_secret_names_for,
     settings_for_identity,
     snowflake_credentials_available,
 )
@@ -21,6 +27,7 @@ from aide.connectors.snowflake.real import RealSnowflakeConnector, build_real_pa
 from aide.connectors.snowflake.specs import FAKE_SNOWFLAKE_DEV, FAKE_SNOWFLAKE_RO
 
 __all__ = [
+    "DEV_IDENTITY_SECRET_NAMES",
     "FAKE_SNOWFLAKE_DEV",
     "FAKE_SNOWFLAKE_RO",
     "FakeSnowflakeConnector",
@@ -28,7 +35,11 @@ __all__ = [
     "FakeSnowflakeSettings",
     "QueryTag",
     "REQUIRED_SECRET_NAMES",
+    "ROLE_DEVELOPMENT",
+    "ROLE_READ_ONLY",
+    "RO_IDENTITY_SECRET_NAMES",
     "RealSnowflakeConnector",
+    "SHARED_SECRET_NAMES",
     "SnowflakeMappedError",
     "SnowflakeSettings",
     "build_fake_pair",
@@ -38,6 +49,7 @@ __all__ = [
     "missing_secret_names",
     "parse_query_tag",
     "query_tag_from_context",
+    "required_secret_names_for",
     "settings_for_identity",
     "snowflake_credentials_available",
     "workflow_short_id",

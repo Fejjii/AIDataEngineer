@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 from uuid import uuid4
 
 from pydantic import SecretStr
@@ -73,7 +73,12 @@ from aide.connectors.snowflake.enforcement import (
     statement_timeout_seconds,
 )
 from aide.connectors.snowflake.errors import SnowflakeMappedError, map_error, sanitize_error_message
-from aide.connectors.snowflake.health import health_snapshot, missing_credential_health
+from aide.connectors.snowflake.health import (
+    current_role_from_rows,
+    health_from_current_role,
+    health_snapshot,
+    missing_credential_health,
+)
 from aide.connectors.snowflake.masking import (
     column_is_sensitive,
     infer_semantic,
@@ -115,10 +120,12 @@ class RealSnowflakeConnector:
         *,
         settings: SnowflakeSettings | None = None,
         resolver: EnvConnectorSecretResolver | None = None,
+        run_session: Callable[..., Awaitable[Any]] | None = None,
     ) -> None:
         self.spec = spec
         self._settings = settings or settings_for_identity(spec.identity_class)
         self._resolver = resolver or EnvConnectorSecretResolver()
+        self._run_session = run_session
         self._closed = False
 
     async def health(self) -> ConnectorHealthSnapshot:
@@ -136,10 +143,10 @@ class RealSnowflakeConnector:
                 fn=lambda session: session.execute("SELECT CURRENT_ROLE() AS ROLE"),
             )
             _columns, result, _query_id = rows
-            if result:
-                return health_snapshot(self.spec, status="AVAILABLE")
-            return health_snapshot(
-                self.spec, status="DEGRADED", reason_codes=("HEALTH_EMPTY_RESULT",)
+            return health_from_current_role(
+                self.spec,
+                expected_role=self._settings.role,
+                current_role=current_role_from_rows(result),
             )
         except SnowflakeMappedError as exc:
             return health_snapshot(
@@ -708,6 +715,13 @@ class RealSnowflakeConnector:
         timeout_seconds: int,
         fn: Callable[[SnowflakeSession], T],
     ) -> T:
+        if self._run_session is not None:
+            return cast(
+                T,
+                await self._run_session(
+                    query_tag=query_tag, timeout_seconds=timeout_seconds, fn=fn
+                ),
+            )
         settings = self._settings
         resolver = self._resolver
 

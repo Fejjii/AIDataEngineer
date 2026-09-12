@@ -136,6 +136,21 @@ async def test_dev_identity_rejects_reads(fake_dev: FakeSnowflakeConnector) -> N
 
 
 @pytest.mark.asyncio
+async def test_vantara_raw_is_on_ro_allow_list(fake_ro: FakeSnowflakeConnector) -> None:
+    assert "VANTARA_RAW" in SNOWFLAKE_RO.allow_list.databases
+    assert "RAW" in SNOWFLAKE_RO.allow_list.databases
+    assert "VANTARA_RAW" in FAKE_SNOWFLAKE_RO.allow_list.databases
+    assert "VANTARA_RAW" not in SNOWFLAKE_DEV.allow_list.databases
+    context = make_context()
+    discovered = await fake_ro.discover_assets(
+        DiscoverAssetsInput(scope=DiscoveryScope(databases=("VANTARA_RAW",))),
+        context,
+    )
+    assert discovered.snapshot_id
+    assert all(asset.address[0] == "VANTARA_RAW" for asset in discovered.assets)
+
+
+@pytest.mark.asyncio
 async def test_allow_list_enforcement(fake_ro: FakeSnowflakeConnector) -> None:
     context = make_context()
     with pytest.raises(SnowflakeMappedError) as exc:
@@ -582,14 +597,16 @@ async def test_real_without_credentials_skips_live_and_fails_closed() -> None:
     reason="Snowflake credentials unavailable",
 )
 @pytest.mark.asyncio
-async def test_real_live_discover_skipped_without_credentials() -> None:
+async def test_real_live_discover_vantara_raw() -> None:
+    """DE005B live scaffold: discover the accepted Vantara demo source database."""
     connector = RealSnowflakeConnector(SNOWFLAKE_RO)
     context = make_context()
     result = await connector.discover_assets(
-        DiscoverAssetsInput(scope=DiscoveryScope(databases=("RAW",))),
+        DiscoverAssetsInput(scope=DiscoveryScope(databases=("VANTARA_RAW",))),
         context,
     )
     assert result.snapshot_id
+    assert all(asset.address[0] == "VANTARA_RAW" for asset in result.assets)
 
 
 def test_dialect_round_trip_and_namespace() -> None:

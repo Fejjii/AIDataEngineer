@@ -10,6 +10,8 @@ def test_snowflake_ro_is_valid_read_binding() -> None:
     assert SNOWFLAKE_RO.identity_class.value == "READ_ONLY"
     assert PermissionLevel.READ in SNOWFLAKE_RO.allowed_permissions
     assert SNOWFLAKE_RO.advertises("execute_query", 1)
+    assert "VANTARA_RAW" in SNOWFLAKE_RO.allow_list.databases
+    assert "RAW" in SNOWFLAKE_RO.allow_list.databases
     startup_permission_check(SNOWFLAKE_RO, kernel_registry().required_permissions())
 
 
