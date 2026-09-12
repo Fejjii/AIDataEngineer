@@ -64,8 +64,19 @@ async def test_two_identical_offline_workflows_keep_artifact_ownership(
             right = second_index[artifact_type][0]
             assert left.workflow_id == first.workflow_id
             assert right.workflow_id == second.workflow_id
-            assert left.sha256 == right.sha256
             assert left.artifact_id != right.artifact_id
+        for artifact_type in ("RequirementSpec", "Plan", "ValidationReport"):
+            left = first_index[artifact_type][0]
+            right = second_index[artifact_type][0]
+            assert left.sha256 == right.sha256
+            assert left.body == right.body
+        first_summary = first_index["WorkflowSummary"][0]
+        second_summary = second_index["WorkflowSummary"][0]
+        assert first_summary.body is not None
+        assert second_summary.body is not None
+        assert first_summary.body["workflow_id"] == str(first.workflow_id)
+        assert second_summary.body["workflow_id"] == str(second.workflow_id)
+        assert first_summary.sha256 != second_summary.sha256
         plan_tasks = list(
             (
                 await session.scalars(
