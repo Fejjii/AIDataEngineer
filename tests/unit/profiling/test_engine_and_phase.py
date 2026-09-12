@@ -10,6 +10,7 @@ from aide.capabilities.io import ProfileDatasetInput, SampleDatasetInput
 from aide.connectors.snowflake.fake import FakeSnowflakeConnector
 from aide.connectors.snowflake.specs import FAKE_SNOWFLAKE_RO
 from aide.domain.sql import AssetKind, AssetRef
+from aide.orchestration.materialization import TemplateSpec
 from aide.orchestration.phases.profiling import (
     PROFILING_EXIT_CRITERIA,
     allocate_profiling_slots,
@@ -201,7 +202,7 @@ def test_task_limit_does_not_profile_unselected_assets(
     assert 1 <= profile_count < len(selected_assets)
 
 
-def _task_counts(templates: tuple) -> tuple[int, int, int, int]:
+def _task_counts(templates: tuple[TemplateSpec, ...]) -> tuple[int, int, int, int]:
     profiles = sum(1 for item in templates if item.capability_id == "profile_dataset")
     infer = sum(1 for item in templates if item.capability_id == "infer_relationships")
     samples = sum(1 for item in templates if item.capability_id == "sample_dataset")
