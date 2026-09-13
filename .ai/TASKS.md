@@ -188,8 +188,9 @@ Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
 - **DE005A SYNC:** `feat/DE005_snowflake_connector` synchronized with `main` at
   `3813042f4e0b34889139c453dae70c9a507e853b` so DE004 synthetic fixtures and DE005A connector
   contracts coexist. Do not execute DE005B in Cloud.
-- **DE005B (pending, LOCAL):** live Snowflake validation. Not started. Do not use Snowflake
-  credentials on Cloud.
+- **DE005B (pending, LOCAL):** live Snowflake validation. AUTH FIX: real connect must pass
+  `authenticator=SNOWFLAKE_JWT`. Health/role verification still requires loaded env vars on
+  a credentialed host. Do not paste Snowflake credentials into chat.
 
 ## DE 006 — Profiling and relationship inference
 - `DE006` · P0 · TODO · Env CLOUD · Cloud yes · Branch `feat/DE006_profiling` · Deps DE 002C, DE 004
