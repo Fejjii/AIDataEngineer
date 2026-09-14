@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: vantara_raw
+    database: "{% if target.type == 'snowflake' %}{{ target.database }}{% else %}VANTARA_RAW{% endif %}"
+    schema: "{% if target.type == 'snowflake' %}{{ target.schema }}{% else %}BILLING{% endif %}"
+    tables:
+      - name: customers
+        identifier: CUSTOMERS
+      - name: invoices
+        identifier: INVOICES

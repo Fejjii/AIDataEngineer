@@ -1,0 +1,19 @@
+name: vantara_project
+version: "1.0.0"
+config-version: 2
+profile: vantara
+require-dbt-version: [">=1.11.0", "<1.12.0"]
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+target-path: target
+clean-targets: ["target", "dbt_packages", "logs"]
+
+models:
+  vantara_project:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
