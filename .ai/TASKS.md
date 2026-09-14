@@ -188,17 +188,24 @@ Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
 - **DE005A SYNC:** `feat/DE005_snowflake_connector` synchronized with `main` at
   `3813042f4e0b34889139c453dae70c9a507e853b` so DE004 synthetic fixtures and DE005A connector
   contracts coexist. Do not execute DE005B in Cloud.
-- **DE005B (pending, LOCAL):** live Snowflake validation. Not started. Do not use Snowflake
-  credentials on Cloud.
+- **DE005B (LOCAL live validation complete; pending Development Control):** tiny v2 loaded
+  into `VANTARA_RAW` via the DEV service identity (not the product DEV connector). Live RO/DEV
+  connector tests passed on a credentialed host. Do not paste Snowflake credentials into chat.
+  Temporary `AIDE_DEV_RW` `CREATE TABLE` on `VANTARA_RAW` should be revoked after bootstrap.
 
 ## DE 006 — Profiling and relationship inference
-- `DE006` · P0 · TODO · Env CLOUD · Cloud yes · Branch `feat/DE006_profiling` · Deps DE 002C, DE 004
+- `DE006` · P0 · DONE (R1 accepted 2026-09-12) · Env CLOUD · Cloud yes · Branch `feat/DE006_profiling` · Deps DE 002C, DE 004
 - Model Grok 4.6 · Reasoning Medium · Risk Medium · Duration 4–6 h · Token L.
+- **DE006 R1 (Cloud, accepted):** deterministic offline Vantara profiling and generic
+  relationship inference on PR 14. Production inference does not consume expected
+  Vantara pairs. PR 14 stays open and stacked until upstream integration clears.
+- Completion evidence: `docs/agent/runs/DE006/DE006-SESSION-20260912T165821Z-bc01a0968e.md`
+  and R1 `docs/agent/runs/DE006/DE006-R1-SESSION-20260912T183120Z-bc01a0968e.md`.
 
 ## DE 007 — Modelling decision engine and design
 - `DE007` · P0 · DONE (operator accepted R1 2026-09-12) · Env CLOUD · Cloud yes (recorded LLM) · Branch `feat/DE007_modelling` · Deps DE 006
 - Model Grok 4.6 · Reasoning High · Risk Medium · Duration 5–7 h · Token L.
-- PR 16 stacked on PR 14 (`feat/DE006_profiling`). Do not merge to `main` until PR 14 is integrated.
+- PR 16 is accepted and remains dependent on DE006 integration before main merge.
 
 ## DE 008 — dbt connector, generation and execution
 - `DE008` · P0 · TODO · Env LOCAL · Cloud no · Branch `feat/DE008_dbt_generation` · Deps DE 005, DE 007 (008a connector may start after DE 005)
