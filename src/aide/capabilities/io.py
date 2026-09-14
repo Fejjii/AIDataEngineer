@@ -484,3 +484,347 @@ class EmitWorkflowSummaryInput(FrozenModel):
     validation_passed: bool
     row_count: int
     sql_dialect: str | None = None
+
+
+DeliverableType = Literal[
+    "ANALYTICAL_DATA_PRODUCT",
+    "PIPELINE",
+    "MODEL_CHANGE",
+    "QUALITY_SUITE",
+    "INVESTIGATION",
+    "UNKNOWN",
+]
+HistoryRequirement = Literal["NONE", "CURRENT_ONLY", "FULL_HISTORY", "UNKNOWN"]
+AuditabilitySignal = Literal["LOW", "HIGH", "UNKNOWN"]
+SourceStructure = Literal["NORMALIZED_3NF", "DENORMALIZED_EXTRACT", "EVENT_LOG", "MIXED", "UNKNOWN"]
+VolumeClass = Literal["S", "M", "L", "XL", "UNKNOWN"]
+VelocityClass = Literal["BATCH_DAILY", "INTRA_DAY", "NEAR_REAL_TIME", "UNKNOWN"]
+ChangeFrequency = Literal["LOW", "MEDIUM", "HIGH", "UNKNOWN"]
+QueryPattern = Literal[
+    "AGGREGATE_BI",
+    "DRILL_DOWN",
+    "OPERATIONAL_LOOKUP",
+    "ML_FEATURES",
+    "UNKNOWN",
+]
+DownstreamConsumer = Literal["BI", "ANALYSTS_SQL", "ML", "APPLICATION", "UNKNOWN"]
+LatencyRequirement = Literal["DAILY", "HOURLY", "MINUTES", "UNKNOWN"]
+CostSensitivity = Literal["LOW", "MEDIUM", "HIGH", "UNKNOWN"]
+KeyQuality = Literal["CLEAN", "DUPLICATES_PRESENT", "NO_NATURAL_KEY", "UNKNOWN"]
+IdentifierAlignment = Literal["ALIGNED", "PARTIAL", "MISALIGNED", "UNKNOWN"]
+TernaryFlag = Literal["TRUE", "FALSE", "UNKNOWN"]
+NamingConvention = Literal["DBT_DEFAULT", "MEDALLION"]
+LayeringClass = Literal[
+    "STAGING_INTERMEDIATE_MARTS",
+    "REUSE_EXISTING",
+    "TESTS_ONLY",
+    "EPHEMERAL_QUERIES",
+]
+IntegrationClass = Literal["NO_VAULT", "RAW_VAULT_RECOMMENDED"]
+PresentationClass = Literal[
+    "STAR_SCHEMA",
+    "WIDE_FEATURE_TABLE",
+    "NORMALIZED_SERVING",
+    "SNOWFLAKE_SCHEMA",
+]
+FactKind = Literal["TRANSACTION_FACT", "PERIODIC_SNAPSHOT_FACT", "ACCUMULATING_SNAPSHOT_FACT"]
+HistoryClass = Literal["SCD1", "SCD2", "STATIC"]
+HistoryStrategy = Literal[
+    "snapshot_timestamp",
+    "snapshot_check",
+    "source_validity_intervals",
+    "static",
+    "none",
+]
+MaterializationKind = Literal[
+    "view", "table", "ephemeral", "incremental", "snapshot", "dynamic_table"
+]
+ModelKind = Literal[
+    "STAGING",
+    "INTERMEDIATE",
+    "DIMENSION",
+    "FACT",
+    "MART",
+    "SNAPSHOT",
+    "HUB",
+    "LINK",
+    "SATELLITE",
+]
+ModelLayer = Literal["staging", "intermediate", "marts"]
+CANONICAL_MODEL_LAYERS: tuple[str, ...] = ("staging", "intermediate", "marts")
+MEDALLION_PHYSICAL_LAYERS: tuple[tuple[str, str], ...] = (
+    ("staging", "bronze"),
+    ("intermediate", "silver"),
+    ("marts", "gold"),
+)
+
+
+def canonical_model_layers(layering: LayeringClass) -> tuple[str, ...]:
+    if layering in {"TESTS_ONLY", "EPHEMERAL_QUERIES"}:
+        return ()
+    return CANONICAL_MODEL_LAYERS
+
+
+def physical_layer_names(
+    naming: NamingConvention, layering: LayeringClass
+) -> tuple[tuple[str, str], ...]:
+    layers = canonical_model_layers(layering)
+    if not layers:
+        return ()
+    if naming == "MEDALLION":
+        return MEDALLION_PHYSICAL_LAYERS
+    return tuple((name, name) for name in layers)
+
+
+class PlatformCapabilities(FrozenModel):
+    supports_merge: TernaryFlag = "UNKNOWN"
+    supports_clustering: TernaryFlag = "UNKNOWN"
+    supports_time_travel: TernaryFlag = "UNKNOWN"
+    supports_streams_tasks: TernaryFlag = "UNKNOWN"
+    supports_dynamic_tables: TernaryFlag = "UNKNOWN"
+
+
+class EntityHistorySignal(FrozenModel):
+    entity: str
+    asset: AssetRef | None = None
+    has_source_history: TernaryFlag = "UNKNOWN"
+    validity_columns: tuple[str, ...] = ()
+
+
+class DuplicateGrainEvidence(FrozenModel):
+    entity: str
+    asset: AssetRef | None = None
+    columns: tuple[str, ...]
+    uniqueness_ratio: float | None = None
+    duplicate_groups_estimate: int = Field(ge=0, default=0)
+    extra_row_estimate: int = Field(ge=0, default=0)
+    reason: str
+
+
+class ModellingSignals(FrozenModel):
+    deliverable_type: DeliverableType
+    history_requirements: HistoryRequirement
+    auditability: AuditabilitySignal
+    source_count: int | None = None
+    source_system_count: int | None = None
+    source_structure: SourceStructure = "UNKNOWN"
+    volume_class: VolumeClass = "UNKNOWN"
+    volume_row_count: int | None = None
+    velocity: VelocityClass = "UNKNOWN"
+    change_frequency: ChangeFrequency = "UNKNOWN"
+    entity_history_in_source: TernaryFlag = "UNKNOWN"
+    entity_history: tuple[EntityHistorySignal, ...] = ()
+    query_patterns: tuple[QueryPattern, ...] = ("UNKNOWN",)
+    downstream_consumers: tuple[DownstreamConsumer, ...] = ("UNKNOWN",)
+    latency_requirement: LatencyRequirement = "UNKNOWN"
+    platform_capabilities: PlatformCapabilities = Field(default_factory=PlatformCapabilities)
+    cost_sensitivity: CostSensitivity = "UNKNOWN"
+    key_quality: KeyQuality = "UNKNOWN"
+    identifier_alignment: IdentifierAlignment = "UNKNOWN"
+    identifier_alignment_ratio: float | None = None
+    duplicate_grains: tuple[DuplicateGrainEvidence, ...] = ()
+    unknown_reasons: tuple[str, ...] = ()
+
+
+class ModellingOpenQuestion(FrozenModel):
+    topic: str
+    question: str
+    blocking: bool = False
+    rule: str | None = None
+
+
+class LayeringDecision(FrozenModel):
+    decision: LayeringClass
+    rule: Literal["L1", "L2", "L3", "L4"]
+    naming: NamingConvention = "DBT_DEFAULT"
+
+
+class IntegrationLayerDecision(FrozenModel):
+    decision: IntegrationClass
+    rule: Literal["V1", "V2", "V3"]
+    recommendation: str | None = None
+
+
+class PresentationDecision(FrozenModel):
+    decision: PresentationClass
+    rule: Literal["P1", "P2", "P3", "P4", "P5"]
+    dimension: str | None = None
+
+
+class FactDecision(FrozenModel):
+    entity: str
+    kind: FactKind
+    grain: tuple[str, ...]
+    source_assets: tuple[AssetRef, ...] = ()
+    materialization: MaterializationKind
+    unique_key: tuple[str, ...] = ()
+    watermark_column: str | None = None
+    watermark_lookback_days: int | None = None
+    dedup_required: bool = False
+    dedup_rule: str | None = None
+    rule: tuple[str, ...] = ()
+
+
+class DimensionDecision(FrozenModel):
+    entity: str
+    history: HistoryClass
+    source_history: bool
+    strategy: HistoryStrategy
+    source_assets: tuple[AssetRef, ...] = ()
+    tracked_columns: tuple[str, ...] = ()
+    hybrid_scd1_attributes: tuple[str, ...] = ()
+    rule: tuple[str, ...] = ()
+
+
+class DedupDecision(FrozenModel):
+    entity: str
+    grain: tuple[str, ...]
+    description: str
+    rule: Literal["F4"] = "F4"
+
+
+class MaterializationDecision(FrozenModel):
+    target: str
+    materialization: MaterializationKind
+    rule: Literal["M1", "M2", "M3", "M4", "M5", "M6", "M7"]
+    detail: str
+
+
+class ArchitectureDecision(FrozenModel):
+    signals: ModellingSignals
+    layering: LayeringDecision
+    naming: NamingConvention
+    integration_layer: IntegrationLayerDecision
+    presentation: PresentationDecision
+    facts: tuple[FactDecision, ...]
+    dimensions: tuple[DimensionDecision, ...]
+    dedup: tuple[DedupDecision, ...] = ()
+    materialization: tuple[MaterializationDecision, ...]
+    recommendations: tuple[str, ...] = ()
+    open_questions: tuple[ModellingOpenQuestion, ...] = ()
+    approval_required: bool
+    approval_reasons: tuple[str, ...] = ()
+    rule_ids: tuple[str, ...]
+    estimated_model_count: int = Field(ge=0)
+    estimated_cost_class: VolumeClass = "UNKNOWN"
+
+
+class AssetProfileEvidence(FrozenModel):
+    asset: AssetRef
+    row_count: int
+    columns: tuple[str, ...]
+    column_types: tuple[tuple[str, str], ...] = ()
+    candidate_keys: tuple[CandidateKey, ...] = ()
+    key_uniqueness: tuple[tuple[str, float], ...] = ()
+    composite_key_uniqueness: tuple[tuple[tuple[str, ...], float, bool], ...] = ()
+    duplicate_groups_estimate: int = Field(ge=0, default=0)
+    has_valid_from: bool = False
+    has_valid_to: bool = False
+    has_updated_at: bool = False
+    has_created_at: bool = False
+    has_loaded_at: bool = False
+    updated_at_null_ratio: float | None = None
+    loaded_at_null_ratio: float | None = None
+    foreign_key_columns: tuple[str, ...] = ()
+
+
+class DuplicateEvidenceLite(FrozenModel):
+    asset: AssetRef
+    columns: tuple[str, ...]
+    uniqueness_ratio: float
+    duplicate_groups_estimate: int = Field(ge=0)
+    extra_row_estimate: int = Field(ge=0)
+    reason: str
+
+
+class ProfilingEvidenceSummary(FrozenModel):
+    fixture_version: str | None = None
+    fact_ids: tuple[str, ...] = ()
+    fact_details: tuple[tuple[str, str], ...] = ()
+    relationship_count: int = 0
+    masking_applied: bool = True
+
+
+class DedupRule(FrozenModel):
+    partition: tuple[str, ...]
+    order_by: tuple[str, ...]
+    keep: Literal["first"] = "first"
+    description: str
+    assumption: bool = True
+
+
+class IncrementalConfig(FrozenModel):
+    strategy: Literal["merge", "append", "delete+insert"]
+    unique_key: tuple[str, ...]
+    watermark_column: str
+    lookback_days: int = Field(ge=0, default=3)
+
+
+class ModelColumn(FrozenModel):
+    name: str
+    expression: str | None = None
+    data_type: str | None = None
+    tests: tuple[str, ...] = ()
+    source_asset: AssetRef | None = None
+    source_column: str | None = None
+    is_pii: bool = False
+    pii_handling: Literal["masked", "excluded", "hashed"] | None = None
+    description: str | None = None
+
+
+class ModelDesignUnit(FrozenModel):
+    name: str
+    model_kind: ModelKind
+    layer: ModelLayer
+    source_assets: tuple[AssetRef, ...] = ()
+    grain: tuple[str, ...] = ()
+    columns: tuple[ModelColumn, ...] = ()
+    materialization: MaterializationKind
+    unique_key: tuple[str, ...] = ()
+    watermark: str | None = None
+    incremental: IncrementalConfig | None = None
+    dedup_rule: DedupRule | None = None
+    history_strategy: HistoryStrategy | None = None
+    tracked_scd2_columns: tuple[str, ...] = ()
+    tests: tuple[str, ...] = ()
+    dependencies: tuple[str, ...] = ()
+    assumptions: tuple[str, ...] = ()
+    rule_refs: tuple[str, ...] = ()
+    surrogate_key: str | None = None
+    natural_keys: tuple[str, ...] = ()
+    scd_type: HistoryClass | None = None
+
+
+class ModelDesign(FrozenModel):
+    layers: tuple[str, ...]
+    physical_layer_names: tuple[tuple[str, str], ...] = ()
+    models: tuple[ModelDesignUnit, ...]
+    relationships: tuple[str, ...] = ()
+    tests: tuple[str, ...] = ()
+    open_questions: tuple[ModellingOpenQuestion, ...] = ()
+    assumptions: tuple[str, ...] = ()
+    architecture_decision_digest: str = Field(min_length=64, max_length=64)
+
+
+class DesignViolation(FrozenModel):
+    code: str
+    message: str
+    model_name: str | None = None
+    details: tuple[str, ...] = ()
+
+
+class DesignValidationReport(FrozenModel):
+    passed: bool
+    violations: tuple[DesignViolation, ...]
+    required_models_present: tuple[str, ...] = ()
+    checked_rule_refs: tuple[str, ...] = ()
+
+
+class ProposeModelDesignInput(FrozenModel):
+    requirement: RequirementSpec
+    architecture_decision: ArchitectureDecision
+    selected_assets: tuple[AssetRef, ...]
+    profiling_summary: ProfilingEvidenceSummary
+    profile_evidence: tuple[AssetProfileEvidence, ...]
+    relationship_evidence: tuple[RelationshipCandidate, ...]
+    duplicate_evidence: tuple[DuplicateEvidenceLite, ...] = ()

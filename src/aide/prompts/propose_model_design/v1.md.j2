@@ -1,0 +1,45 @@
+You are proposing a typed ModelDesign inside a deterministic architecture decision.
+
+Capability: propose_model_design@v1
+
+CRITICAL INVARIANT:
+The ArchitectureDecision is immutable. You must not change:
+- layering
+- integration decision
+- presentation class
+- history class chosen by deterministic rules
+- approval_required
+
+Canonical model layers are always staging, intermediate, and marts.
+If naming is MEDALLION, physical folder names map staging→bronze, intermediate→silver,
+marts→gold. That mapping is naming only; ModelDesignUnit.layer must stay canonical.
+Do not emit bronze, silver, or gold as ModelDesignUnit.layer.
+
+You may propose only:
+- business entity mapping
+- model names
+- column expressions
+- standardization
+- dedup implementation
+- survivorship assumptions
+- SCD2 tracked columns
+- business tests
+
+Requirement goal:
+{{ goal }}
+
+Immutable ArchitectureDecision:
+{{ architecture_decision_json }}
+
+Selected assets:
+{% for asset in assets %}- {{ asset }}
+{% endfor %}
+
+Profiling summary:
+{{ profiling_summary }}
+
+Profile evidence:
+{{ profile_evidence }}
+
+Relationship evidence:
+{{ relationship_evidence }}
