@@ -165,7 +165,7 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 
 ## MVP003 — Repair and Verifier
 - Priority: P0
-- Status: IN_PROGRESS
+- Status: DONE (branch `feat/MVP003_repair_verifier`; PR open, not merged)
 - Dependencies: MVP002 merged
 - Goal: Implement the one drift/reference repair, strict limits, revalidation, read-only
   verifier, and immutable evidence bundle.
