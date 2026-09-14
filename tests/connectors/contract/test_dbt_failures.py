@@ -18,6 +18,7 @@ from aide.connectors.dbt.errors import (
     DbtProcessTerminatedError,
     DbtTimeoutError,
     map_error,
+    map_exception_name,
     map_run_result_status,
 )
 from aide.connectors.dbt.fake import FakeDbtConnector
@@ -28,6 +29,15 @@ from aide.domain.failures import FailureClass
 def test_compilation_error_maps_to_dbt_compile() -> None:
     exc = type("CompilationError", (Exception,), {})("invalid jinja")
     assert map_error(exc) is FailureClass.DBT_COMPILE
+    assert map_exception_name(None, "Compilation Error in model") is FailureClass.DBT_COMPILE
+    wrapped = (
+        "Runtime Error\n  Compilation Error in model stg_live_compile_fail "
+        "(models/staging/stg_live_compile_fail.sql)\n  "
+        "'definitely_not_a_macro' is undefined. This can happen when calling "
+        "a macro that is not defined or installing package dependencies with "
+        '"dbt deps".'
+    )
+    assert map_exception_name("RuntimeError", wrapped) is FailureClass.DBT_COMPILE
 
 
 def test_database_error_remaps_through_warehouse_mapper() -> None:

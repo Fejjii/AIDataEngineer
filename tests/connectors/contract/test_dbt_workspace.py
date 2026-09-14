@@ -41,6 +41,21 @@ def test_two_workflows_receive_different_snowflake_schemas(tmp_path: Path) -> No
     assert f"schema: {schema_b}" in yaml_b
     assert f"schema: {schema_b}" not in yaml_a
     assert "schema: AIDE_DEV" not in yaml_a
+    assert "env_var('SNOWFLAKE_ACCOUNT')" in yaml_a
+    assert "env_var('SNOWFLAKE_USER_DEV')" in yaml_a
+    assert "env_var('SNOWFLAKE_PRIVATE_KEY_DEV')" in yaml_a
+    assert "env_var('SNOWFLAKE_WAREHOUSE_DEV')" in yaml_a
+    assert "query_tag:" in yaml_a
+    assert str(workflow_a) in yaml_a
+    assert "BEGIN" not in yaml_a
+
+    sources = (
+        Path(__file__).resolve().parents[3] / "dbt" / "vantara_project" / "models" / "sources.yml"
+    ).read_text(encoding="utf-8")
+    assert "target.type == 'snowflake'" in sources
+    assert "target.database" in sources
+    assert "VANTARA_RAW" in sources
+    assert "BILLING" in sources
 
     connector = RealDbtConnector(DBT_DEV, settings)
     connector._ensure_workspace(workflow_a)

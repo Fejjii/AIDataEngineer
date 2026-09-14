@@ -9,7 +9,12 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from aide.connectors.dbt.namespace import DEV_DATABASE, SCHEMA_SUFFIX, snowflake_workflow_schema
+from aide.connectors.dbt.namespace import (
+    DEV_DATABASE,
+    SCHEMA_SUFFIX,
+    snowflake_dbt_query_tag,
+    snowflake_workflow_schema,
+)
 from aide.secrets.refs import SecretRef, SecretScope
 
 SNOWFLAKE_DBT_SECRET_NAMES: tuple[str, ...] = (
@@ -75,6 +80,11 @@ def missing_secret_names(settings: DbtSettings) -> tuple[str, ...]:
     return tuple(missing)
 
 
+def snowflake_dbt_credentials_available() -> bool:
+    """True when Snowflake dbt env var *names* are set. Never inspects values."""
+    return not missing_secret_names(snowflake_dbt_settings(Path(".")))
+
+
 def snowflake_dbt_settings(work_root: Path, *, project_template: Path | None = None) -> DbtSettings:
     return DbtSettings(
         adapter=DbtAdapter.SNOWFLAKE,
@@ -105,6 +115,7 @@ def render_profiles_yaml(settings: DbtSettings, *, workflow_id: UUID) -> str:
     private_key = (settings.snowflake_private_key or _ref("SNOWFLAKE_PRIVATE_KEY_DEV")).name
     warehouse = (settings.snowflake_warehouse or _ref("SNOWFLAKE_WAREHOUSE_DEV")).name
     schema = snowflake_workflow_schema(workflow_id, suffix=settings.snowflake_schema_suffix)
+    query_tag = snowflake_dbt_query_tag(workflow_id)
     return (
         f"{settings.profile_name}:\n"
         f"  target: {settings.target_name}\n"
@@ -118,6 +129,7 @@ def render_profiles_yaml(settings: DbtSettings, *, workflow_id: UUID) -> str:
         f"      database: {settings.snowflake_database}\n"
         f"      schema: {schema}\n"
         f"      role: {settings.snowflake_role}\n"
+        f'      query_tag: "{query_tag}"\n'
         f"      threads: {settings.threads}\n"
         f"      client_session_keep_alive: False\n"
     )

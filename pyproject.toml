@@ -117,6 +117,7 @@ addopts = "-q --strict-markers"
 markers = [
     "snowflake_live: live Snowflake tests skipped when credentials are absent",
     "dbt_offline: offline dbt Core + DuckDB tests; no Snowflake credentials",
+    "dbt_live: live Snowflake dbt tests skipped when DEV credentials are absent",
 ]
 
 [tool.importlinter]

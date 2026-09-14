@@ -33,6 +33,7 @@ from aide.connectors.dbt.config import (
     duckdb_dbt_settings,
     missing_secret_names,
     render_profiles_yaml,
+    snowflake_dbt_settings,
 )
 from aide.connectors.dbt.contracts import (
     CompiledModel,
@@ -65,7 +66,7 @@ from aide.connectors.dbt.journal import (
     find_latest_journal_for_operation,
     utc_now_iso,
 )
-from aide.connectors.dbt.namespace import snowflake_workflow_schema
+from aide.connectors.dbt.namespace import snowflake_dbt_query_tag, snowflake_workflow_schema
 from aide.connectors.dbt.reconcile import reconcile_create_transformation, reconcile_invocation
 from aide.connectors.dbt.runner import (
     IsolatedResult,
@@ -519,9 +520,7 @@ class RealDbtConnector:
     def _classify_result(self, result: IsolatedResult) -> FailureClass:
         name = result.result_payload.get("exception_type")
         message = str(result.result_payload.get("message") or result.stderr or result.stdout)
-        if isinstance(name, str):
-            return map_exception_name(name, message)
-        return FailureClass.DBT_RUNTIME
+        return map_exception_name(name if isinstance(name, str) else None, message)
 
     def _journal(
         self,
@@ -559,6 +558,9 @@ class RealDbtConnector:
                     "snowflake_schema": snowflake_workflow_schema(context.workflow_id)
                     if self.settings.adapter is DbtAdapter.SNOWFLAKE
                     else None,
+                    "query_tag": snowflake_dbt_query_tag(context.workflow_id)
+                    if self.settings.adapter is DbtAdapter.SNOWFLAKE
+                    else None,
                 },
                 dispatch_status=status,
                 adapter_response=adapter_response,
@@ -593,4 +595,17 @@ def build_real_duckdb(
             duckdb_path=duckdb_path,
             project_template=project_template,
         ),
+    )
+
+
+def build_real_snowflake(
+    work_root: Path,
+    *,
+    project_template: Path | None = None,
+    timeout_seconds: int = 300,
+) -> RealDbtConnector:
+    settings = snowflake_dbt_settings(work_root, project_template=project_template)
+    return RealDbtConnector(
+        DBT_DEV,
+        settings.model_copy(update={"timeout_seconds": timeout_seconds}),
     )

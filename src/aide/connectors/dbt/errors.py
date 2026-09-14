@@ -8,8 +8,12 @@ from aide.domain.failures import FailureClass
 COMPILE_TYPE_NAMES = frozenset(
     {
         "CompilationError",
+        "DbtCompilationError",
         "ParsingError",
         "CompilationException",
+        "UndefinedMacroError",
+        "MissingMacroError",
+        "JinjaException",
         "DbtConfigError",
         "DbtProjectError",
         "DbtProfileError",
@@ -22,6 +26,13 @@ COMPILE_TYPE_NAMES = frozenset(
         "GraphDependencyNotFoundError",
         "MissingRelationError",
     }
+)
+COMPILE_MESSAGE_MARKERS = (
+    "compilation error",
+    "parsing error",
+    "is undefined",
+    "got 'none'",
+    "macro named",
 )
 DATABASE_TYPE_NAMES = frozenset(
     {
@@ -104,10 +115,17 @@ def map_error(exc: BaseException) -> FailureClass:
 
 
 def map_exception_name(name: str | None, message: str) -> FailureClass:
-    if not name:
-        return FailureClass.DBT_RUNTIME
-    dummy = type(name, (Exception,), {})
-    return map_error(dummy(message))
+    if any(marker in message.lower() for marker in COMPILE_MESSAGE_MARKERS):
+        return FailureClass.DBT_COMPILE
+    if name:
+        dummy = type(name, (Exception,), {})
+        mapped = map_error(dummy(message))
+        if mapped is not FailureClass.CONNECTOR_FAILURE:
+            return mapped
+        if name in COMPILE_TYPE_NAMES:
+            return FailureClass.DBT_COMPILE
+        return map_error(dummy(message))
+    return FailureClass.DBT_RUNTIME
 
 
 def map_run_result_status(status: str, message: str | None) -> FailureClass | None:

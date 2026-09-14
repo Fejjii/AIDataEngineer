@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -24,6 +23,7 @@ from aide.connectors.dbt.contracts import (
     RunTestsInput,
 )
 from aide.connectors.dbt.real import build_real_duckdb
+from aide.connectors.dbt.runner import build_controlled_env
 from aide.connectors.dbt.workspace import duckdb_workspace_path, invocation_dir
 
 pytestmark = pytest.mark.dbt_offline
@@ -42,7 +42,8 @@ FORBIDDEN_SNOWFLAKE_ENV = (
 
 
 def _assert_no_snowflake_env() -> None:
-    leaked = [name for name in FORBIDDEN_SNOWFLAKE_ENV if os.environ.get(name)]
+    env = build_controlled_env({}, secret_names=())
+    leaked = [name for name in FORBIDDEN_SNOWFLAKE_ENV if name in env]
     assert not leaked, leaked
 
 

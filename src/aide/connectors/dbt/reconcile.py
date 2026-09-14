@@ -76,9 +76,23 @@ def reconcile_invocation(
         )
     if journal.dispatch_status is DispatchStatus.DISPATCHED and run_results is None:
         return Unknown(reason="dispatched without run_results; indeterminate")
+    if (
+        journal.operation == "compile_transformation"
+        and journal.dispatch_status is DispatchStatus.FAILED
+    ):
+        return EffectFound(
+            output={
+                "ok": False,
+                "errors": ["compile failed"],
+                "artifact_hashes": journal.artifact_hashes,
+                "manifest": manifest_present,
+            },
+            external_ref=str(journal.attempt_id),
+        )
     if run_results is None:
         compiled_ok = (
             journal.operation == "compile_transformation"
+            and journal.dispatch_status is DispatchStatus.COMPLETED
             and manifest_present
             and journal.effect_applied
         )
@@ -87,16 +101,7 @@ def reconcile_invocation(
                 output={"ok": True, "manifest": True, "artifact_hashes": journal.artifact_hashes},
                 external_ref=str(journal.attempt_id),
             )
-        if journal.operation == "compile_transformation" and not manifest_present:
-            if journal.dispatch_status is DispatchStatus.FAILED:
-                return EffectFound(
-                    output={
-                        "ok": False,
-                        "errors": ["compile failed"],
-                        "artifact_hashes": journal.artifact_hashes,
-                    },
-                    external_ref=str(journal.attempt_id),
-                )
+        if journal.operation == "compile_transformation":
             return Unknown(reason="compile artifacts incomplete")
         return Unknown(reason="required run_results.json is missing")
     results = run_results.get("results")

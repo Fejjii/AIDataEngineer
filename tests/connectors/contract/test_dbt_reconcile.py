@@ -143,3 +143,34 @@ async def test_manifest_and_run_results_parse(tmp_path: Path) -> None:
     assert payload["execution_status"] == "COMPLETED"
     assert "manifest.json" in payload["artifact_hashes"]
     await fake.close()
+
+
+def test_failed_compile_with_manifest_does_not_false_succeed() -> None:
+    from uuid import uuid4
+
+    from aide.connectors.dbt.journal import DispatchStatus, InvocationJournalEntry
+    from aide.connectors.dbt.reconcile import reconcile_invocation
+    from aide.domain.effects import EffectSemantics
+
+    journal = InvocationJournalEntry(
+        workflow_id=uuid4(),
+        operation="compile_transformation",
+        attempt_id=uuid4(),
+        attempt_number=1,
+        operation_idempotency_key="c" * 64,
+        selected_nodes=(),
+        compiled_configuration={},
+        dispatch_status=DispatchStatus.FAILED,
+        artifact_hashes={"manifest.json": "a" * 64},
+        effect_semantics=EffectSemantics.SIDE_EFFECT_FREE,
+        effect_applied=True,
+        recorded_at="2026-09-14T00:00:00+00:00",
+    )
+    recovered = reconcile_invocation(
+        journal=journal,
+        run_results=None,
+        manifest_present=True,
+        required_nodes=(),
+    )
+    assert isinstance(recovered, EffectFound)
+    assert recovered.output.get("ok") is False

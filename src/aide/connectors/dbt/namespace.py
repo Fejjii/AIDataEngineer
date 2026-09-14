@@ -26,3 +26,8 @@ def snowflake_workflow_schema(workflow_id: UUID, *, suffix: str = SCHEMA_SUFFIX)
     if not cleaned:
         cleaned = SCHEMA_SUFFIX
     return f"{workflow_short_id(workflow_id)}_{cleaned}"
+
+
+def snowflake_dbt_query_tag(workflow_id: UUID) -> str:
+    """Workflow identity for dbt Snowflake QUERY_TAG. No secrets."""
+    return f"aide:v1;wf={workflow_id};dbt=1"

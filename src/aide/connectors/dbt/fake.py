@@ -73,6 +73,14 @@ SOURCE_RE = re.compile(
 )
 REF_RE = re.compile(r"\{\{\s*ref\(\s*['\"]([^'\"]+)['\"]\s*\)\s*\}\}", re.I)
 CONFIG_RE = re.compile(r"\{\{\s*config\s*\(.*?\)\s*\}\}", re.I | re.S)
+SNOWFLAKE_TARGET_IF_RE = re.compile(
+    r"\{%\s*if\s+target\.type\s*==\s*['\"]snowflake['\"]\s*%\}"
+    r"(.*?)"
+    r"\{%\s*else\s*%\}"
+    r"(.*?)"
+    r"\{%\s*endif\s*%\}",
+    re.I | re.S,
+)
 
 SOURCE_RELATIONS = {
     ("vantara_raw", "customers"): '"VANTARA_RAW"."BILLING"."CUSTOMERS"',
@@ -535,7 +543,8 @@ class FakeDbtConnector:
         return manifest, compiled
 
     def _resolve_sql(self, raw: str) -> str:
-        sql = CONFIG_RE.sub("", raw)
+        sql = SNOWFLAKE_TARGET_IF_RE.sub(lambda match: match.group(2), raw)
+        sql = CONFIG_RE.sub("", sql)
 
         def source_sub(match: re.Match[str]) -> str:
             key = (match.group(1), match.group(2))
