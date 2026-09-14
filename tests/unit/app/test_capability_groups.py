@@ -5,7 +5,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from aide.app.groups import (
-    classify_reliability_noop,
+    classify_schema_mismatch,
     interpret_customer_revenue_request,
     plan_interview_phase,
     propose_relevant_assets,
@@ -97,5 +97,17 @@ def test_propose_relevant_assets_intersects_locked_set() -> None:
     assert any(item.asset.address == extra.address for item in selected.excluded_notable)
 
 
-def test_reliability_group_is_a_noop() -> None:
-    assert classify_reliability_noop() is False
+def test_reliability_group_classifies_schema_mismatch() -> None:
+    from aide.capabilities.io import NodeRunResult
+    from aide.domain.failures import FailureClass
+
+    classified = classify_schema_mismatch(
+        (
+            NodeRunResult(
+                model="stg_billing__invoices",
+                status="error",
+                error_class=FailureClass.SCHEMA_MISMATCH,
+            ),
+        )
+    )
+    assert classified is FailureClass.SCHEMA_MISMATCH

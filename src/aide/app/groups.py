@@ -10,14 +10,17 @@ from __future__ import annotations
 from aide.capabilities.io import (
     DiscoverAssetsOutput,
     ExcludedAsset,
+    NodeRunResult,
     Plan,
     PlanPhaseInput,
     RequirementSpec,
     SelectedAsset,
     SelectRelevantAssetsOutput,
 )
+from aide.domain.failures import FailureClass
 from aide.domain.sql import AssetRef
 from aide.modelling.vantara import vantara_demo_requirement, vantara_selected_addresses
+from aide.repair.propose import classify_execute_failure
 
 
 def interpret_customer_revenue_request(text: str) -> RequirementSpec:
@@ -79,6 +82,6 @@ def propose_relevant_assets(
     )
 
 
-def classify_reliability_noop() -> bool:
-    """Reliability is a documented group; MVP002 does not apply repairs."""
-    return False
+def classify_schema_mismatch(results: tuple[NodeRunResult, ...]) -> FailureClass | None:
+    """Reliability group: classify SCHEMA_MISMATCH. Never applies a patch."""
+    return classify_execute_failure(tuple(item.error_class for item in results))

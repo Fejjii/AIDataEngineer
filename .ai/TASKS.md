@@ -145,7 +145,7 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 
 ## MVP001 — Digital Twin
 - Priority: P0
-- Status: TODO (blocked until PIVOT001 acceptance)
+- Status: DONE (merged to main)
 - Dependencies: PIVOT001 accepted and merged
 - Goal: Implement the five minimal twin contracts, PostgreSQL persistence, capture,
   immutable snapshot pinning, and bounded authorized context assembly.
@@ -155,7 +155,7 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 
 ## MVP002 — Supervisor and Tool Gateway flow
 - Priority: P0
-- Status: IN_PROGRESS
+- Status: DONE (merged to main)
 - Dependencies: MVP001 merged
 - Goal: Compose the deterministic Supervisor, sole Governed Tool Gateway, bounded dbt
   generation, manifest-mediated DEV source preparation, and pre-drift build/validation.
@@ -165,7 +165,7 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 
 ## MVP003 — Repair and Verifier
 - Priority: P0
-- Status: TODO
+- Status: IN_PROGRESS
 - Dependencies: MVP002 merged
 - Goal: Implement the one drift/reference repair, strict limits, revalidation, read-only
   verifier, and immutable evidence bundle.

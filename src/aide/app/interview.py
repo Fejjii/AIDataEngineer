@@ -7,6 +7,7 @@ groups, and orchestration must not.
 from __future__ import annotations
 
 from pathlib import Path
+from uuid import UUID
 
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -18,6 +19,8 @@ from aide.app.supervisor import (
     generate_transformation_handler,
     plan_phase_handler,
     propose_model_design_handler,
+    propose_repair_handler,
+    validate_repair_handler,
 )
 from aide.capabilities.io import LoadManifestSourcesInput
 from aide.capabilities.v1_kernel import kernel_registry
@@ -80,6 +83,22 @@ class ManifestDualLoadBinding:
         return result
 
 
+class InvoiceStatusDriftInjector:
+    """Composition-root injector for the accepted INVOICE_STATUS → STATUS rename."""
+
+    def __init__(self, snowflake_ro: FakeSnowflakeConnector, dbt: FakeDbtConnector) -> None:
+        self._snowflake_ro = snowflake_ro
+        self._dbt = dbt
+
+    def inject_invoice_status_rename(self, workflow_id: UUID) -> None:
+        self._snowflake_ro.rename_column(
+            ("VANTARA_RAW", "BILLING", "INVOICES"), "INVOICE_STATUS", "STATUS"
+        )
+        self._dbt.rename_loaded_column(
+            workflow_id, "BILLING", "INVOICES", "INVOICE_STATUS", "STATUS"
+        )
+
+
 def build_interview_stack(
     session_factory: async_sessionmaker[AsyncSession],
     *,
@@ -112,6 +131,7 @@ def build_interview_stack(
     for capability_id in (
         "discover_assets",
         "describe_asset",
+        "detect_schema_drift",
         "profile_estate",
         "evaluate_execution_policy",
     ):
@@ -137,9 +157,17 @@ def build_interview_stack(
     async def propose(payload: BaseModel, context: CallContext) -> BaseModel:
         return propose_model_design_handler(payload, context)
 
+    async def propose_repair(payload: BaseModel, context: CallContext) -> BaseModel:
+        return propose_repair_handler(payload, context)
+
+    async def validate_repair(payload: BaseModel, context: CallContext) -> BaseModel:
+        return validate_repair_handler(payload, context)
+
     gateway.register_binding("plan_phase", LocalHandlerBinding(plan))
     gateway.register_binding("generate_transformation", LocalHandlerBinding(generate))
     gateway.register_binding("propose_model_design", LocalHandlerBinding(propose))
+    gateway.register_binding("propose_repair", LocalHandlerBinding(propose_repair))
+    gateway.register_binding("validate_repair", LocalHandlerBinding(validate_repair))
     return InterviewSupervisor(
         session_factory,
         capabilities=capabilities,
@@ -147,4 +175,5 @@ def build_interview_stack(
         gateway=gateway,
         events=EventBus(),
         execution_mode=ExecutionMode.MOCK,
+        drift_injector=InvoiceStatusDriftInjector(snowflake_ro, dbt_connector),
     )

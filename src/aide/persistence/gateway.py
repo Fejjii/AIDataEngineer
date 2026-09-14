@@ -69,6 +69,19 @@ class GatewayDispatchRepository:
         )
         return row if isinstance(row, GatewayDispatchIntentModel) else None
 
+    async def list_for_workflow(self, workflow_id: UUID) -> tuple[GatewayDispatchIntentModel, ...]:
+        rows = (
+            await self._session.scalars(
+                select(GatewayDispatchIntentModel)
+                .where(GatewayDispatchIntentModel.workflow_id == workflow_id)
+                .order_by(
+                    GatewayDispatchIntentModel.created_at,
+                    GatewayDispatchIntentModel.intent_id,
+                )
+            )
+        ).all()
+        return tuple(rows)
+
     async def complete(
         self,
         intent_id: UUID,

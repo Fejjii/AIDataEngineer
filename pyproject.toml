@@ -262,3 +262,28 @@ forbidden_modules = [
     "aide.connectors.dbt.real",
     "aide.connectors.dbt.fake",
 ]
+
+[[tool.importlinter.contracts]]
+name = "Independent verifier cannot import execution or writers"
+type = "forbidden"
+source_modules = ["aide.verification"]
+forbidden_modules = [
+    "aide.app.gateway",
+    "aide.app.supervisor",
+    "aide.repair.writer",
+    "aide.approvals",
+    "aide.orchestration",
+    "aide.connectors.snowflake",
+    "aide.connectors.dbt",
+]
+
+[[tool.importlinter.contracts]]
+name = "Repair cannot import gateway or vendor execution"
+type = "forbidden"
+source_modules = ["aide.repair"]
+forbidden_modules = [
+    "aide.app.gateway",
+    "aide.app.supervisor",
+    "aide.connectors.snowflake",
+    "aide.connectors.dbt",
+]

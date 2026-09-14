@@ -15,6 +15,7 @@ from aide.connectors.dbt.errors import map_run_result_status
 from aide.connectors.dbt.redaction import sanitize_text
 from aide.connectors.dbt.workspace import file_sha256
 from aide.domain.artifacts import ArtifactProvenance, ExecutionMode
+from aide.domain.failures import FailureClass
 
 MANIFEST_NAME = "manifest.json"
 RUN_RESULTS_NAME = "run_results.json"
@@ -211,6 +212,15 @@ def node_results_from_run_results(payload: dict[str, Any]) -> tuple[NodeRunResul
         adapter_raw = item.get("adapter_response")
         adapter = adapter_raw if isinstance(adapter_raw, dict) else {}
         rows = adapter.get("rows_affected") if isinstance(adapter, dict) else None
+        raw_class = item.get("error_class")
+        error_class = None
+        if isinstance(raw_class, str) and raw_class:
+            try:
+                error_class = FailureClass(raw_class)
+            except ValueError:
+                error_class = None
+        if error_class is None:
+            error_class = map_run_result_status(status_raw, str(message) if message else None)
         parsed.append(
             NodeRunResult(
                 model=str(item.get("name") or unique_id.split(".")[-1]),
@@ -218,7 +228,7 @@ def node_results_from_run_results(payload: dict[str, Any]) -> tuple[NodeRunResul
                 execution_time_s=float(item.get("execution_time") or 0.0),
                 rows_affected=int(rows) if isinstance(rows, int) else None,
                 message=str(message) if message is not None else None,
-                error_class=map_run_result_status(status_raw, str(message) if message else None),
+                error_class=error_class,
             )
         )
     return tuple(parsed)

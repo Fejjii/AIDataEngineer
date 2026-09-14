@@ -24,6 +24,25 @@ SCAN_ROOTS = (
     Path("src/aide/reasoning"),
     Path("src/aide/quality"),
 )
+VERIFIER_FORBIDDEN = FORBIDDEN_MODULES | frozenset(
+    {
+        "aide.app.gateway",
+        "aide.app.supervisor",
+        "aide.repair.writer",
+        "aide.approvals",
+        "aide.orchestration",
+        "aide.connectors.snowflake",
+        "aide.connectors.dbt",
+    }
+)
+REPAIR_FORBIDDEN = FORBIDDEN_MODULES | frozenset(
+    {
+        "aide.app.gateway",
+        "aide.app.supervisor",
+        "aide.connectors.snowflake",
+        "aide.connectors.dbt",
+    }
+)
 
 
 def _python_files(root: Path) -> list[Path]:
@@ -52,4 +71,44 @@ def test_application_and_orchestration_do_not_import_vendor_execution() -> None:
             banned = imported.intersection(FORBIDDEN_MODULES)
             if banned:
                 violations.append(f"{path}: {sorted(banned)}")
+    assert violations == []
+
+
+def test_verifier_cannot_import_gateway_connectors_or_repair_writer() -> None:
+    violations: list[str] = []
+    for path in _python_files(Path("src/aide/verification")):
+        imported = _imported_modules(path)
+        banned = {
+            module
+            for module in imported
+            if module in VERIFIER_FORBIDDEN
+            or any(
+                module == banned or module.startswith(f"{banned}.") for banned in VERIFIER_FORBIDDEN
+            )
+        }
+        if banned:
+            violations.append(f"{path}: {sorted(banned)}")
+        source = path.read_text(encoding="utf-8")
+        assert "GovernedToolGateway" not in source
+        assert "FakeSnowflakeConnector" not in source
+        assert "FakeDbtConnector" not in source
+    assert violations == []
+
+
+def test_repair_cannot_import_gateway_or_vendor_execution() -> None:
+    violations: list[str] = []
+    for path in _python_files(Path("src/aide/repair")):
+        imported = _imported_modules(path)
+        banned = {
+            module
+            for module in imported
+            if module in REPAIR_FORBIDDEN
+            or any(
+                module == banned or module.startswith(f"{banned}.") for banned in REPAIR_FORBIDDEN
+            )
+        }
+        if banned:
+            violations.append(f"{path}: {sorted(banned)}")
+        source = path.read_text(encoding="utf-8")
+        assert "GovernedToolGateway" not in source
     assert violations == []

@@ -104,6 +104,12 @@ class TwinRepository:
         await self._session.flush()
         return reference
 
+    async def get_evidence_reference(self, evidence_ref_id: UUID) -> EvidenceReference | None:
+        row = await self._session.get(EvidenceReferenceModel, evidence_ref_id)
+        if row is None:
+            return None
+        return _evidence_from_row(row)
+
     async def capture_asset(
         self,
         capture: AssetCapture,
