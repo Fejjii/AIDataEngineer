@@ -13,6 +13,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     MetaData,
@@ -501,3 +502,238 @@ class BudgetEntryModel(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)
     evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+
+
+class EvidenceReferenceModel(Base):
+    """Immutable locator and digest for evidence used by the Twin."""
+
+    __tablename__ = "evidence_references"
+
+    evidence_ref_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    evidence_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    artifact_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("artifacts.artifact_id", ondelete="RESTRICT")
+    )
+    immutable_uri: Mapped[str | None] = mapped_column(Text)
+    media_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    execution_mode: Mapped[str] = mapped_column(String(8), nullable=False)
+    source_authority: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    source_authority_digest: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    producer_operation_key: Mapped[str | None] = mapped_column(String(64))
+    producer_attempt_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("task_attempts.attempt_id", ondelete="RESTRICT")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class TwinAssetModel(Base):
+    __tablename__ = "twin_assets"
+    __table_args__ = (
+        CheckConstraint("asset_version >= 1", name="positive_asset_version"),
+        CheckConstraint("incarnation >= 1", name="positive_incarnation"),
+        Index(
+            "ix_twin_assets_native_identity",
+            "source_authority_digest",
+            "environment",
+            "kind",
+            "native_key",
+            "asset_version",
+            unique=True,
+            postgresql_where="native_key IS NOT NULL",
+        ),
+        Index(
+            "ix_twin_assets_locator_identity",
+            "source_authority_digest",
+            "environment",
+            "kind",
+            "canonical_locator_digest",
+            "incarnation",
+            "asset_version",
+            unique=True,
+            postgresql_where="native_key IS NULL",
+        ),
+    )
+
+    asset_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    asset_version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_authority: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    source_authority_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    environment: Mapped[str] = mapped_column(String(32), nullable=False)
+    native_key: Mapped[str | None] = mapped_column(String(512))
+    canonical_locator: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    canonical_locator_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    incarnation: Mapped[int] = mapped_column(Integer, nullable=False)
+    parent_asset_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), index=True)
+    platform_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    attributes: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    first_observed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    evidence_ref_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("evidence_references.evidence_ref_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+
+class TwinRelationshipModel(Base):
+    __tablename__ = "twin_relationships"
+    __table_args__ = (
+        CheckConstraint("relationship_version >= 1", name="positive_relationship_version"),
+        CheckConstraint("confidence >= 0 AND confidence <= 1", name="valid_confidence"),
+        Index(
+            "ix_twin_relationship_identity",
+            "source_authority_digest",
+            "environment",
+            "kind",
+            "from_asset_id",
+            "to_asset_id",
+            "relationship_version",
+            unique=True,
+        ),
+        Index("ix_twin_relationship_from", "from_asset_id"),
+        Index("ix_twin_relationship_to", "to_asset_id"),
+    )
+
+    relationship_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    relationship_version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    from_asset_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    to_asset_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    source_authority: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    source_authority_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    environment: Mapped[str] = mapped_column(String(32), nullable=False)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(6, 5), nullable=False)
+    attributes: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    evidence_ref_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("evidence_references.evidence_ref_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+
+class TwinObservationModel(Base):
+    __tablename__ = "twin_observations"
+    __table_args__ = (
+        CheckConstraint("confidence >= 0 AND confidence <= 1", name="valid_confidence"),
+        Index("ix_twin_observation_subject_kind", "subject_asset_id", "kind"),
+    )
+
+    observation_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    subject_asset_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_authority: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    source_authority_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    environment: Mapped[str] = mapped_column(String(32), nullable=False)
+    value: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    effective_at: Mapped[datetime | None] = mapped_column(DateTime)
+    fresh_until: Mapped[datetime | None] = mapped_column(DateTime)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(6, 5), nullable=False)
+    evidence_ref_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("evidence_references.evidence_ref_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+
+class TwinSnapshotModel(Base):
+    __tablename__ = "twin_snapshots"
+
+    twin_snapshot_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    environment: Mapped[str] = mapped_column(String(32), nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    capture_cutoff: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    source_authorities: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+
+
+class TwinSnapshotAssetModel(Base):
+    __tablename__ = "twin_snapshot_assets"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["asset_id", "asset_version"],
+            ["twin_assets.asset_id", "twin_assets.asset_version"],
+            ondelete="RESTRICT",
+        ),
+    )
+
+    twin_snapshot_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("twin_snapshots.twin_snapshot_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    asset_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    asset_version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class TwinSnapshotRelationshipModel(Base):
+    __tablename__ = "twin_snapshot_relationships"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["relationship_id", "relationship_version"],
+            [
+                "twin_relationships.relationship_id",
+                "twin_relationships.relationship_version",
+            ],
+            ondelete="RESTRICT",
+        ),
+    )
+
+    twin_snapshot_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("twin_snapshots.twin_snapshot_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    relationship_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    relationship_version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class TwinSnapshotObservationModel(Base):
+    __tablename__ = "twin_snapshot_observations"
+
+    twin_snapshot_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("twin_snapshots.twin_snapshot_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    observation_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("twin_observations.observation_id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+
+
+class TwinSnapshotEvidenceModel(Base):
+    __tablename__ = "twin_snapshot_evidence"
+
+    twin_snapshot_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("twin_snapshots.twin_snapshot_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    evidence_ref_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("evidence_references.evidence_ref_id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+
+
+class WorkflowTwinSnapshotModel(Base):
+    __tablename__ = "workflow_twin_snapshots"
+
+    workflow_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("workflows.workflow_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    twin_snapshot_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("twin_snapshots.twin_snapshot_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    pinned_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)

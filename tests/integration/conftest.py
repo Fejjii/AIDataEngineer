@@ -44,6 +44,10 @@ async def session_factory(
             text(
                 """
                 TRUNCATE TABLE
+                    workflow_twin_snapshots, twin_snapshot_evidence,
+                    twin_snapshot_observations, twin_snapshot_relationships,
+                    twin_snapshot_assets, twin_snapshots, twin_observations,
+                    twin_relationships, twin_assets, evidence_references,
                     unresolved_effects, recovery_events, task_attempts, artifacts, approvals,
                     template_dispositions, materialized_tasks, task_templates, phase_runs,
                     budget_entries, budget_ledgers, workflow_grants, contract_snapshots,
