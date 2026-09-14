@@ -194,8 +194,13 @@ Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
   Temporary `AIDE_DEV_RW` `CREATE TABLE` on `VANTARA_RAW` should be revoked after bootstrap.
 
 ## DE 006 — Profiling and relationship inference
-- `DE006` · P0 · TODO · Env CLOUD · Cloud yes · Branch `feat/DE006_profiling` · Deps DE 002C, DE 004
+- `DE006` · P0 · DONE (R1 accepted 2026-09-12) · Env CLOUD · Cloud yes · Branch `feat/DE006_profiling` · Deps DE 002C, DE 004
 - Model Grok 4.6 · Reasoning Medium · Risk Medium · Duration 4–6 h · Token L.
+- **DE006 R1 (Cloud, accepted):** deterministic offline Vantara profiling and generic
+  relationship inference on PR 14. Production inference does not consume expected
+  Vantara pairs. PR 14 stays open and stacked until upstream integration clears.
+- Completion evidence: `docs/agent/runs/DE006/DE006-SESSION-20260912T165821Z-bc01a0968e.md`
+  and R1 `docs/agent/runs/DE006/DE006-R1-SESSION-20260912T183120Z-bc01a0968e.md`.
 
 ## DE 007 — Modelling decision engine and design
 - `DE007` · P0 · TODO · Env CLOUD · Cloud yes (recorded LLM) · Branch `feat/DE007_modelling` · Deps DE 006
