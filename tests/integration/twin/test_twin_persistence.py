@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from aide.domain.artifacts import ExecutionMode
 from aide.domain.states import WorkflowState
 from aide.domain.twin import (
     EvidenceReference,
@@ -43,7 +44,7 @@ def _evidence(evidence_type: str = "snowflake.metadata") -> EvidenceReference:
         media_type="application/json",
         sha256="a" * 64,
         size_bytes=100,
-        execution_mode="REAL",
+        execution_mode=ExecutionMode.REAL,
         source_authority=AUTHORITY,
         created_at=NOW,
     )
