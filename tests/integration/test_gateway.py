@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from pydantic import BaseModel, ConfigDict
@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tests.integration.helpers import SeedInput, seed_task
 
-from aide.app.gateway import GovernedToolGateway
+from aide.app.gateway import GovernedToolGateway, gateway_holds_write_transaction
 from aide.auth.grants import GrantAuthorizer
 from aide.capabilities.registry import CapabilityRegistry
 from aide.capabilities.spec import CapabilitySpec, ConnectorRequirement, RetryPolicy
@@ -25,18 +25,25 @@ from aide.connectors.base.spec import (
     IdentityClass,
     ObjectAllowList,
 )
+from aide.domain.approvals import ApprovalRecord, ApprovalStatus, OperationApproval
 from aide.domain.effects import EffectSemantics
 from aide.domain.enums import ApprovalRule, RiskLevel, TargetEnv
 from aide.domain.failures import FailureClass
+from aide.domain.identity import compute_resolved_input_digest
 from aide.domain.permissions import PermissionLevel
 from aide.domain.principal import GrantAuthorization, PrincipalRef, Role
-from aide.orchestration.worker import claim_task
+from aide.domain.states import TaskState, WorkflowState
+from aide.orchestration.worker import TaskClaim, claim_task
 from aide.persistence.models import (
+    ApprovalModel,
+    AuditEventModel,
     EvidenceReferenceModel,
     GatewayDispatchIntentModel,
     MaterializedTaskModel,
     RecoveryEventModel,
+    WorkflowModel,
 )
+from aide.persistence.repositories import ApprovalRepository
 from aide.policy.engine import PolicyEngine
 
 
@@ -60,8 +67,12 @@ class SpyBinding:
         self.crash_after_effect = False
         self.stale_claim = False
         self.effects: dict[str, dict[str, Any]] = {}
+        self.health_calls = 0
+        self.health_during_write_txn = False
 
     async def health(self) -> ConnectorHealthSnapshot:
+        self.health_calls += 1
+        self.health_during_write_txn = gateway_holds_write_transaction()
         now = _naive_now()
         return ConnectorHealthSnapshot(
             connector_id="fake",
@@ -114,9 +125,13 @@ def _naive_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-def _capability() -> CapabilitySpec:
+def _capability(
+    *,
+    capability_id: str = "fake_side_effect",
+    approval: ApprovalRule = ApprovalRule.NEVER,
+) -> CapabilitySpec:
     return CapabilitySpec(
-        id="fake_side_effect",
+        id=capability_id,
         version=1,
         kind="deterministic",
         purpose="spy connector for governed gateway tests",
@@ -126,7 +141,7 @@ def _capability() -> CapabilitySpec:
         output_schema_version=1,
         required_permission=PermissionLevel.DEVELOPMENT_WRITE,
         risk=RiskLevel.MEDIUM,
-        approval=ApprovalRule.NEVER,
+        approval=approval,
         timeout_seconds=30,
         retry=RetryPolicy(
             max_attempts=2,
@@ -142,7 +157,8 @@ def _capability() -> CapabilitySpec:
     )
 
 
-def _connector() -> ConnectorSpec:
+def _connector(*capability_ids: str) -> ConnectorSpec:
+    ids = capability_ids or ("fake_side_effect",)
     return ConnectorSpec(
         connector_id="fake",
         kind=ConnectorKind.TRANSFORMATION,
@@ -153,11 +169,12 @@ def _connector() -> ConnectorSpec:
         implementations=frozenset(
             {
                 CapabilityImplementation(
-                    capability_id="fake_side_effect",
+                    capability_id=item,
                     supported_contract_versions=frozenset({1}),
                     input_schema_versions=frozenset({1}),
                     output_schema_versions=frozenset({1}),
                 )
+                for item in ids
             }
         ),
         allowed_permissions=frozenset({PermissionLevel.DEVELOPMENT_WRITE}),
@@ -184,19 +201,25 @@ def _principal() -> tuple[PrincipalRef, GrantAuthorization]:
 
 
 def _gateway(
-    session_factory: async_sessionmaker[AsyncSession], spy: SpyBinding
+    session_factory: async_sessionmaker[AsyncSession],
+    spy: SpyBinding,
+    *,
+    capability: CapabilitySpec | None = None,
 ) -> GovernedToolGateway:
+    spec = capability or _capability()
     capabilities = CapabilityRegistry()
-    capabilities.register(_capability())
+    capabilities.register(spec)
     connectors = ConnectorRegistry()
-    connectors.register(_connector(), capabilities.required_permissions())
+    connector = _connector(spec.id)
+    connectors.register(connector, capabilities.required_permissions())
+    spy.spec = connector
     gateway = GovernedToolGateway(
         session_factory,
         capabilities=capabilities,
         connectors=connectors,
         policy=PolicyEngine(),
     )
-    gateway.register_binding("fake_side_effect", spy, connector_id="fake")
+    gateway.register_binding(spec.id, spy, connector_id="fake")
     return gateway
 
 
@@ -220,6 +243,8 @@ async def test_execute_persists_dispatch_intent_before_connector_runs(
     assert outcome.evidence_ref_id is not None
     assert spy.execute_calls == 1
     assert spy.intents_before_execute == ["DISPATCHED"]
+    assert spy.health_calls >= 1
+    assert spy.health_during_write_txn is False
     async with session_factory() as session:
         intent = await session.get(GatewayDispatchIntentModel, outcome.intent_id)
         assert intent is not None
@@ -320,3 +345,248 @@ async def test_stale_claim_cannot_persist_successful_evidence(
         assert intent_rows
         assert all(item.evidence_ref_id is None for item in intent_rows)
         assert any(item.status == "STALE" for item in intent_rows)
+
+
+ALWAYS_CAPABILITY = "fake_needs_approval"
+
+
+def _always_capability() -> CapabilitySpec:
+    return _capability(capability_id=ALWAYS_CAPABILITY, approval=ApprovalRule.ALWAYS)
+
+
+async def _claim_ready_task(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> TaskClaim:
+    async with session_factory() as session, session.begin():
+        claim = await claim_task(
+            session, owner="worker", now=_naive_now(), lease_duration=timedelta(seconds=30)
+        )
+        assert claim is not None
+        return claim
+
+
+async def _task_operation_subject(
+    session_factory: async_sessionmaker[AsyncSession],
+    task_id: UUID,
+    *,
+    capability_id: str,
+    expires_at: datetime,
+    resolved_input_digest: str | None = None,
+) -> OperationApproval:
+    async with session_factory() as session:
+        task = await session.get(MaterializedTaskModel, task_id)
+        assert task is not None
+        return OperationApproval(
+            operation_idempotency_key=task.operation_idempotency_key,
+            resolved_input_digest=resolved_input_digest or task.resolved_input_digest,
+            artifact_hashes=(),
+            capability_id=capability_id,
+            capability_contract_version=1,
+            connector_id="fake",
+            connector_version="1.0",
+            target_environment=TargetEnv.DEV,
+            required_permission=PermissionLevel.DEVELOPMENT_WRITE,
+            external_state_digest=None,
+            expires_at=expires_at,
+        )
+
+
+async def _store_approval(
+    session_factory: async_sessionmaker[AsyncSession],
+    record: ApprovalRecord,
+    *,
+    task_id: UUID,
+) -> None:
+    async with session_factory() as session, session.begin():
+        await ApprovalRepository(session).add(record, task_id=task_id)
+
+
+def _approved_record(
+    *,
+    workflow_id: UUID,
+    subject: OperationApproval,
+    principal: PrincipalRef,
+    now: datetime,
+    expires_at: datetime,
+) -> ApprovalRecord:
+    return ApprovalRecord(
+        approval_id=uuid4(),
+        workflow_id=workflow_id,
+        subject=subject,
+        subject_digest=compute_resolved_input_digest(subject),
+        requester=principal,
+        status=ApprovalStatus.APPROVED,
+        created_at=now,
+        expires_at=expires_at,
+        decided_by=principal,
+        decided_at=now,
+    )
+
+
+@pytest.mark.asyncio
+async def test_approval_required_does_not_execute_and_persists_requirement(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    seeded = await seed_task(session_factory, capability_id=ALWAYS_CAPABILITY)
+    spy = SpyBinding(session_factory, _connector(ALWAYS_CAPABILITY))
+    gateway = _gateway(session_factory, spy, capability=_always_capability())
+    principal, authorization = _principal()
+    claim = await _claim_ready_task(session_factory)
+    outcome = await gateway.execute(claim, principal=principal, authorization=authorization)
+    assert outcome.status == "AWAITING_APPROVAL"
+    assert outcome.policy is not None
+    assert outcome.policy.decision == "REQUIRE_APPROVAL"
+    assert spy.execute_calls == 0
+    assert spy.health_during_write_txn is False
+    async with session_factory() as session:
+        task = await session.get(MaterializedTaskModel, seeded.task_id)
+        workflow = await session.get(WorkflowModel, seeded.workflow_id)
+        assert task is not None and workflow is not None
+        assert task.status == TaskState.AWAITING_APPROVAL.value
+        assert workflow.state == WorkflowState.APPROVAL_REQUIRED.value
+        approvals = (await session.scalars(select(ApprovalModel))).all()
+        assert len(approvals) == 1
+        assert approvals[0].status == ApprovalStatus.PENDING.value
+        assert approvals[0].task_id == seeded.task_id
+        assert approvals[0].workflow_id == seeded.workflow_id
+        execute_intents = (
+            await session.scalars(
+                select(GatewayDispatchIntentModel).where(
+                    GatewayDispatchIntentModel.task_id == seeded.task_id,
+                    GatewayDispatchIntentModel.action == "EXECUTE",
+                )
+            )
+        ).all()
+        assert execute_intents == []
+        events = (
+            await session.scalars(
+                select(AuditEventModel).where(AuditEventModel.event_type == "APPROVAL_REQUIRED")
+            )
+        ).all()
+        assert events
+
+
+@pytest.mark.asyncio
+async def test_matching_approved_record_allows_execution_and_binds_approval_id(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    seeded = await seed_task(session_factory, capability_id=ALWAYS_CAPABILITY)
+    now = _naive_now()
+    principal, authorization = _principal()
+    subject = await _task_operation_subject(
+        session_factory,
+        seeded.task_id,
+        capability_id=ALWAYS_CAPABILITY,
+        expires_at=now + timedelta(hours=1),
+    )
+    record = _approved_record(
+        workflow_id=seeded.workflow_id,
+        subject=subject,
+        principal=principal,
+        now=now,
+        expires_at=now + timedelta(hours=1),
+    )
+    await _store_approval(session_factory, record, task_id=seeded.task_id)
+    spy = SpyBinding(session_factory, _connector(ALWAYS_CAPABILITY))
+    gateway = _gateway(session_factory, spy, capability=_always_capability())
+    claim = await _claim_ready_task(session_factory)
+    outcome = await gateway.execute(claim, principal=principal, authorization=authorization)
+    assert outcome.status == "SUCCEEDED"
+    assert spy.execute_calls == 1
+    assert spy.intents_before_execute == ["DISPATCHED"]
+    assert spy.health_during_write_txn is False
+    async with session_factory() as session:
+        intent = await session.get(GatewayDispatchIntentModel, outcome.intent_id)
+        assert intent is not None
+        assert intent.approval_id == record.approval_id
+        assert intent.status == "SUCCEEDED"
+
+
+@pytest.mark.asyncio
+async def test_expired_approval_does_not_allow_execution(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    seeded = await seed_task(session_factory, capability_id=ALWAYS_CAPABILITY)
+    now = _naive_now()
+    principal, authorization = _principal()
+    expired_at = now - timedelta(minutes=1)
+    subject = await _task_operation_subject(
+        session_factory,
+        seeded.task_id,
+        capability_id=ALWAYS_CAPABILITY,
+        expires_at=expired_at,
+    )
+    record = _approved_record(
+        workflow_id=seeded.workflow_id,
+        subject=subject,
+        principal=principal,
+        now=now - timedelta(hours=1),
+        expires_at=expired_at,
+    )
+    await _store_approval(session_factory, record, task_id=seeded.task_id)
+    spy = SpyBinding(session_factory, _connector(ALWAYS_CAPABILITY))
+    gateway = _gateway(session_factory, spy, capability=_always_capability())
+    claim = await _claim_ready_task(session_factory)
+    outcome = await gateway.execute(claim, principal=principal, authorization=authorization)
+    assert outcome.status == "AWAITING_APPROVAL"
+    assert spy.execute_calls == 0
+    async with session_factory() as session:
+        pending = (
+            await session.scalars(
+                select(ApprovalModel).where(ApprovalModel.status == ApprovalStatus.PENDING.value)
+            )
+        ).all()
+        assert pending
+        execute_intents = (
+            await session.scalars(
+                select(GatewayDispatchIntentModel).where(
+                    GatewayDispatchIntentModel.action == "EXECUTE"
+                )
+            )
+        ).all()
+        assert execute_intents == []
+
+
+@pytest.mark.asyncio
+async def test_mismatched_approval_does_not_allow_execution(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    seeded = await seed_task(session_factory, capability_id=ALWAYS_CAPABILITY)
+    now = _naive_now()
+    principal, authorization = _principal()
+    subject = await _task_operation_subject(
+        session_factory,
+        seeded.task_id,
+        capability_id=ALWAYS_CAPABILITY,
+        expires_at=now + timedelta(hours=1),
+        resolved_input_digest="c" * 64,
+    )
+    record = _approved_record(
+        workflow_id=seeded.workflow_id,
+        subject=subject,
+        principal=principal,
+        now=now,
+        expires_at=now + timedelta(hours=1),
+    )
+    await _store_approval(session_factory, record, task_id=seeded.task_id)
+    spy = SpyBinding(session_factory, _connector(ALWAYS_CAPABILITY))
+    gateway = _gateway(session_factory, spy, capability=_always_capability())
+    claim = await _claim_ready_task(session_factory)
+    outcome = await gateway.execute(claim, principal=principal, authorization=authorization)
+    assert outcome.status == "AWAITING_APPROVAL"
+    assert spy.execute_calls == 0
+    async with session_factory() as session:
+        pending = (
+            await session.scalars(
+                select(ApprovalModel).where(ApprovalModel.status == ApprovalStatus.PENDING.value)
+            )
+        ).all()
+        assert pending
+        execute_intents = (
+            await session.scalars(
+                select(GatewayDispatchIntentModel).where(
+                    GatewayDispatchIntentModel.action == "EXECUTE"
+                )
+            )
+        ).all()
+        assert execute_intents == []

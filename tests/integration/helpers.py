@@ -40,6 +40,7 @@ async def seed_task(
     *,
     max_attempts: int = 2,
     local_id: str = "task",
+    capability_id: str = "fake_side_effect",
 ) -> SeededTask:
     async with session_factory() as session, session.begin():
         workflow = await WorkflowRepository(session).add(state=WorkflowState.PLANNING)
@@ -47,7 +48,7 @@ async def seed_task(
             snapshot_id=uuid4(),
             capability_contracts=(
                 CapabilityContractRef(
-                    capability_id="fake_side_effect",
+                    capability_id=capability_id,
                     capability_contract_version=1,
                     input_schema_version=1,
                     output_schema_version=1,
@@ -70,7 +71,7 @@ async def seed_task(
             templates=[
                 TemplateSpec(
                     local_id=local_id,
-                    capability_id="fake_side_effect",
+                    capability_id=capability_id,
                     capability_contract_version=1,
                     connector_id="fake",
                     depends_on=(),
@@ -93,7 +94,7 @@ async def seed_task(
             template_id=template_row.template_id,
             phase_run_id=phase_run_id,
             local_id=local_id,
-            capability_id="fake_side_effect",
+            capability_id=capability_id,
             capability_contract_version=1,
             connector_id="fake",
             unresolved_inputs={"value": "payload"},

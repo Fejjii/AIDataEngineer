@@ -10,6 +10,9 @@ PostgreSQL transaction. Callers never receive a mutable vendor client.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
@@ -18,7 +21,8 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from aide.app.parking import fail_closed_task, park_task
+from aide.app.parking import await_approval_task, fail_closed_task, park_task
+from aide.approvals.matching import matching_operation_approval_id
 from aide.capabilities.registry import CapabilityRegistry
 from aide.capabilities.spec import CapabilitySpec
 from aide.connectors.base.context import (
@@ -27,6 +31,7 @@ from aide.connectors.base.context import (
     RecoveryContext,
     RedactionPolicy,
 )
+from aide.connectors.base.health import ConnectorHealthSnapshot
 from aide.connectors.base.reconcile import EffectFound
 from aide.connectors.base.registry import ConnectorRegistry
 from aide.connectors.base.spec import ConnectorSpec
@@ -50,17 +55,21 @@ from aide.orchestration.worker import (
 )
 from aide.persistence.audit import append_audit_event
 from aide.persistence.gateway import GatewayDispatchRepository
-from aide.persistence.models import MaterializedTaskModel, PhaseRunModel
+from aide.persistence.models import ConnectorHealthModel, MaterializedTaskModel, PhaseRunModel
+from aide.persistence.repositories import ApprovalRepository, ConnectorHealthRepository
 from aide.persistence.twin import TwinRepository
-from aide.policy.engine import PolicyEngine
+from aide.policy.engine import PolicyEngine, operation_binding
 from aide.policy.request import PolicyDecision, PolicyRequest
 from aide.tools.binding import ConnectorBinding
 from aide.tools.registry import OutputInvalid
+
+_GATEWAY_WRITE_TXN: ContextVar[bool] = ContextVar("aide_gateway_write_txn", default=False)
 
 GatewayStatus = Literal[
     "SUCCEEDED",
     "FAILED",
     "PARKED",
+    "AWAITING_APPROVAL",
     "STALE",
     "RETRY_WAIT",
     "RECOVERING",
@@ -141,6 +150,16 @@ class GovernedToolGateway:
             return found
         return self._bindings.get((None, capability_id))
 
+    @asynccontextmanager
+    async def _write_txn(self) -> AsyncIterator[AsyncSession]:
+        """Open a write transaction and mark it so connector I/O cannot sneak in."""
+        async with self._sessions() as session, session.begin():
+            token = _GATEWAY_WRITE_TXN.set(True)
+            try:
+                yield session
+            finally:
+                _GATEWAY_WRITE_TXN.reset(token)
+
     async def execute(
         self,
         claim: TaskClaim,
@@ -213,7 +232,7 @@ class GovernedToolGateway:
     ) -> GatewayOutcome:
         del principal, authorization
         instant = _naive(now or datetime.now(UTC))
-        async with self._sessions() as session, session.begin():
+        async with self._write_txn() as session:
             task = await session.get(MaterializedTaskModel, claim.task_id)
             if task is None:
                 raise LookupError("recovery task does not exist")
@@ -274,6 +293,52 @@ class GovernedToolGateway:
         result = await binding.reconcile(recovery_ctx)
         return await self._apply_reconcile(claim, spec, result, intent_id, instant, copies)
 
+    async def _peek_task(self, task_id: UUID) -> MaterializedTaskModel:
+        async with self._sessions() as session:
+            task = await session.get(MaterializedTaskModel, task_id)
+            if task is None:
+                raise LookupError("claimed task does not exist")
+            session.expunge(task)
+            return task
+
+    async def _latest_unexpired_health(
+        self, connector_id: str | None, now: datetime
+    ) -> ConnectorHealthSnapshot | None:
+        if connector_id is None:
+            return None
+        async with self._sessions() as session:
+            row = await ConnectorHealthRepository(session).latest(connector_id)
+            if row is None:
+                return None
+            snapshot = _health_from_row(row)
+            if snapshot.is_expired(now):
+                return None
+            return snapshot
+
+    async def _health_for_policy(
+        self,
+        *,
+        binding: ConnectorBinding | None,
+        connector_id: str | None,
+        required: bool,
+        now: datetime,
+    ) -> tuple[ConnectorHealthSnapshot | None, ConnectorHealthSnapshot | None]:
+        """Return (policy_health, snapshot_to_persist). Never probes inside a write txn."""
+        if gateway_holds_write_transaction():
+            raise RuntimeError("connector health must not run inside a write transaction")
+        if not required:
+            return None, None
+        persisted = await self._latest_unexpired_health(connector_id, now)
+        if persisted is not None:
+            return persisted, None
+        if binding is None:
+            return None, None
+        live = await binding.health()
+        if live is None:
+            return None, None
+        snapshot = _persistable_health(live)
+        return snapshot, snapshot
+
     async def _prepare_dispatch(
         self,
         claim: TaskClaim,
@@ -285,7 +350,16 @@ class GovernedToolGateway:
         now: datetime,
         mark_running: bool,
     ) -> _Prepared | GatewayOutcome:
-        async with self._sessions() as session, session.begin():
+        peeked = await self._peek_task(claim.task_id)
+        spec = self._capabilities.get(peeked.capability_id, 1)
+        binding = self._binding_for(peeked.capability_id, peeked.connector_id)
+        health, persist_health = await self._health_for_policy(
+            binding=binding,
+            connector_id=peeked.connector_id,
+            required=spec.connector_requirement.required,
+            now=now,
+        )
+        async with self._write_txn() as session:
             task = await session.get(MaterializedTaskModel, claim.task_id)
             if task is None:
                 raise LookupError("claimed task does not exist")
@@ -301,6 +375,8 @@ class GovernedToolGateway:
                 return GatewayOutcome(
                     status="FAILED", failure_classification="CONNECTOR_BINDING_MISSING"
                 )
+            if persist_health is not None:
+                await ConnectorHealthRepository(session).add(persist_health)
             connector: ConnectorSpec | None = None
             registered = True
             advertises = True
@@ -326,7 +402,7 @@ class GovernedToolGateway:
                 return GatewayOutcome(status="FAILED", failure_classification="INPUT_INVALID")
             phase = await session.get(PhaseRunModel, task.phase_run_id)
             snapshot_id = phase.contract_snapshot_id if phase is not None else uuid4()
-            health = await binding.health()
+            approvals = await ApprovalRepository(session).list_for_workflow(task.workflow_id)
             request = PolicyRequest(
                 workflow_id=task.workflow_id,
                 phase_run_id=task.phase_run_id,
@@ -346,8 +422,24 @@ class GovernedToolGateway:
                 capability_known=True,
                 connector_registered=registered,
                 connector_advertises_capability=advertises,
+                approvals=approvals,
             )
             decision = self._policy.evaluate(request)
+            if decision.decision == "REQUIRE_APPROVAL":
+                await await_approval_task(
+                    session,
+                    task_id=task.task_id,
+                    now=now,
+                    principal=principal,
+                    requirements=decision.approval_requirements,
+                    routing=decision.routing,
+                )
+                return GatewayOutcome(
+                    status="AWAITING_APPROVAL",
+                    policy=decision,
+                    task_state=TaskState.AWAITING_APPROVAL.value,
+                    failure_classification="APPROVAL_REQUIRED",
+                )
             if decision.routing == "PARK":
                 reason = decision.reasons[0].value if decision.reasons else "PARKED"
                 await park_task(
@@ -374,6 +466,9 @@ class GovernedToolGateway:
                 return GatewayOutcome(
                     status="FAILED", policy=decision, failure_classification=reason
                 )
+            bound_approval_id = matching_operation_approval_id(
+                request.approvals, operation_binding(request), now=now
+            )
             intents = GatewayDispatchRepository(session)
             existing = await intents.get_by_attempt(claim.attempt_id, action)
             if existing is None:
@@ -390,6 +485,7 @@ class GovernedToolGateway:
                     resolved_input_digest=task.resolved_input_digest,
                     policy_decision=decision.model_dump(mode="json"),
                     risk_decision=_risk_decision(spec),
+                    approval_id=bound_approval_id,
                     status="DISPATCHED",
                 )
             if mark_running:
@@ -409,6 +505,9 @@ class GovernedToolGateway:
                     "intent_id": str(existing.intent_id),
                     "capability_id": task.capability_id,
                     "connector_id": task.connector_id,
+                    "approval_id": str(bound_approval_id)
+                    if bound_approval_id is not None
+                    else None,
                 },
             )
             context = CallContext(
@@ -459,7 +558,7 @@ class GovernedToolGateway:
         except ValidationError as exc:
             raise OutputInvalid(str(exc)) from exc
         dumped = validated.model_dump(mode="json")
-        async with self._sessions() as session, session.begin():
+        async with self._write_txn() as session:
             adopted = await finalize_success(session, claim=claim, output=dumped, now=now)
             intents = GatewayDispatchRepository(session)
             if not adopted:
@@ -534,7 +633,7 @@ class GovernedToolGateway:
         if prepared.spec.effect_semantics is EffectSemantics.SIDE_EFFECT_FREE:
             return await self._complete_failure(claim, prepared, failure, now)
         recovery: RecoveryClaim | None
-        async with self._sessions() as session, session.begin():
+        async with self._write_txn() as session:
             recovery = await acquire_recovery(
                 session,
                 task_id=claim.task_id,
@@ -560,7 +659,7 @@ class GovernedToolGateway:
         failure: str,
         now: datetime,
     ) -> GatewayOutcome:
-        async with self._sessions() as session, session.begin():
+        async with self._write_txn() as session:
             await finalize_failure(session, claim=claim, failure_classification=failure, now=now)
             await GatewayDispatchRepository(session).complete(
                 prepared.intent_id, status="FAILED", now=now
@@ -592,7 +691,7 @@ class GovernedToolGateway:
         action: GatewayAction,
         now: datetime,
     ) -> GatewayOutcome:
-        async with self._sessions() as session, session.begin():
+        async with self._write_txn() as session:
             await GatewayDispatchRepository(session).complete(
                 prepared.intent_id,
                 status="SUCCEEDED",
@@ -628,7 +727,7 @@ class GovernedToolGateway:
             validated = spec.output_schema.model_validate(output)
             return validated.model_dump(mode="json")
 
-        async with self._sessions() as session, session.begin():
+        async with self._write_txn() as session:
             state = await apply_reconcile_result(
                 session,
                 claim=claim,
@@ -765,3 +864,29 @@ def _digest(payload: dict[str, Any]) -> str:
 
 def _naive(value: datetime) -> datetime:
     return value.replace(tzinfo=None) if value.tzinfo else value
+
+
+def gateway_holds_write_transaction() -> bool:
+    return _GATEWAY_WRITE_TXN.get()
+
+
+def _persistable_health(snapshot: ConnectorHealthSnapshot) -> ConnectorHealthSnapshot:
+    return snapshot.model_copy(
+        update={
+            "checked_at": _naive(snapshot.checked_at),
+            "expires_at": _naive(snapshot.expires_at),
+        }
+    )
+
+
+def _health_from_row(row: ConnectorHealthModel) -> ConnectorHealthSnapshot:
+    return ConnectorHealthSnapshot.model_validate(
+        {
+            "connector_id": row.connector_id,
+            "status": row.status,
+            "checked_at": row.checked_at,
+            "expires_at": row.expires_at,
+            "missing_permissions": row.missing_permissions,
+            "reason_codes": row.reason_codes,
+        }
+    )

@@ -12,6 +12,7 @@ from aide.approvals.matching import (
     match_budget_approval,
     match_design_approval,
     match_operation_approval,
+    matching_operation_approval_id,
     simultaneous_subjects_approved,
 )
 from aide.approvals.routing import route_approval_rejection
@@ -62,6 +63,19 @@ def test_full_binding_must_match() -> None:
     assert not match_operation_approval(record, mutated, now=now)
     expired = record.model_copy(update={"expires_at": now - timedelta(seconds=1)})
     assert not match_operation_approval(expired, subject.as_binding(), now=now)
+
+
+def test_matching_operation_approval_id_binds_effective_record() -> None:
+    now = _now()
+    subject = _operation()
+    actor = principal()
+    record = approval_record(subject, actor, now=now)
+    assert (
+        matching_operation_approval_id((record,), subject.as_binding(), now=now)
+        == record.approval_id
+    )
+    expired = record.model_copy(update={"expires_at": now - timedelta(seconds=1)})
+    assert matching_operation_approval_id((expired,), subject.as_binding(), now=now) is None
 
 
 def test_simultaneous_approval_aggregation() -> None:

@@ -755,7 +755,7 @@ class InterviewSupervisor:
     def _absorb_outcome(
         self, result: InterviewResult, capability_id: str, outcome: GatewayOutcome
     ) -> bool:
-        if outcome.status == "PARKED":
+        if outcome.status in {"PARKED", "AWAITING_APPROVAL"}:
             result.parked = True
             result.park_reason = outcome.failure_classification
             return True

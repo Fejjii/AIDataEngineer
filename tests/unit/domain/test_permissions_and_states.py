@@ -35,3 +35,4 @@ def test_every_workflow_state_reachable_and_nonterminal_has_exit() -> None:
     assert (WorkflowState.APPROVAL_REQUIRED, WorkflowState.COMPLETED) in LEGAL_TRANSITIONS
     assert (WorkflowState.APPROVAL_REQUIRED, WorkflowState.BLOCKED) in LEGAL_TRANSITIONS
     assert (WorkflowState.APPROVAL_REQUIRED, WorkflowState.FAILED) in LEGAL_TRANSITIONS
+    assert (WorkflowState.EXECUTION, WorkflowState.APPROVAL_REQUIRED) in LEGAL_TRANSITIONS

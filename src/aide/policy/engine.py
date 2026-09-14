@@ -74,6 +74,11 @@ def approval_eligible(request: PolicyRequest) -> bool:
     return permission is PermissionLevel.DESTRUCTIVE and request.target_environment is TargetEnv.DEV
 
 
+def operation_binding(request: PolicyRequest) -> OperationBinding:
+    """Typed operation subject used for approval matching at evaluate and dispatch."""
+    return _operation_binding(request)
+
+
 def _operation_binding(request: PolicyRequest) -> OperationBinding:
     connector_id = request.connector.connector_id if request.connector else "unbound"
     connector_version = request.connector.version if request.connector else "unbound"

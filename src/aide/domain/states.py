@@ -114,6 +114,7 @@ LEGAL_TRANSITIONS: frozenset[tuple[WorkflowState, WorkflowState]] = frozenset(
         (WorkflowState.POLICY_CHECK, WorkflowState.BLOCKED),
         (WorkflowState.POLICY_CHECK, WorkflowState.APPROVAL_REQUIRED),
         (WorkflowState.POLICY_CHECK, WorkflowState.EXECUTION),
+        (WorkflowState.EXECUTION, WorkflowState.APPROVAL_REQUIRED),
         (WorkflowState.EXECUTION, WorkflowState.VALIDATION),
         (WorkflowState.VALIDATION, WorkflowState.REPAIR),
         (WorkflowState.VALIDATION, WorkflowState.PLANNING),

@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+from pydantic import TypeAdapter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aide.connectors.base.health import ConnectorHealthSnapshot
-from aide.domain.approvals import ApprovalRecord
+from aide.domain.approvals import ApprovalRecord, ApprovalStatus, ApprovalSubject
 from aide.domain.artifacts import ArtifactProvenance
 from aide.domain.permissions import PermissionLevel
-from aide.domain.principal import GrantAuthorization, PrincipalRef
+from aide.domain.principal import GrantAuthorization, PrincipalRef, Role
 from aide.domain.states import WorkflowState
 from aide.domain.versions import ContractSnapshot
 from aide.persistence.models import (
@@ -30,6 +32,8 @@ from aide.persistence.models import (
     WorkflowGrantModel,
     WorkflowModel,
 )
+
+_APPROVAL_SUBJECT_ADAPTER: TypeAdapter[ApprovalSubject] = TypeAdapter(ApprovalSubject)
 
 
 class WorkflowRepository:
@@ -209,6 +213,94 @@ class ApprovalRepository:
         self._session.add(row)
         await self._session.flush()
         return row
+
+    async def list_for_workflow(self, workflow_id: UUID) -> tuple[ApprovalRecord, ...]:
+        rows = (
+            await self._session.scalars(
+                select(ApprovalModel)
+                .where(ApprovalModel.workflow_id == workflow_id)
+                .order_by(ApprovalModel.created_at, ApprovalModel.approval_id)
+            )
+        ).all()
+        return await self._records_from_rows(rows)
+
+    async def list_for_task(self, task_id: UUID) -> tuple[ApprovalRecord, ...]:
+        rows = (
+            await self._session.scalars(
+                select(ApprovalModel)
+                .where(ApprovalModel.task_id == task_id)
+                .order_by(ApprovalModel.created_at, ApprovalModel.approval_id)
+            )
+        ).all()
+        return await self._records_from_rows(rows)
+
+    async def _records_from_rows(self, rows: Sequence[ApprovalModel]) -> tuple[ApprovalRecord, ...]:
+        if not rows:
+            return ()
+        principal_ids = {row.requester_principal_id for row in rows}
+        principal_ids.update(
+            row.decided_by_principal_id for row in rows if row.decided_by_principal_id is not None
+        )
+        sessions = (
+            await self._session.scalars(
+                select(SessionModel).where(SessionModel.principal_id.in_(principal_ids))
+            )
+        ).all()
+        by_principal = {item.principal_id: item for item in sessions}
+        return tuple(_approval_record_from_model(row, by_principal) for row in rows)
+
+
+def _approval_record_from_model(
+    row: ApprovalModel, sessions: dict[UUID, SessionModel]
+) -> ApprovalRecord:
+    subject = _naive_approval_subject(_APPROVAL_SUBJECT_ADAPTER.validate_python(row.subject))
+    return ApprovalRecord(
+        approval_id=row.approval_id,
+        workflow_id=row.workflow_id,
+        subject=subject,
+        subject_digest=row.subject_digest,
+        requester=_principal_ref(row.requester_principal_id, sessions),
+        status=ApprovalStatus(row.status),
+        created_at=_naive_utc(row.created_at),
+        expires_at=_naive_utc(row.expires_at),
+        decided_by=(
+            _principal_ref(row.decided_by_principal_id, sessions)
+            if row.decided_by_principal_id is not None
+            else None
+        ),
+        decided_at=_naive_utc(row.decided_at) if row.decided_at is not None else None,
+        comment=row.comment,
+    )
+
+
+def _naive_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(UTC).replace(tzinfo=None)
+
+
+def _naive_approval_subject(subject: ApprovalSubject) -> ApprovalSubject:
+    expires = subject.expires_at
+    if expires.tzinfo is None:
+        return subject
+    return subject.model_copy(update={"expires_at": _naive_utc(expires)})
+
+
+def _principal_ref(principal_id: UUID, sessions: dict[UUID, SessionModel]) -> PrincipalRef:
+    row = sessions.get(principal_id)
+    if row is None:
+        return PrincipalRef(
+            principal_id=principal_id,
+            authentication_source="LOCAL_SESSION",
+            roles=frozenset(),
+            session_id=principal_id,
+        )
+    return PrincipalRef(
+        principal_id=row.principal_id,
+        authentication_source="LOCAL_SESSION",
+        roles=frozenset(Role(item) for item in row.roles),
+        session_id=row.session_id,
+    )
 
 
 class ArtifactRepository:
