@@ -54,6 +54,19 @@ from aide.domain.tasks import (
     TaskTemplate,
     materialize_task,
 )
+from aide.domain.twin import (
+    EstateContext,
+    EvidenceReference,
+    SourceAuthorityRef,
+    TwinAsset,
+    TwinAssetKind,
+    TwinEnvironment,
+    TwinObservation,
+    TwinObservationKind,
+    TwinRelationship,
+    TwinRelationshipKind,
+    TwinSnapshot,
+)
 from aide.domain.versions import CapabilityContractRef, ContractSnapshot
 
 __all__ = [
@@ -80,6 +93,8 @@ __all__ = [
     "DesignApproval",
     "DispatchState",
     "EffectSemantics",
+    "EstateContext",
+    "EvidenceReference",
     "ExecutionMode",
     "FailureClass",
     "GitChangeClassification",
@@ -95,10 +110,19 @@ __all__ = [
     "Role",
     "SqlClassification",
     "SqlText",
+    "SourceAuthorityRef",
     "TargetEnv",
     "TaskAttempt",
     "TaskState",
     "TaskTemplate",
+    "TwinAsset",
+    "TwinAssetKind",
+    "TwinEnvironment",
+    "TwinObservation",
+    "TwinObservationKind",
+    "TwinRelationship",
+    "TwinRelationshipKind",
+    "TwinSnapshot",
     "UnresolvedInputError",
     "WorkflowState",
     "approval_is_effective",
