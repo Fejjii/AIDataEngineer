@@ -134,7 +134,7 @@ The baseline is a tested **foundation and partial vertical slice**, not a comple
 | Evaluation | `docs/EVALUATION_STRATEGY.md` is detailed, but `src/aide/evaluation/`, `evaluation/`, and `tests/evaluation/` do not exist. | Design only |
 | Monitoring, repair, lineage, delivery, observability | Their architecture is documented, but corresponding product packages are absent (dbt can extract manifest lineage internally). | Not implemented as control-plane components |
 | API/CLI | `src/aide/api/app.py` and `src/aide/cli/` expose local session, workflow submit, events, connector health, fixture building, and the offline slice. | Thin prototype surface, not an operator control plane |
-| Tests and CI | `tests/` has 369 collectable tests across unit, PostgreSQL integration, connector contract, security, offline dbt, profiling and modelling. `.github/workflows/ci.yml` runs lint, strict types, imports, gitleaks, migrations, full/integration pytest, and Docker smoke. | Strong engineering gate; no pivot end-to-end evaluation |
+| Tests and CI | `tests/` has 369 collectable tests across unit, PostgreSQL integration, connector contract, security, offline dbt, profiling and modelling. `.github/workflows/ci.yml` runs lint, strict types, imports, gitleaks, migrations, full/integration pytest, and Docker smoke. Live Snowflake/dbt tests are opt-in and skipped without credentials; the security suite has one leakage test rather than the planned adversarial corpus. | Strong engineering gate for the kernel; no pivot end-to-end evaluation, live-vendor CI gate, or broad security corpus |
 
 Run reports provide stronger evidence than the backlog status alone:
 
@@ -152,6 +152,14 @@ Run reports provide stronger evidence than the backlog status alone:
 This evidence supports feasibility, but it does not prove the proposed control-plane
 workflow. No executable test currently combines a Digital Twin, dbt generation, policy,
 repair, independent verification, and evidence evaluation.
+
+The tracked task ledger also lags merged implementation state:
+`.ai/TASKS.md` still labels DE005 `IN_PROGRESS` and the umbrella DE008 `TODO`, while this
+baseline includes the Snowflake and DE008A dbt connector merges. The same ledger records
+DE005B live validation as complete but pending Development Control and records temporary
+`AIDE_DEV_RW` `CREATE TABLE` on `VANTARA_RAW` for revocation. Run reports and Git history
+are therefore the stronger maturity evidence; the grant cleanup remains a human
+operational action, not a pivot implementation task.
 
 ## 5. Reuse assessment
 
@@ -291,11 +299,19 @@ single prototype scenario before being generalized.
 
 ### Vendor and identity caveat
 
+Vendor neutrality is currently proven at the capability/connector-contract level, not by
+multi-vendor execution. Only Snowflake and dbt have real implemented data-platform
+adapters. The prototype should state that limitation plainly rather than adding a second
+vendor for appearance; a second real stack becomes a later portability evaluation with its
+own acceptance evidence.
+
 The live dbt run report records that the current Snowflake DEV role does not read
 `VANTARA_RAW`; the test safely copied source fixtures into a workflow-specific `AIDE_DEV`
 schema. The prototype must preserve that least-privilege posture. It must not expand grants
 merely to make the demo path easier. The next architecture audit should explicitly choose
-between a governed RO-to-DEV handoff and workflow-local source copies.
+between a governed RO-to-DEV handoff and workflow-local source copies. Separately, the
+temporary bootstrap `CREATE TABLE` grant on `VANTARA_RAW` recorded in `.ai/TASKS.md` must
+be revoked by the human operator; this audit cannot verify or perform that live action.
 
 ## 8. Smallest credible prototype
 
