@@ -109,6 +109,9 @@ T = TypeVar("T")
 _SUCCESS_STATUSES = frozenset({"SUCCESS", "SUCCEEDED"})
 _RUNNING_STATUSES = frozenset({"RUNNING", "QUEUED", "QUEUEING", "RESUMING", "BLOCKED"})
 _FAILED_STATUSES = frozenset({"FAIL", "FAILED", "ABORTED", "INCIDENT", "FAILED_WITH_INCIDENT"})
+# Unqualified INFORMATION_SCHEMA.QUERY_HISTORY() resolves to the session database
+# (e.g. VANTARA_RAW) and fails. Use the account-level Snowflake information schema.
+_QUERY_HISTORY = "TABLE(SNOWFLAKE.INFORMATION_SCHEMA.QUERY_HISTORY())"
 
 
 class RealSnowflakeConnector:
@@ -546,9 +549,7 @@ class RealSnowflakeConnector:
             try:
                 _cols, rows, _qid = session.execute(
                     "SELECT QUERY_ID, TOTAL_ELAPSED_TIME, BYTES_SCANNED, ROWS_PRODUCED, "
-                    "PARTITIONS_SCANNED, PARTITIONS_TOTAL, BYTES_SPILLED_TO_LOCAL_STORAGE, "
-                    "WAREHOUSE_NAME FROM TABLE(INFORMATION_SCHEMA.QUERY_HISTORY()) "
-                    "WHERE QUERY_TAG = %s",
+                    f"WAREHOUSE_NAME FROM {_QUERY_HISTORY} WHERE QUERY_TAG = %s",
                     (payload.query_tag,),
                 )
             except SnowflakeMappedError:
@@ -794,7 +795,7 @@ def _history_row(session: SnowflakeSession, query_id: str) -> dict[str, Any] | N
     sql = (
         "SELECT QUERY_ID, EXECUTION_STATUS, ERROR_CODE, BYTES_SCANNED, ROWS_PRODUCED, "
         "TOTAL_ELAPSED_TIME, QUERY_TAG, WAREHOUSE_NAME "
-        "FROM TABLE(INFORMATION_SCHEMA.QUERY_HISTORY()) WHERE QUERY_ID = %s"
+        f"FROM {_QUERY_HISTORY} WHERE QUERY_ID = %s"
     )
     _cols, rows, _ = session.execute(sql, (query_id,))
     return rows[0] if rows else None
@@ -804,7 +805,7 @@ def _history_by_tag(session: SnowflakeSession, query_tag: str) -> list[dict[str,
     sql = (
         "SELECT QUERY_ID, EXECUTION_STATUS, ERROR_CODE, BYTES_SCANNED, ROWS_PRODUCED, "
         "TOTAL_ELAPSED_TIME, QUERY_TAG, WAREHOUSE_NAME "
-        "FROM TABLE(INFORMATION_SCHEMA.QUERY_HISTORY()) WHERE QUERY_TAG = %s"
+        f"FROM {_QUERY_HISTORY} WHERE QUERY_TAG = %s"
     )
     _cols, rows, _ = session.execute(sql, (query_tag,))
     return rows

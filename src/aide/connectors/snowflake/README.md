@@ -62,6 +62,7 @@ never `AVAILABLE`.
 
 ## Session defaults
 
+- `authenticator = SNOWFLAKE_JWT` (RSA key-pair authentication)
 - `STATEMENT_TIMEOUT_IN_SECONDS` from the task deadline
 - `AUTOCOMMIT = TRUE`
 - Canonical `QUERY_TAG = aide:v1;wf=<uuid>;phase_run=<uuid>;task=<uuid>;op=<64-hex>;attempt=<uuid>;n=<int>`

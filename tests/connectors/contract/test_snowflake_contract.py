@@ -7,6 +7,7 @@ import pytest
 from tests.connectors.contract.conftest import (
     DEV_HANDLERS,
     RO_HANDLERS,
+    clear_snowflake_env,
     make_context,
 )
 
@@ -553,7 +554,10 @@ async def test_fail_after_effect_still_reconciles(fake_dev: FakeSnowflakeConnect
 
 
 @pytest.mark.asyncio
-async def test_real_without_credentials_skips_live_and_fails_closed() -> None:
+async def test_real_without_credentials_skips_live_and_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_snowflake_env(monkeypatch)
     connector = RealSnowflakeConnector(SNOWFLAKE_RO)
     snapshot = await connector.health()
     assert snapshot.status == "UNAVAILABLE"
@@ -598,15 +602,29 @@ async def test_real_without_credentials_skips_live_and_fails_closed() -> None:
 )
 @pytest.mark.asyncio
 async def test_real_live_discover_vantara_raw() -> None:
-    """DE005B live scaffold: discover the accepted Vantara demo source database."""
+    """DE005B live discovery: nonempty VANTARA_RAW with required Vantara schemas/tables."""
+    from tests.connectors.contract.test_snowflake_live import (
+        REQUIRED_SCHEMAS,
+        REQUIRED_TABLES,
+        _discovered_tables,
+        assert_vantara_raw_populated,
+    )
+
     connector = RealSnowflakeConnector(SNOWFLAKE_RO)
-    context = make_context()
+    context = make_context(deadline_seconds=90)
     result = await connector.discover_assets(
         DiscoverAssetsInput(scope=DiscoveryScope(databases=("VANTARA_RAW",))),
         context,
     )
     assert result.snapshot_id
+    assert result.assets, "empty VANTARA_RAW must not pass live discovery"
     assert all(asset.address[0] == "VANTARA_RAW" for asset in result.assets)
+    schemas = {asset.address[1] for asset in result.assets if len(asset.address) >= 3}
+    assert schemas >= REQUIRED_SCHEMAS
+    missing = REQUIRED_TABLES - _discovered_tables(result.assets)
+    assert not missing, f"missing required Vantara tables: {sorted(missing)}"
+    await assert_vantara_raw_populated(connector, context)
+    await connector.close()
 
 
 def test_dialect_round_trip_and_namespace() -> None:
