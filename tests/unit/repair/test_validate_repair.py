@@ -14,6 +14,7 @@ from aide.domain.repair import (
     ProposeRepairInput,
     RepairBudgetSnapshot,
     RepairProposal,
+    RepairValidation,
     ValidateRepairInput,
 )
 from aide.domain.sql import AssetKind, AssetRef
@@ -94,14 +95,14 @@ def _proposal(drift: DriftEvidence, **overrides: object) -> RepairProposal:
     return proposal.model_copy(update=overrides) if overrides else proposal
 
 
-def _budget(**overrides: object) -> RepairBudgetSnapshot:
-    payload = {
+def _budget(**overrides: int | bool) -> RepairBudgetSnapshot:
+    payload: dict[str, int | bool] = {
         "proposal_count": 1,
         "applied_count": 0,
         "post_repair_revalidation_count": 0,
     }
     payload.update(overrides)
-    return RepairBudgetSnapshot(**payload)  # type: ignore[arg-type]
+    return RepairBudgetSnapshot.model_validate(payload)
 
 
 def _input(
@@ -127,8 +128,8 @@ def _input(
     )
 
 
-def _reasons(result: object) -> set[str]:
-    return set(result.reason_codes)  # type: ignore[union-attr]
+def _reasons(result: RepairValidation) -> set[str]:
+    return set(result.reason_codes)
 
 
 def test_accepted_invoice_status_repair_is_allowed() -> None:

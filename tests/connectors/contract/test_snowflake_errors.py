@@ -53,3 +53,13 @@ def test_errno_table_matches_architecture_codes() -> None:
 
 def test_timeout_error_maps_to_timeout() -> None:
     assert map_error(TimeoutError("deadline")) is FailureClass.TIMEOUT
+
+
+def test_duckdb_missing_column_alias_collision_is_schema_mismatch() -> None:
+    exc = _VendorError(
+        None,
+        None,
+        'Binder Error: Column "INVOICE_STATUS" referenced that exists in the '
+        "SELECT clause - but this column cannot be referenced before it is defined",
+    )
+    assert map_error(exc) is FailureClass.SCHEMA_MISMATCH

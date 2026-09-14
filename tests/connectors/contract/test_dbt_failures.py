@@ -45,6 +45,14 @@ def test_database_error_remaps_through_warehouse_mapper() -> None:
     assert map_error(exc) is FailureClass.SCHEMA_MISMATCH
 
 
+def test_duckdb_alias_collision_maps_to_schema_mismatch() -> None:
+    exc = type("BinderException", (Exception,), {})(
+        'Binder Error: Column "INVOICE_STATUS" referenced that exists in the '
+        "SELECT clause - but this column cannot be referenced before it is defined"
+    )
+    assert map_error(exc) is FailureClass.SCHEMA_MISMATCH
+
+
 def test_unknown_runtime_maps_to_dbt_runtime() -> None:
     exc = type("DbtRuntimeError", (Exception,), {})("something exploded")
     assert map_error(exc) is FailureClass.DBT_RUNTIME

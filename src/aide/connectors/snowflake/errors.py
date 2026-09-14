@@ -27,7 +27,12 @@ _SQL_SYNTAX_RE = re.compile(r"syntax error|unexpected|parse error", re.I)
 _MISSING_RE = re.compile(
     r"does not exist|does not exist or not authorized|object .* not found", re.I
 )
-_SCHEMA_RE = re.compile(r"invalid identifier|unknown column|invalid column|referenced column", re.I)
+_SCHEMA_RE = re.compile(
+    r"invalid identifier|unknown column|invalid column|referenced column|"
+    r"column \".+\" referenced|not found in from clause|"
+    r"cannot be referenced before it is defined",
+    re.I,
+)
 _TYPE_RE = re.compile(
     r"numeric value .* is not recognized|timestamp .* is not recognized|is not recognized|"
     r"data type|incompatible type|type mismatch",
