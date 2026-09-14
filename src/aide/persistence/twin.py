@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from aide.domain.artifacts import ExecutionMode
 from aide.domain.identity import canonical_json_bytes
 from aide.domain.twin import (
     EvidenceReference,
@@ -35,12 +36,6 @@ from aide.persistence.models import (
     TwinSnapshotRelationshipModel,
     WorkflowTwinSnapshotModel,
 )
-from aide.twin.capture import (
-    PendingAssetCapture,
-    PendingObservationCapture,
-    PendingRelationshipCapture,
-    TwinCaptureBatch,
-)
 from aide.twin.identity import (
     AssetCapture,
     RelationshipCapture,
@@ -48,6 +43,11 @@ from aide.twin.identity import (
     TwinIdentityError,
     materialize_asset_version,
     materialize_relationship_version,
+)
+from aide.twin.records import (
+    PendingObservationCapture,
+    PendingRelationshipCapture,
+    TwinCaptureBatch,
 )
 from aide.twin.snapshot import snapshot_manifest_payload
 
@@ -92,7 +92,7 @@ class TwinRepository:
             media_type=reference.media_type,
             sha256=reference.sha256,
             size_bytes=reference.size_bytes,
-            execution_mode=reference.execution_mode,
+            execution_mode=reference.execution_mode.value,
             source_authority=reference.source_authority.model_dump(mode="json"),
             source_authority_digest=_authority_digest(reference.source_authority),
             producer_operation_key=reference.producer_operation_key,
@@ -107,15 +107,16 @@ class TwinRepository:
         self,
         capture: AssetCapture,
         *,
-        incarnation: int = 1,
         rename_continuity: RenameContinuity | None = None,
     ) -> TwinAsset:
         if rename_continuity is not None:
             await self._validate_rename_evidence(capture, rename_continuity)
             rows = await self._asset_rows(rename_continuity.asset_id)
             identity_asset_id: UUID | None = rename_continuity.asset_id
+            incarnation = rows[-1].incarnation
         else:
-            rows = await self._matching_asset_rows(capture, incarnation=incarnation)
+            incarnation = capture.incarnation
+            rows = await self._matching_asset_rows(capture)
             identity_asset_id = rows[-1].asset_id if rows else None
         versions = tuple(_asset_from_row(item) for item in rows)
         asset = materialize_asset_version(
@@ -230,7 +231,6 @@ class TwinRepository:
                     parent_id = parent.asset_id
                 asset = await self.capture_asset(
                     item.resolved(parent_asset_id=parent_id),
-                    incarnation=item.incarnation,
                 )
                 assets_by_key[item.capture_key] = asset
                 pending.remove(item)
@@ -280,6 +280,7 @@ class TwinRepository:
             manifest_sha256=snapshot.manifest_sha256,
         )
         self._session.add(row)
+        await self._session.flush()
         self._session.add_all(
             [
                 TwinSnapshotAssetModel(
@@ -388,24 +389,32 @@ class TwinRepository:
             ).all()
         )
         assets = tuple(
-            _asset_from_row(await self._require_asset(member.asset_id, member.asset_version))
-            for member in asset_members
+            [
+                _asset_from_row(await self._require_asset(member.asset_id, member.asset_version))
+                for member in asset_members
+            ]
         )
         relationships = tuple(
-            _relationship_from_row(
-                await self._require_relationship(
-                    member.relationship_id, member.relationship_version
+            [
+                _relationship_from_row(
+                    await self._require_relationship(
+                        member.relationship_id, member.relationship_version
+                    )
                 )
-            )
-            for member in relationship_members
+                for member in relationship_members
+            ]
         )
         observations = tuple(
-            _observation_from_row(await self._require_observation(member.observation_id))
-            for member in observation_members
+            [
+                _observation_from_row(await self._require_observation(member.observation_id))
+                for member in observation_members
+            ]
         )
         evidence = tuple(
-            _evidence_from_row(await self._require_evidence(member.evidence_ref_id))
-            for member in evidence_members
+            [
+                _evidence_from_row(await self._require_evidence(member.evidence_ref_id))
+                for member in evidence_members
+            ]
         )
         snapshot = TwinSnapshot(
             twin_snapshot_id=row.twin_snapshot_id,
@@ -433,9 +442,7 @@ class TwinRepository:
             evidence_references=evidence,
         )
 
-    async def _matching_asset_rows(
-        self, capture: AssetCapture, *, incarnation: int
-    ) -> tuple[TwinAssetModel, ...]:
+    async def _matching_asset_rows(self, capture: AssetCapture) -> tuple[TwinAssetModel, ...]:
         authority_digest = _authority_digest(capture.source_authority)
         statement = select(TwinAssetModel).where(
             TwinAssetModel.source_authority_digest == authority_digest,
@@ -449,7 +456,7 @@ class TwinRepository:
                 TwinAssetModel.native_key.is_(None),
                 TwinAssetModel.canonical_locator_digest
                 == _locator_digest(capture.canonical_locator),
-                TwinAssetModel.incarnation == incarnation,
+                TwinAssetModel.incarnation == capture.incarnation,
             )
         rows = await self._session.scalars(statement.order_by(TwinAssetModel.asset_version))
         return tuple(rows.all())
@@ -633,7 +640,7 @@ def _evidence_from_row(row: EvidenceReferenceModel) -> EvidenceReference:
         media_type=row.media_type,
         sha256=row.sha256,
         size_bytes=row.size_bytes,
-        execution_mode=row.execution_mode,
+        execution_mode=ExecutionMode(row.execution_mode),
         source_authority=SourceAuthorityRef.model_validate(row.source_authority),
         producer_operation_key=row.producer_operation_key,
         producer_attempt_id=row.producer_attempt_id,

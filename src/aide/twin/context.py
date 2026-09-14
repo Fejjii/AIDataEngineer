@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 from collections import deque
+from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -219,8 +221,11 @@ def _validate_snapshot_members(
             TwinFailureCode.SNAPSHOT_MEMBER_MISMATCH,
             "loaded context records do not exactly match pinned snapshot membership",
         )
-    all_records = (*assets, *relationships, *observations)
-    if any(item.environment != snapshot.environment for item in all_records):
+    if (
+        any(item.environment != snapshot.environment for item in assets)
+        or any(item.environment != snapshot.environment for item in relationships)
+        or any(item.environment != snapshot.environment for item in observations)
+    ):
         raise TwinValidationError(
             TwinFailureCode.ENVIRONMENT_MISMATCH,
             "context record environment differs from the pinned snapshot",
@@ -267,11 +272,11 @@ def _candidate_asset_ids(
 
 def _require_subset(
     proposed: frozenset[UUID],
-    eligible: object,
+    eligible: Iterable[UUID],
     *,
     detail: str,
 ) -> None:
-    eligible_ids = frozenset(eligible)  # type: ignore[arg-type]
+    eligible_ids = frozenset(eligible)
     outside = proposed - eligible_ids
     if outside:
         raise TwinValidationError(
@@ -286,7 +291,7 @@ def _expand_relationships(
     eligible_ids: frozenset[UUID],
     relationships: tuple[TwinRelationship, ...],
     max_depth: int,
-) -> tuple[frozenset[UUID], frozenset[TwinRelationship]]:
+) -> tuple[frozenset[UUID], tuple[TwinRelationship, ...]]:
     adjacency: dict[UUID, list[tuple[UUID, TwinRelationship]]] = {}
     for relationship in relationships:
         if relationship.kind not in EXPANDABLE_RELATIONSHIPS:
@@ -304,7 +309,7 @@ def _expand_relationships(
         )
     queue = deque((asset_id, 0) for asset_id in sorted(selected_ids, key=str))
     expanded = set(selected_ids)
-    included_relationships: set[TwinRelationship] = set()
+    included_relationships: dict[tuple[UUID, int], TwinRelationship] = {}
     while queue:
         asset_id, depth = queue.popleft()
         if depth >= max_depth:
@@ -313,19 +318,21 @@ def _expand_relationships(
             adjacency.get(asset_id, ()),
             key=lambda item: (_relationship_key(item[1]), str(item[0])),
         ):
-            included_relationships.add(relationship)
+            included_relationships[
+                (relationship.relationship_id, relationship.relationship_version)
+            ] = relationship
             if neighbor_id in expanded:
                 continue
             expanded.add(neighbor_id)
             queue.append((neighbor_id, depth + 1))
-    return frozenset(expanded), frozenset(included_relationships)
+    return frozenset(expanded), tuple(included_relationships.values())
 
 
 def _validate_required_observations(
     observations: tuple[TwinObservation, ...],
     *,
     request: EstateContextRequest,
-    captured_at: Any,
+    captured_at: datetime,
 ) -> None:
     by_id = {item.observation_id: item for item in observations}
     missing_ids = request.required_observation_ids - by_id.keys()

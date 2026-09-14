@@ -15,6 +15,8 @@ from aide.domain.twin import (
     TwinAssetKind,
     TwinObservation,
     TwinObservationKind,
+    TwinRelationship,
+    TwinRelationshipKind,
 )
 from aide.twin.context import (
     EstateAccessPolicy,
@@ -368,6 +370,44 @@ def test_at07_repeated_context_assembly_is_byte_identical() -> None:
     assert first.context.estate_context_sha256 == second.context.estate_context_sha256
 
 
+def test_context_expansion_stops_at_depth_two_and_enforces_relationship_bound() -> None:
+    evidence = _evidence()
+    assets = tuple(_asset(evidence, name=f"TABLE_{index}") for index in range(4))
+    relationships = tuple(
+        _relationship(evidence, assets[index], assets[index + 1]) for index in range(3)
+    )
+    snapshot = build_twin_snapshot(
+        assets=assets,
+        relationships=relationships,
+        observations=(),
+        evidence_references=(evidence,),
+        captured_at=NOW + timedelta(minutes=1),
+        capture_cutoff=NOW + timedelta(minutes=1),
+    )
+    kwargs = {
+        "snapshot": snapshot,
+        "assets": assets,
+        "relationships": relationships,
+        "observations": (),
+        "evidence_references": (evidence,),
+        "access": _access(*assets),
+        "request": EstateContextRequest(reasoner_asset_ids=(assets[0].asset_id,)),
+    }
+
+    assembled = assemble_estate_context(**kwargs)  # type: ignore[arg-type]
+    assert tuple(item.asset_id for item in assembled.context.assets) == tuple(
+        sorted((item.asset_id for item in assets[:3]), key=str)
+    )
+    assert len(assembled.context.relationships) == 2
+
+    with pytest.raises(TwinValidationError) as raised:
+        assemble_estate_context(
+            **kwargs,  # type: ignore[arg-type]
+            limits=EstateContextLimits(max_relationships=1),
+        )
+    assert raised.value.code is TwinFailureCode.CONTEXT_BOUND_EXCEEDED
+
+
 def _observation(
     asset: TwinAsset,
     evidence: EvidenceReference,
@@ -384,5 +424,24 @@ def _observation(
         observed_at=NOW,
         fresh_until=fresh_until or NOW + timedelta(minutes=2),
         confidence=1,
+        evidence_ref_id=evidence.evidence_ref_id,
+    )
+
+
+def _relationship(
+    evidence: EvidenceReference,
+    from_asset: TwinAsset,
+    to_asset: TwinAsset,
+) -> TwinRelationship:
+    return TwinRelationship(
+        relationship_id=uuid4(),
+        relationship_version=1,
+        kind=TwinRelationshipKind.TRANSFORMS_FROM,
+        from_asset_id=from_asset.asset_id,
+        to_asset_id=to_asset.asset_id,
+        source_authority=evidence.source_authority,
+        confidence=1,
+        attributes={"declared": True},
+        observed_at=NOW,
         evidence_ref_id=evidence.evidence_ref_id,
     )

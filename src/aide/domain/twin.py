@@ -9,6 +9,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from aide.domain.artifacts import ExecutionMode
+
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
 
 
@@ -138,16 +140,14 @@ class EvidenceReference(TwinModel):
     media_type: str = Field(min_length=1)
     sha256: str = Field(pattern=SHA256_PATTERN)
     size_bytes: int = Field(ge=0)
-    execution_mode: str
+    execution_mode: ExecutionMode
     source_authority: SourceAuthorityRef
     producer_operation_key: str | None = None
     producer_attempt_id: UUID | None = None
     created_at: datetime
 
     @model_validator(mode="after")
-    def validate_execution_mode(self) -> EvidenceReference:
-        if self.execution_mode not in {"REAL", "MOCK"}:
-            raise ValueError("execution_mode must be REAL or MOCK")
+    def validate_producer_identity(self) -> EvidenceReference:
         if self.producer_operation_key is not None:
             if len(self.producer_operation_key) != 64:
                 raise ValueError("producer_operation_key must be a 64-character digest")
@@ -175,10 +175,14 @@ class TwinSnapshot(TwinModel):
             raise ValueError("capture_cutoff cannot be after captured_at")
         if self.asset_versions != tuple(sorted(set(self.asset_versions), key=_version_key)):
             raise ValueError("asset_versions must be sorted and unique")
+        if len({item[0] for item in self.asset_versions}) != len(self.asset_versions):
+            raise ValueError("asset_versions must pin exactly one version per asset")
         if self.relationship_versions != tuple(
             sorted(set(self.relationship_versions), key=_version_key)
         ):
             raise ValueError("relationship_versions must be sorted and unique")
+        if len({item[0] for item in self.relationship_versions}) != len(self.relationship_versions):
+            raise ValueError("relationship_versions must pin exactly one version per relationship")
         if self.observation_ids != tuple(sorted(set(self.observation_ids), key=str)):
             raise ValueError("observation_ids must be sorted and unique")
         if self.evidence_reference_ids != tuple(sorted(set(self.evidence_reference_ids), key=str)):

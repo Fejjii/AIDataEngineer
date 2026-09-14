@@ -9,10 +9,22 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from aide.domain.states import WorkflowState
-from aide.domain.twin import EvidenceReference, SourceAuthorityRef, TwinAssetKind
+from aide.domain.twin import (
+    EvidenceReference,
+    SourceAuthorityRef,
+    TwinAssetKind,
+    TwinObservation,
+    TwinObservationKind,
+    TwinRelationshipKind,
+)
 from aide.persistence.repositories import WorkflowRepository
 from aide.persistence.twin import TwinRepository
-from aide.twin.identity import AssetCapture, RenameContinuity, TwinIdentityError
+from aide.twin.identity import (
+    AssetCapture,
+    RelationshipCapture,
+    RenameContinuity,
+    TwinIdentityError,
+)
 from aide.twin.snapshot import build_twin_snapshot
 
 NOW = datetime(2026, 9, 14, 12)
@@ -41,12 +53,14 @@ def _capture(
     *,
     locator: tuple[str, ...] = ("VANTARA_RAW", "BILLING", "INVOICES"),
     columns: int = 5,
+    incarnation: int = 1,
 ) -> AssetCapture:
     return AssetCapture(
         kind=TwinAssetKind.DATASET,
         source_authority=AUTHORITY,
         native_key=None,
         canonical_locator=locator,
+        incarnation=incarnation,
         platform_type="snowflake.table",
         attributes={"columns": columns},
         observed_at=NOW,
@@ -65,7 +79,7 @@ async def test_asset_versions_rename_recreation_snapshot_pin_and_immutability(
         first = await repository.capture_asset(_capture(evidence))
         repeated = await repository.capture_asset(_capture(evidence))
         changed = await repository.capture_asset(_capture(evidence, columns=6))
-        recreated = await repository.capture_asset(_capture(evidence, columns=6), incarnation=2)
+        recreated = await repository.capture_asset(_capture(evidence, columns=6, incarnation=2))
         renamed = await repository.capture_asset(
             _capture(
                 evidence,
@@ -78,10 +92,35 @@ async def test_asset_versions_rename_recreation_snapshot_pin_and_immutability(
                 source_authority=AUTHORITY,
             ),
         )
+        relationship = await repository.capture_relationship(
+            RelationshipCapture(
+                kind=TwinRelationshipKind.MATERIALIZED_FROM,
+                from_asset_id=recreated.asset_id,
+                to_asset_id=first.asset_id,
+                source_authority=AUTHORITY,
+                confidence=1,
+                attributes={"declared": True},
+                observed_at=NOW,
+                evidence_ref_id=evidence.evidence_ref_id,
+            )
+        )
+        observation = await repository.add_observation(
+            TwinObservation(
+                observation_id=uuid4(),
+                subject_asset_id=first.asset_id,
+                kind=TwinObservationKind.SCHEMA,
+                source_authority=AUTHORITY,
+                value={"columns": 5},
+                observed_at=NOW,
+                fresh_until=NOW + timedelta(minutes=5),
+                confidence=1,
+                evidence_ref_id=evidence.evidence_ref_id,
+            )
+        )
         snapshot = build_twin_snapshot(
-            assets=(first,),
-            relationships=(),
-            observations=(),
+            assets=(first, recreated),
+            relationships=(relationship,),
+            observations=(observation,),
             evidence_references=(evidence,),
             captured_at=NOW + timedelta(minutes=1),
             capture_cutoff=NOW + timedelta(minutes=1),
@@ -111,7 +150,12 @@ async def test_asset_versions_rename_recreation_snapshot_pin_and_immutability(
     async with session_factory() as session:
         records = await TwinRepository(session).pinned_snapshot(workflow.workflow_id)
     assert records.snapshot.twin_snapshot_id == snapshot.twin_snapshot_id
-    assert records.assets == (first,)
+    assert {item.asset_id for item in records.assets} == {
+        first.asset_id,
+        recreated.asset_id,
+    }
+    assert records.relationships == (relationship,)
+    assert records.observations == (observation,)
 
     other_snapshot = build_twin_snapshot(
         assets=(changed,),

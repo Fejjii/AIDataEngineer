@@ -8,10 +8,22 @@ from aide.capabilities.io import (
     ColumnSpec,
     DescribeAssetOutput,
     DiscoverAssetsOutput,
+    ProfileColumn,
 )
 from aide.domain.sql import AssetKind, AssetRef
 from aide.domain.twin import SourceAuthorityRef, TwinAssetKind, TwinObservationKind
-from aide.twin.capture import capture_dbt_artifacts, capture_snowflake_metadata
+from aide.profiling.artifacts import (
+    BudgetUsage,
+    DatasetProfileArtifact,
+    MaskingState,
+    ProfilingRunResult,
+    ProfilingSummary,
+)
+from aide.twin.capture import (
+    capture_dbt_artifacts,
+    capture_profile_observations,
+    capture_snowflake_metadata,
+)
 
 NOW = datetime(2026, 9, 14, tzinfo=UTC)
 
@@ -152,3 +164,89 @@ def test_dbt_capture_is_manifest_scoped_and_uses_declared_lineage() -> None:
     payload = batch.model_dump_json()
     assert "compiled_code" not in payload
     assert "select *" not in payload
+
+
+def test_profile_capture_persists_aggregates_without_samples_or_top_values() -> None:
+    authority = SourceAuthorityRef(
+        authority_id="de006_profiler",
+        contract_version="1.0",
+        scope=("VANTARA_RAW",),
+    )
+    asset = AssetRef(
+        connector_id="snowflake_ro",
+        address=("VANTARA_RAW", "BILLING", "INVOICES"),
+        kind=AssetKind.TABLE,
+        platform_type="snowflake",
+    )
+    masking = MaskingState(
+        pii_columns=("EMAIL",),
+        samples_masked=True,
+        top_values_masked=True,
+    )
+    profile = DatasetProfileArtifact(
+        fixture_version="tiny-v1",
+        asset=asset,
+        profile_id=uuid4(),
+        describe_snapshot_id=uuid4(),
+        capability_profile_id=uuid4(),
+        row_count=10,
+        sampled=False,
+        columns=(
+            ProfileColumn(
+                name="INVOICE_ID",
+                null_ratio=0,
+                distinct_ratio=1,
+                top_values=(),
+                inferred_semantic="ID",
+            ),
+        ),
+        candidate_keys=(),
+        key_evidence=(),
+        duplicate_evidence=(),
+        duplicate_groups_estimate=0,
+        masking=masking,
+        column_types=(("INVOICE_ID", "NUMBER"),),
+    )
+    budget = BudgetUsage(
+        queries=1,
+        pairs=0,
+        elapsed_seconds=0.1,
+        max_queries=10,
+        max_pairs=10,
+        max_seconds=30,
+        sample_n=5,
+    )
+    result = ProfilingRunResult(
+        fixture_version="tiny-v1",
+        duration_seconds=0.1,
+        profiles=(profile,),
+        relationships=(),
+        samples=(),
+        summary=ProfilingSummary(
+            fixture_version="tiny-v1",
+            connector_id="snowflake_ro",
+            assets=(asset,),
+            facts=(),
+            relationship_count=0,
+            sample_asset_count=0,
+            budget=budget,
+            masking_applied=True,
+        ),
+        relationships_id=uuid4(),
+        masking=masking,
+    )
+
+    observations = capture_profile_observations(
+        result=result,
+        asset_ids_by_locator={asset.address: uuid4()},
+        source_authority=authority,
+        evidence_ref_id=uuid4(),
+        observed_at=NOW,
+        fresh_until=NOW + timedelta(hours=1),
+    )
+
+    assert len(observations) == 1
+    payload = observations[0].model_dump_json()
+    assert '"samples"' not in payload
+    assert '"top_values"' not in payload
+    assert '"row_count":10' in payload

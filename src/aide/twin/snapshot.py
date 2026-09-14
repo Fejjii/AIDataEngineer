@@ -132,9 +132,11 @@ def _validate_environment(
     relationships: tuple[TwinRelationship, ...],
     observations: tuple[TwinObservation, ...],
 ) -> None:
-    records = (*assets, *relationships, *observations)
-    mismatched = [item for item in records if item.environment is not TwinEnvironment.DEVELOPMENT]
-    if mismatched:
+    if (
+        any(item.environment is not TwinEnvironment.DEVELOPMENT for item in assets)
+        or any(item.environment is not TwinEnvironment.DEVELOPMENT for item in relationships)
+        or any(item.environment is not TwinEnvironment.DEVELOPMENT for item in observations)
+    ):
         raise TwinValidationError(
             TwinFailureCode.ENVIRONMENT_MISMATCH,
             "all MVP Twin members must be DEVELOPMENT",
