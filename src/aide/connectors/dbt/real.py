@@ -11,6 +11,12 @@ from importlib.metadata import version as distribution_version
 from pathlib import Path
 from uuid import UUID, uuid4
 
+from aide.capabilities.io import (
+    ParseTransformationInput,
+    ParseTransformationOutput,
+    ValidateInterviewQualityInput,
+    ValidationReport,
+)
 from aide.connectors.base.context import CallContext, RecoveryContext
 from aide.connectors.base.health import ConnectorHealthSnapshot
 from aide.connectors.base.reconcile import EffectFound, InProgress, NoEffect, Unknown
@@ -294,6 +300,68 @@ class RealDbtConnector:
                 LineageEdge(from_id=edge["from_id"], to_id=edge["to_id"]) for edge in edges
             ),
         )
+
+    async def parse_transformation(
+        self, payload: ParseTransformationInput, context: CallContext
+    ) -> ParseTransformationOutput:
+        del payload
+        result, _bundle = await self._invoke(
+            context,
+            ["parse", *self._project_args(context)],
+            operation="parse_transformation",
+            effect=EffectSemantics.SIDE_EFFECT_FREE,
+            selected=(),
+        )
+        if result.exit_code != 0:
+            return ParseTransformationOutput(
+                ok=False,
+                errors=(
+                    TransformationIssue(
+                        message=_safe_message(result),
+                        error_class=self._classify_result(result),
+                    ),
+                ),
+            )
+        return ParseTransformationOutput(ok=True)
+
+    async def validate_interview_quality(
+        self, payload: ValidateInterviewQualityInput, context: CallContext
+    ) -> ValidationReport:
+        import duckdb
+
+        from aide.modelling.constants import REQUIRED_DEMO_MODELS
+        from aide.quality.interview import evaluate_interview_quality
+
+        self._ensure_workspace(context.workflow_id)
+        duck = duckdb_workspace_path(self.settings.work_root, context.workflow_id)
+        models = payload.required_models or REQUIRED_DEMO_MODELS
+        conn = duckdb.connect(str(duck), read_only=True)
+        try:
+            return evaluate_interview_quality(conn.execute, required_models=models)
+        finally:
+            conn.close()
+
+    def ensure_workflow_sources(self, payload: object, context: CallContext) -> None:
+        import duckdb
+
+        from aide.capabilities.io import LoadManifestSourcesInput
+        from aide.connectors.snowflake.manifest import load_csvs_into_dev, verify_pinned_manifest
+
+        assert isinstance(payload, LoadManifestSourcesInput)
+        duck = duckdb_workspace_path(self.settings.work_root, context.workflow_id)
+        duck.parent.mkdir(parents=True, exist_ok=True)
+        conn = duckdb.connect(str(duck))
+        try:
+            verify_pinned_manifest(payload.manifest_sha256)
+            load_csvs_into_dev(
+                conn,
+                workflow_id=context.workflow_id,
+                version=payload.fixture_version,
+                selected=payload.selected_addresses,
+                flattened=False,
+            )
+        finally:
+            conn.close()
 
     async def debug(self, context: CallContext) -> IsolatedResult:
         result, _bundle = await self._invoke(

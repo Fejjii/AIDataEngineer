@@ -130,7 +130,7 @@ layers = [
     "aide.api | aide.cli",
     "aide.app",
     "aide.orchestration",
-    "aide.modelling",
+    "aide.generation | aide.modelling",
     "aide.tools | aide.persistence | aide.approvals | aide.quality | aide.discovery | aide.profiling",
     "aide.policy | aide.reasoning",
     "aide.capabilities | aide.connectors.base | aide.secrets | aide.auth | aide.llm",
@@ -238,4 +238,27 @@ forbidden_modules = [
     "aide.reasoning",
     "aide.api",
     "aide.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "Vendor execution stays out of application and orchestration"
+type = "forbidden"
+source_modules = [
+    "aide.app.supervisor",
+    "aide.app.groups",
+    "aide.app.slice",
+    "aide.app.gateway",
+    "aide.orchestration",
+    "aide.generation",
+    "aide.repair",
+    "aide.verification",
+    "aide.modelling",
+    "aide.reasoning",
+    "aide.quality",
+]
+forbidden_modules = [
+    "aide.connectors.snowflake.real",
+    "aide.connectors.snowflake.fake",
+    "aide.connectors.dbt.real",
+    "aide.connectors.dbt.fake",
 ]

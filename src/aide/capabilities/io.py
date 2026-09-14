@@ -8,6 +8,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from aide.domain.artifacts import ArtifactProvenance
+from aide.domain.failures import FailureClass
 from aide.domain.sql import AssetKind, AssetRef, SqlClassification, SqlText
 from aide.domain.states import WorkflowState
 
@@ -828,3 +830,210 @@ class ProposeModelDesignInput(FrozenModel):
     profile_evidence: tuple[AssetProfileEvidence, ...]
     relationship_evidence: tuple[RelationshipCandidate, ...]
     duplicate_evidence: tuple[DuplicateEvidenceLite, ...] = ()
+
+
+class TransformationFile(FrozenModel):
+    path: str = Field(min_length=1)
+    content: str
+    kind: Literal["MODEL_SQL", "SCHEMA_YML", "SOURCE_YML", "MACRO", "SNAPSHOT", "DOC_MD"] = (
+        "MODEL_SQL"
+    )
+
+
+class TransformationProjectRef(FrozenModel):
+    project_id: str = Field(min_length=1)
+    root: str | None = None
+    platform: Literal["dbt"] = "dbt"
+
+
+class ConnectorArtifactRef(FrozenModel):
+    artifact_id: UUID
+    sha256: str = Field(min_length=64, max_length=64)
+    type: str = Field(min_length=1)
+    version: int = Field(default=1, ge=1)
+    schema_version: int = Field(default=1, ge=1)
+    provenance: ArtifactProvenance | None = None
+
+
+class WrittenFile(FrozenModel):
+    path: str
+    sha256: str = Field(min_length=64, max_length=64)
+
+
+class CreateTransformationInput(FrozenModel):
+    artifact_set: tuple[ConnectorArtifactRef, ...] = ()
+    files: tuple[TransformationFile, ...]
+    project_ref: TransformationProjectRef
+    mode: Literal["ADD", "REPLACE"] = "ADD"
+
+
+class CreateTransformationOutput(FrozenModel):
+    written: tuple[WrittenFile, ...]
+    project_state_id: UUID
+
+
+class ParseTransformationInput(FrozenModel):
+    project_state_id: UUID
+    target: Literal["DEV"] = "DEV"
+
+
+class CompileTransformationInput(FrozenModel):
+    project_state_id: UUID
+    select: tuple[str, ...] | None = None
+    target: Literal["DEV"] = "DEV"
+
+
+class CompiledModel(FrozenModel):
+    model: str
+    compiled_sql_ref: ConnectorArtifactRef | None = None
+    compiled_sql: str | None = None
+
+
+class TransformationIssue(FrozenModel):
+    model: str | None = None
+    message: str
+    error_class: FailureClass
+
+
+class ParseTransformationOutput(FrozenModel):
+    ok: bool
+    errors: tuple[TransformationIssue, ...] = ()
+
+
+class CompileTransformationOutput(FrozenModel):
+    ok: bool
+    manifest_ref: ConnectorArtifactRef | None = None
+    compiled: tuple[CompiledModel, ...] = ()
+    errors: tuple[TransformationIssue, ...] = ()
+
+
+class ExecuteTransformationInput(FrozenModel):
+    project_state_id: UUID
+    select: tuple[str, ...] = ()
+    full_refresh: bool = False
+    target: Literal["DEV"] = "DEV"
+
+
+class NodeRunResult(FrozenModel):
+    model: str
+    status: Literal["success", "error", "skipped"]
+    execution_time_s: float = 0.0
+    rows_affected: int | None = None
+    message: str | None = None
+    error_class: FailureClass | None = None
+
+
+class ExecuteTransformationOutput(FrozenModel):
+    ok: bool
+    results: tuple[NodeRunResult, ...]
+    run_results_ref: ConnectorArtifactRef | None = None
+
+
+class TestNodeResult(FrozenModel):
+    test_name: str
+    model: str | None = None
+    column: str | None = None
+    status: Literal["pass", "fail", "warn", "error"]
+    failures: int | None = None
+
+
+class RunPipelineInput(FrozenModel):
+    project_state_id: UUID
+    select: tuple[str, ...] | None = None
+    full_refresh: bool = False
+    target: Literal["DEV"] = "DEV"
+
+
+class RunPipelineOutput(FrozenModel):
+    ok: bool
+    results: tuple[NodeRunResult, ...]
+    tests: tuple[TestNodeResult, ...] = ()
+    run_results_ref: ConnectorArtifactRef | None = None
+
+
+class RunTestsInput(FrozenModel):
+    project_state_id: UUID
+    select: tuple[str, ...] | None = None
+    store_failures: bool = False
+
+
+class RunTestsOutput(FrozenModel):
+    ok: bool
+    tests: tuple[TestNodeResult, ...]
+    run_results_ref: ConnectorArtifactRef | None = None
+
+
+class GetLineageInput(FrozenModel):
+    manifest_ref: ConnectorArtifactRef | None = None
+    project_state_id: UUID | None = None
+    column_level: bool = False
+
+
+class LineageNode(FrozenModel):
+    id: str
+    kind: Literal["source", "model", "seed", "snapshot", "test"]
+    name: str
+
+
+class LineageEdge(FrozenModel):
+    from_id: str
+    to_id: str
+    columns: tuple[tuple[str, str], ...] | None = None
+
+
+class GetLineageOutput(FrozenModel):
+    nodes: tuple[LineageNode, ...]
+    edges: tuple[LineageEdge, ...]
+    lineage_ref: ConnectorArtifactRef | None = None
+
+
+class LoadedSourceTable(FrozenModel):
+    address: tuple[str, ...]
+    schema_name: str
+    row_count: int
+    schema_sha256: str = Field(min_length=64, max_length=64)
+
+
+class LoadManifestSourcesInput(FrozenModel):
+    fixture_version: Literal["v1", "v2"] = "v1"
+    manifest_sha256: str = Field(min_length=64, max_length=64)
+    selected_addresses: tuple[tuple[str, str, str], ...]
+
+
+class LoadManifestSourcesOutput(FrozenModel):
+    fixture_digest: str = Field(min_length=64, max_length=64)
+    target_database: str
+    tables: tuple[LoadedSourceTable, ...]
+    reconcile_ok: bool
+
+
+class GenerateTransformationInput(FrozenModel):
+    workflow_id: UUID
+    model_design: ModelDesign
+    fixture_version: Literal["v1", "v2"] = "v1"
+
+
+class GenerateTransformationOutput(FrozenModel):
+    files: tuple[TransformationFile, ...]
+    model_names: tuple[str, ...]
+    content_sha256: str = Field(min_length=64, max_length=64)
+
+
+class ProfileEstateInput(FrozenModel):
+    assets: tuple[AssetRef, ...]
+    fixture_version: Literal["v1", "v2"] = "v1"
+    budget: Budget | None = None
+
+
+class ProfileEstateOutput(FrozenModel):
+    fixture_version: str
+    duration_seconds: float
+    profile_count: int
+    relationship_count: int
+    relationships_id: UUID
+    run_payload: dict[str, Any]
+
+
+class ValidateInterviewQualityInput(FrozenModel):
+    project_state_id: UUID
+    required_models: tuple[str, ...]

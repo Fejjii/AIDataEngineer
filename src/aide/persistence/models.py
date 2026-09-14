@@ -737,3 +737,49 @@ class WorkflowTwinSnapshotModel(Base):
         nullable=False,
     )
     pinned_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+
+
+class GatewayDispatchIntentModel(Base):
+    __tablename__ = "gateway_dispatch_intents"
+    __table_args__ = (
+        UniqueConstraint("attempt_id", "action", name="uq_gateway_dispatch_attempt_action"),
+    )
+
+    intent_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    workflow_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("workflows.workflow_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    phase_run_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("phase_runs.phase_run_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    task_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("materialized_tasks.task_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    attempt_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("task_attempts.attempt_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    capability_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    connector_id: Mapped[str | None] = mapped_column(String(128))
+    connector_version: Mapped[str | None] = mapped_column(String(64))
+    operation_idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    resolved_input_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy_decision: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    risk_decision: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    approval_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    evidence_ref_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("evidence_references.evidence_ref_id", ondelete="RESTRICT"),
+    )
+    result_digest: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)

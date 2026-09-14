@@ -15,5 +15,7 @@ models:
   vantara_project:
     staging:
       +materialized: view
+    intermediate:
+      +materialized: table
     marts:
       +materialized: table

@@ -23,17 +23,23 @@ from aide.capabilities.io import (
     DiscoverAssetsOutput,
     DropDatasetInput,
     DropDatasetOutput,
+    EvaluateExecutionPolicyInput,
+    EvaluateExecutionPolicyOutput,
     ExecuteQueryInput,
     ExecuteQueryOutput,
     GetCostMetricsOutput,
     GetExecutionMetricsOutput,
     InferRelationshipsInput,
     InferRelationshipsOutput,
+    LoadManifestSourcesInput,
+    LoadManifestSourcesOutput,
     MetricsQueryInput,
     PlanSummary,
     ProfileColumn,
     ProfileDatasetInput,
     ProfileDatasetOutput,
+    ProfileEstateInput,
+    ProfileEstateOutput,
     QueryError,
     QueryMetric,
     RelationshipCandidate,
@@ -141,6 +147,9 @@ class FakeSnowflakeConnector:
         self._history_lag = False
         self._renames: dict[tuple[str, str, str], tuple[str, str]] = {}
         self._conn = duckdb.connect(database=":memory:")
+        self._catalogue: list[tuple[str, str, str, tuple[tuple[str, str, bool], ...]]] = [
+            item for item in CATALOGUE
+        ]
         self._install_catalogue()
 
     def force_health(self, status: str | None) -> None:
@@ -216,7 +225,7 @@ class FakeSnowflakeConnector:
         self._prepare("discover_assets", context, read=True)
         require_scope_allowed(self.spec, payload.scope)
         assets: list[CatalogAsset] = []
-        for database, schema, table, _columns in sorted(CATALOGUE):
+        for database, schema, table, _columns in self._known_tables():
             if database not in payload.scope.databases:
                 continue
             if payload.scope.schemas is not None and schema not in payload.scope.schemas:
@@ -578,6 +587,58 @@ class FakeSnowflakeConnector:
         )
         return self._finish("get_cost_metrics", context, output)
 
+    async def evaluate_execution_policy(
+        self, payload: EvaluateExecutionPolicyInput, context: CallContext
+    ) -> EvaluateExecutionPolicyOutput:
+        self._prepare("evaluate_execution_policy", context, read=True)
+        del payload
+        output = EvaluateExecutionPolicyOutput(decision="ALLOW", routing="EXECUTE", reasons=())
+        return self._finish("evaluate_execution_policy", context, output)
+
+    async def profile_estate(
+        self, payload: ProfileEstateInput, context: CallContext
+    ) -> ProfileEstateOutput:
+        self._prepare("profile_estate", context, read=True)
+        from aide.profiling.engine import profile_selected_assets
+
+        run = await profile_selected_assets(
+            self, payload.assets, fixture_version=payload.fixture_version
+        )
+        output = ProfileEstateOutput(
+            fixture_version=run.fixture_version,
+            duration_seconds=run.duration_seconds,
+            profile_count=len(run.profiles),
+            relationship_count=len(run.relationships),
+            relationships_id=run.relationships_id,
+            run_payload=run.model_dump(mode="json"),
+        )
+        return self._finish("profile_estate", context, output)
+
+    async def load_manifest_sources(
+        self, payload: LoadManifestSourcesInput, context: CallContext
+    ) -> LoadManifestSourcesOutput:
+        self._prepare("load_manifest_sources", context, read=False)
+        from aide.connectors.snowflake.manifest import (
+            load_csvs_into_dev,
+            verify_pinned_manifest,
+        )
+
+        digest = verify_pinned_manifest(payload.manifest_sha256)
+        tables = load_csvs_into_dev(
+            self._conn,
+            workflow_id=context.workflow_id,
+            version=payload.fixture_version,
+            selected=payload.selected_addresses,
+            flattened=True,
+        )
+        output = LoadManifestSourcesOutput(
+            fixture_digest=digest,
+            target_database="AIDE_DEV",
+            tables=tables,
+            reconcile_ok=True,
+        )
+        return self._finish("load_manifest_sources", context, output)
+
     async def create_dataset(
         self, payload: CreateDatasetInput, context: CallContext
     ) -> CreateDatasetOutput:
@@ -764,7 +825,7 @@ class FakeSnowflakeConnector:
         if len(asset.address) != 3:
             raise FakeSnowflakeError(FailureClass.MISSING_OBJECT, "asset address incomplete")
         wanted = tuple(normalize_identifier(part) for part in asset.address)
-        for item in CATALOGUE:
+        for item in self._known_tables():
             if tuple(normalize_identifier(part) for part in item[0:3]) == wanted:
                 return item
         ident = _table_ident(*wanted)
@@ -800,6 +861,27 @@ class FakeSnowflakeConnector:
         ident = _table_ident(database, schema, table)
         row = self._duck(f'SELECT COUNT(*) FROM "{ident}"').fetchone()
         return int(row[0]) if row is not None else 0
+
+    def _known_tables(
+        self,
+    ) -> list[tuple[str, str, str, tuple[tuple[str, str, bool], ...]]]:
+        found: dict[tuple[str, str, str], tuple[tuple[str, str, bool], ...]] = {}
+        for database, schema, table, columns in self._catalogue:
+            found[(database, schema, table)] = columns
+        rows = self._duck(
+            "SELECT table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE'"
+        ).fetchall()
+        for (name,) in rows:
+            if not isinstance(name, str) or name.count(".") != 2:
+                continue
+            database, schema, table = name.split(".")
+            key = (database, schema, table)
+            if key in found:
+                continue
+            ident = _table_ident(*key)
+            description = self._duck(f'SELECT * FROM "{ident}" LIMIT 0').description or []
+            found[key] = tuple((str(col[0]), "VARCHAR", True) for col in description)
+        return [(key[0], key[1], key[2], cols) for key, cols in sorted(found.items())]
 
     def _table_exists(self, ident: str) -> bool:
         row = self._duck(

@@ -24,9 +24,10 @@ _READ_CAPABILITIES = (
     "evaluate_execution_policy",
     "get_execution_metrics",
     "get_cost_metrics",
+    "profile_estate",
 )
 
-_WRITE_CAPABILITIES = ("create_dataset", "drop_dataset")
+_WRITE_CAPABILITIES = ("create_dataset", "drop_dataset", "load_manifest_sources")
 
 
 def _impl(capability_id: str) -> CapabilityImplementation:
