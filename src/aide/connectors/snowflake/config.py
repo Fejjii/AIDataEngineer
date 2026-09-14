@@ -107,6 +107,11 @@ def snowflake_credentials_available() -> bool:
     return not missing_secret_names(settings_for_identity(IdentityClass.READ_ONLY))
 
 
+def snowflake_dev_credentials_available() -> bool:
+    """True when DEVELOPMENT identity env vars are present. Never inspects secret values."""
+    return not missing_secret_names(settings_for_identity(IdentityClass.DEVELOPMENT))
+
+
 class EnvConnectorSecretResolver:
     """Resolve CONNECTOR-scoped refs from process environment. No enumeration."""
 
