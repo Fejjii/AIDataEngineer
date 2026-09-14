@@ -28,6 +28,7 @@ docs/agent/runs/
 
 | Task ID | Session ID | Status | Branch | Report |
 |---------|------------|--------|--------|--------|
+| DE005B | DE005B-SESSION-20260914T075329Z | REVIEW_REQUIRED | `feat/DE005_snowflake_connector` | [report](DE005B/DE005B-SESSION-20260914T075329Z.md) |
 | DE005B | DE005B-AUTH-FIX-SESSION-20260913T171100Z-bc01a096 | PARTIAL | `feat/DE005_snowflake_connector` | [report](DE005B/DE005B-AUTH-FIX-SESSION-20260913T171100Z-bc01a096.md) |
 | DE005A | DE005A-SYNC-SESSION-20260912T163700Z-bc01a096 | SUCCESS | `feat/DE005_snowflake_connector` | [report](DE005A/DE005A-SYNC-SESSION-20260912T163700Z-bc01a096.md) |
 | DE005A | DE005A-R1-SESSION-20260912T154100Z-bc01a096 | REVIEW_REQUIRED | `feat/DE005_snowflake_connector` | [report](DE005A/DE005A-R1-SESSION-20260912T154100Z-bc01a096.md) |
