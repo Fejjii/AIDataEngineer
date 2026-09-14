@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
+from uuid import UUID
 
 from aide.domain.approvals import (
     ApprovalRecord,
@@ -31,6 +33,19 @@ def match_operation_approval(
     if not approval_is_effective(record, now):
         return False
     return subject.covers_operation(binding)
+
+
+def matching_operation_approval_id(
+    approvals: Sequence[ApprovalRecord],
+    binding: OperationBinding,
+    *,
+    now: datetime,
+) -> UUID | None:
+    """First effective operation approval that covers ``binding``, else None."""
+    for record in approvals:
+        if match_operation_approval(record, binding, now=now):
+            return record.approval_id
+    return None
 
 
 def match_design_approval(

@@ -155,7 +155,7 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 
 ## MVP002 — Supervisor and Tool Gateway flow
 - Priority: P0
-- Status: TODO
+- Status: IN_PROGRESS
 - Dependencies: MVP001 merged
 - Goal: Compose the deterministic Supervisor, sole Governed Tool Gateway, bounded dbt
   generation, manifest-mediated DEV source preparation, and pre-drift build/validation.

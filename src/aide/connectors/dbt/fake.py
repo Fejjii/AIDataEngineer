@@ -12,6 +12,10 @@ from uuid import UUID, uuid4
 import duckdb
 import yaml
 
+from aide.capabilities.io import (
+    ValidateInterviewQualityInput,
+    ValidationReport,
+)
 from aide.connectors.base.context import CallContext, RecoveryContext
 from aide.connectors.base.health import ConnectorHealthSnapshot
 from aide.connectors.base.reconcile import EffectFound, InProgress, NoEffect, Unknown
@@ -38,6 +42,8 @@ from aide.connectors.dbt.contracts import (
     GetLineageOutput,
     LineageEdge,
     LineageNode,
+    ParseTransformationInput,
+    ParseTransformationOutput,
     RunPipelineInput,
     RunPipelineOutput,
     RunTestsInput,
@@ -53,6 +59,7 @@ from aide.connectors.dbt.journal import (
     find_latest_journal_for_operation,
     utc_now_iso,
 )
+from aide.connectors.dbt.namespace import workflow_short_id
 from aide.connectors.dbt.reconcile import reconcile_create_transformation, reconcile_invocation
 from aide.connectors.dbt.specs import FAKE_DBT_DEV
 from aide.connectors.dbt.workspace import (
@@ -81,11 +88,18 @@ SNOWFLAKE_TARGET_IF_RE = re.compile(
     r"\{%\s*endif\s*%\}",
     re.I | re.S,
 )
+SNOWFLAKE_IF_ENDIF_RE = re.compile(
+    r"\{%\s*if\s+target\.type\s*==\s*['\"]snowflake['\"]\s*%\}"
+    r"(.*?)"
+    r"\{%\s*endif\s*%\}",
+    re.I | re.S,
+)
 
-SOURCE_RELATIONS = {
+DEFAULT_SOURCE_RELATIONS = {
     ("vantara_raw", "customers"): '"VANTARA_RAW"."BILLING"."CUSTOMERS"',
     ("vantara_raw", "invoices"): '"VANTARA_RAW"."BILLING"."INVOICES"',
 }
+SOURCE_RELATIONS = DEFAULT_SOURCE_RELATIONS
 
 HEALTH_TTL = timedelta(minutes=5)
 
@@ -112,6 +126,7 @@ class FakeDbtConnector:
         self._states: dict[UUID, Path] = {}
         self._written_hashes: dict[str, dict[str, str]] = {}
         self._outputs: dict[str, dict[str, Any]] = {}
+        self._source_relations: dict[tuple[str, str], str] = dict(DEFAULT_SOURCE_RELATIONS)
         self._install_fixtures()
 
     def fail_next(self, capability: str, failure: FailureClass) -> None:
@@ -354,6 +369,96 @@ class FakeDbtConnector:
             ),
         )
 
+    async def parse_transformation(
+        self, payload: ParseTransformationInput, context: CallContext
+    ) -> ParseTransformationOutput:
+        self._maybe_fail("parse_transformation")
+        project = self._project_for(payload.project_state_id, context.workflow_id)
+        sources_path = project / "models" / "sources.yml"
+        if sources_path.is_file():
+            rendered = _render_target_jinja(sources_path.read_text(encoding="utf-8"))
+            if "{{" in rendered or "{%" in rendered:
+                return ParseTransformationOutput(
+                    ok=False,
+                    errors=(
+                        TransformationIssue(
+                            message="unresolved jinja in sources.yml",
+                            error_class=FailureClass.DBT_COMPILE,
+                        ),
+                    ),
+                )
+            parsed = yaml.safe_load(rendered) or {}
+            if isinstance(parsed, dict):
+                self._ingest_sources(parsed)
+        for path in sorted((project / "models").rglob("*.sql")):
+            sql = _render_target_jinja(path.read_text(encoding="utf-8"))
+            sql = CONFIG_RE.sub("", sql)
+            sql = SOURCE_RE.sub("src", sql)
+            sql = REF_RE.sub("ref", sql)
+            if "{{" in sql or "{%" in sql:
+                return ParseTransformationOutput(
+                    ok=False,
+                    errors=(
+                        TransformationIssue(
+                            model=path.stem,
+                            message=f"unresolved jinja in {path.name}",
+                            error_class=FailureClass.DBT_COMPILE,
+                        ),
+                    ),
+                )
+        self._write_journal(
+            context,
+            operation="parse_transformation",
+            status=DispatchStatus.COMPLETED,
+            selected=(),
+            hashes={},
+            effect=EffectSemantics.SIDE_EFFECT_FREE,
+            applied=True,
+        )
+        return ParseTransformationOutput(ok=True)
+
+    async def validate_interview_quality(
+        self,
+        payload: ValidateInterviewQualityInput,
+        context: CallContext,
+    ) -> ValidationReport:
+        from aide.modelling.constants import REQUIRED_DEMO_MODELS
+        from aide.quality.interview import evaluate_interview_quality
+
+        self._maybe_fail("validate_interview_quality")
+        models = payload.required_models or REQUIRED_DEMO_MODELS
+        report = evaluate_interview_quality(self._conn.execute, required_models=models)
+        assert isinstance(report, ValidationReport)
+        self._write_journal(
+            context,
+            operation="validate_interview_quality",
+            status=DispatchStatus.COMPLETED,
+            selected=models,
+            hashes={},
+            effect=EffectSemantics.SIDE_EFFECT_FREE,
+            applied=True,
+        )
+        return report
+
+    def ensure_workflow_sources(self, payload: object, context: CallContext) -> None:
+        from aide.capabilities.io import LoadManifestSourcesInput
+        from aide.connectors.snowflake.manifest import load_csvs_into_dev, verify_pinned_manifest
+
+        assert isinstance(payload, LoadManifestSourcesInput)
+        verify_pinned_manifest(payload.manifest_sha256)
+        load_csvs_into_dev(
+            self._conn,
+            workflow_id=context.workflow_id,
+            version=payload.fixture_version,
+            selected=payload.selected_addresses,
+            flattened=False,
+        )
+        short = workflow_short_id(context.workflow_id)
+        for _database, schema, table in payload.selected_addresses:
+            self._source_relations[(schema.lower(), table.lower())] = (
+                f'"{short}_{schema}"."{table}"'
+            )
+
     async def reconcile(
         self, recovery: RecoveryContext
     ) -> EffectFound | NoEffect | InProgress | Unknown:
@@ -510,7 +615,7 @@ class FakeDbtConnector:
         compiled: dict[str, str] = {}
         nodes: dict[str, Any] = {}
         sources: dict[str, Any] = {}
-        for source_name, table in SOURCE_RELATIONS:
+        for source_name, table in self._source_relations:
             uid = f"source.vantara_project.{source_name}.{table}"
             sources[uid] = {"name": table, "resource_type": "source", "source_name": source_name}
         for path in models:
@@ -542,15 +647,31 @@ class FakeDbtConnector:
         }
         return manifest, compiled
 
+    def _ingest_sources(self, payload: dict[str, Any]) -> None:
+        for source in payload.get("sources") or []:
+            if not isinstance(source, dict):
+                continue
+            name = str(source.get("name") or "")
+            schema = str(source.get("schema") or "")
+            if not name or not schema:
+                continue
+            for table in source.get("tables") or []:
+                if not isinstance(table, dict):
+                    continue
+                table_name = str(table.get("name") or "")
+                ident = str(table.get("identifier") or table_name)
+                if table_name:
+                    self._source_relations[(name, table_name)] = f'"{schema}"."{ident}"'
+
     def _resolve_sql(self, raw: str) -> str:
-        sql = SNOWFLAKE_TARGET_IF_RE.sub(lambda match: match.group(2), raw)
+        sql = _render_target_jinja(raw)
         sql = CONFIG_RE.sub("", sql)
 
         def source_sub(match: re.Match[str]) -> str:
             key = (match.group(1), match.group(2))
-            if key not in SOURCE_RELATIONS:
+            if key not in self._source_relations:
                 raise DbtMappedError(FailureClass.DBT_COMPILE, f"unknown source {key}")
-            return SOURCE_RELATIONS[key]
+            return self._source_relations[key]
 
         def ref_sub(match: re.Match[str]) -> str:
             return f'"AIDE_DEV"."{match.group(1)}"'
@@ -740,3 +861,16 @@ class FakeDbtConnector:
                 recorded_at=utc_now_iso(),
             ),
         )
+
+
+def _render_target_jinja(raw: str, *, target_type: str = "duckdb") -> str:
+    snowflake = target_type.lower() == "snowflake"
+
+    def if_else(match: re.Match[str]) -> str:
+        return match.group(1) if snowflake else match.group(2)
+
+    def if_endif(match: re.Match[str]) -> str:
+        return match.group(1) if snowflake else ""
+
+    rendered = SNOWFLAKE_TARGET_IF_RE.sub(if_else, raw)
+    return SNOWFLAKE_IF_ENDIF_RE.sub(if_endif, rendered)

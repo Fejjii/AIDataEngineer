@@ -68,11 +68,13 @@ def test_fake_and_real_handler_parity() -> None:
     real = RealDbtConnector(DBT_DEV, duckdb_dbt_settings(Path("/tmp")))
     for name in (
         "create_transformation",
+        "parse_transformation",
         "compile_transformation",
         "execute_transformation",
         "run_pipeline",
         "run_tests",
         "get_lineage",
+        "validate_interview_quality",
         "reconcile",
         "health",
         "close",

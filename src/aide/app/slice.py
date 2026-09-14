@@ -43,9 +43,9 @@ from aide.capabilities.io import (
     WorkflowSummary,
 )
 from aide.capabilities.registry import CapabilityRegistry
+from aide.connectors.base.handles import WarehouseSurface
 from aide.connectors.base.health import ConnectorHealthSnapshot
 from aide.connectors.base.registry import ConnectorRegistry
-from aide.connectors.snowflake.fake import FakeSnowflakeConnector
 from aide.discovery.catalog import MetadataCatalog
 from aide.domain.artifacts import ArtifactProvenance, ExecutionMode
 from aide.domain.enums import TargetEnv
@@ -148,8 +148,8 @@ class OfflineSliceService:
         connectors: ConnectorRegistry,
         tools: ToolRegistry,
         reasoner: ReasoningCapabilities,
-        snowflake_ro: FakeSnowflakeConnector,
-        snowflake_dev: FakeSnowflakeConnector,
+        snowflake_ro: WarehouseSurface,
+        snowflake_dev: WarehouseSurface,
         events: EventBus,
     ) -> None:
         self._sessions = session_factory

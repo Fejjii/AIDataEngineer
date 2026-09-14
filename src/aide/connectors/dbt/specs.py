@@ -14,20 +14,24 @@ from aide.domain.permissions import PermissionLevel
 
 DBT_CAPABILITIES: tuple[str, ...] = (
     "create_transformation",
+    "parse_transformation",
     "compile_transformation",
     "execute_transformation",
     "run_pipeline",
     "run_tests",
     "get_lineage",
+    "validate_interview_quality",
 )
 
 DBT_REQUIRED_PERMISSIONS: dict[str, PermissionLevel] = {
     "create_transformation": PermissionLevel.DEVELOPMENT_WRITE,
+    "parse_transformation": PermissionLevel.DEVELOPMENT_EXECUTE,
     "compile_transformation": PermissionLevel.DEVELOPMENT_EXECUTE,
     "execute_transformation": PermissionLevel.DEVELOPMENT_EXECUTE,
     "run_pipeline": PermissionLevel.DEVELOPMENT_EXECUTE,
     "run_tests": PermissionLevel.DEVELOPMENT_EXECUTE,
     "get_lineage": PermissionLevel.READ,
+    "validate_interview_quality": PermissionLevel.DEVELOPMENT_EXECUTE,
 }
 
 

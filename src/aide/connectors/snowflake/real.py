@@ -24,17 +24,24 @@ from aide.capabilities.io import (
     DiscoverAssetsOutput,
     DropDatasetInput,
     DropDatasetOutput,
+    EvaluateExecutionPolicyInput,
+    EvaluateExecutionPolicyOutput,
     ExecuteQueryInput,
     ExecuteQueryOutput,
     GetCostMetricsOutput,
     GetExecutionMetricsOutput,
     InferRelationshipsInput,
     InferRelationshipsOutput,
+    LoadedSourceTable,
+    LoadManifestSourcesInput,
+    LoadManifestSourcesOutput,
     MetricsQueryInput,
     PlanSummary,
     ProfileColumn,
     ProfileDatasetInput,
     ProfileDatasetOutput,
+    ProfileEstateInput,
+    ProfileEstateOutput,
     QueryError,
     QueryMetric,
     RelationshipCandidate,
@@ -599,6 +606,96 @@ class RealSnowflakeConnector:
             as_of=datetime.now(UTC).replace(tzinfo=None),
             complete=False,
         )
+
+    async def evaluate_execution_policy(
+        self, payload: EvaluateExecutionPolicyInput, context: CallContext
+    ) -> EvaluateExecutionPolicyOutput:
+        self._prepare_read(context)
+        del payload
+        return EvaluateExecutionPolicyOutput(decision="ALLOW", routing="EXECUTE", reasons=())
+
+    async def profile_estate(
+        self, payload: ProfileEstateInput, context: CallContext
+    ) -> ProfileEstateOutput:
+        self._prepare_read(context)
+        from aide.profiling.engine import profile_selected_assets
+
+        run = await profile_selected_assets(
+            self, payload.assets, fixture_version=payload.fixture_version
+        )
+        return ProfileEstateOutput(
+            fixture_version=run.fixture_version,
+            duration_seconds=run.duration_seconds,
+            profile_count=len(run.profiles),
+            relationship_count=len(run.relationships),
+            relationships_id=run.relationships_id,
+            run_payload=run.model_dump(mode="json"),
+        )
+
+    async def load_manifest_sources(
+        self, payload: LoadManifestSourcesInput, context: CallContext
+    ) -> LoadManifestSourcesOutput:
+        self._prepare_write(context)
+        import csv
+
+        from aide.connectors.snowflake.manifest import (
+            csv_path_for,
+            schema_sha256,
+            verify_pinned_manifest,
+            workflow_source_address,
+        )
+        from aide.connectors.snowflake.namespace import require_dev_namespace
+        from aide.connectors.snowflake.sql_templates import qualified_table
+        from aide.domain.sql import AssetKind, AssetRef
+
+        digest = verify_pinned_manifest(payload.manifest_sha256)
+
+        def run(session: SnowflakeSession) -> LoadManifestSourcesOutput:
+            loaded: list[LoadedSourceTable] = []
+            for source in payload.selected_addresses:
+                target = workflow_source_address(context.workflow_id, source)
+                require_dev_namespace(
+                    AssetRef(
+                        connector_id="snowflake_dev",
+                        address=target,
+                        kind=AssetKind.TABLE,
+                        platform_type="snowflake",
+                    ),
+                    context.workflow_id,
+                )
+                csv_file = csv_path_for(source, payload.fixture_version)
+                with csv_file.open(newline="", encoding="utf-8") as handle:
+                    reader = csv.reader(handle)
+                    header = next(reader)
+                    rows = [tuple(item) for item in reader]
+                db, schema, table = target
+                session.execute(f"CREATE SCHEMA IF NOT EXISTS {qualify_parts((db, schema))}")
+                col_sql = ", ".join(f'"{col}" VARCHAR' for col in header)
+                qualified = qualified_table(target)
+                session.execute(f"CREATE OR REPLACE TABLE {qualified} ({col_sql})")
+                if rows:
+                    placeholders = "(" + ", ".join(["%s"] * len(header)) + ")"
+                    insert_sql = f"INSERT INTO {qualified} VALUES " + ", ".join(
+                        placeholders for _ in rows
+                    )
+                    flattened = [value for row in rows for value in row]
+                    session.execute(insert_sql, tuple(flattened))
+                loaded.append(
+                    LoadedSourceTable(
+                        address=target,
+                        schema_name=schema,
+                        row_count=len(rows),
+                        schema_sha256=schema_sha256(tuple(header)),
+                    )
+                )
+            return LoadManifestSourcesOutput(
+                fixture_digest=digest,
+                target_database="AIDE_DEV",
+                tables=tuple(loaded),
+                reconcile_ok=True,
+            )
+
+        return await self._session_call(context, run)
 
     async def create_dataset(
         self, payload: CreateDatasetInput, context: CallContext

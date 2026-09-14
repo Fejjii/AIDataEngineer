@@ -19,10 +19,12 @@ RO_HANDLERS = (
     "infer_relationships",
     "validate_query",
     "execute_query",
+    "evaluate_execution_policy",
     "get_execution_metrics",
     "get_cost_metrics",
+    "profile_estate",
 )
-DEV_HANDLERS = ("create_dataset", "drop_dataset")
+DEV_HANDLERS = ("create_dataset", "drop_dataset", "load_manifest_sources")
 
 
 def clear_snowflake_env(monkeypatch: pytest.MonkeyPatch) -> None:
