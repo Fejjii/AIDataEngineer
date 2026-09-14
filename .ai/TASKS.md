@@ -188,16 +188,17 @@ Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
 - **DE005A SYNC:** `feat/DE005_snowflake_connector` synchronized with `main` at
   `3813042f4e0b34889139c453dae70c9a507e853b` so DE004 synthetic fixtures and DE005A connector
   contracts coexist. Do not execute DE005B in Cloud.
-- **DE005B (pending, LOCAL):** live Snowflake validation. Not started. Do not use Snowflake
-  credentials on Cloud.
+- **DE005B (LOCAL live validation complete; pending Development Control):** tiny v2 loaded
+  into `VANTARA_RAW` via the DEV service identity (not the product DEV connector). Live RO/DEV
+  connector tests passed on a credentialed host. Do not paste Snowflake credentials into chat.
+  Temporary `AIDE_DEV_RW` `CREATE TABLE` on `VANTARA_RAW` should be revoked after bootstrap.
 
 ## DE 006 — Profiling and relationship inference
 - `DE006` · P0 · DONE (R1 accepted 2026-09-12) · Env CLOUD · Cloud yes · Branch `feat/DE006_profiling` · Deps DE 002C, DE 004
 - Model Grok 4.6 · Reasoning Medium · Risk Medium · Duration 4–6 h · Token L.
 - **DE006 R1 (Cloud, accepted):** deterministic offline Vantara profiling and generic
   relationship inference on PR 14. Production inference does not consume expected
-  Vantara pairs. PR 14 stays open and stacked on PR 13 until DE005B clears the
-  Snowflake live gate. Do not merge to `main`. Do not run DE005B in Cloud.
+  Vantara pairs. PR 14 stays open and stacked until upstream integration clears.
 - Completion evidence: `docs/agent/runs/DE006/DE006-SESSION-20260912T165821Z-bc01a0968e.md`
   and R1 `docs/agent/runs/DE006/DE006-R1-SESSION-20260912T183120Z-bc01a0968e.md`.
 

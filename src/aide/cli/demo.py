@@ -45,3 +45,37 @@ def build_fixtures_command(
             f"Built {result.profile} fixtures: {result.total_rows} rows in "
             f"{result.build_seconds:.2f}s"
         )
+
+
+@demo_app.command("load-snowflake")
+def load_snowflake_command(
+    profile: Profile = typer.Option(  # noqa: B008
+        ..., "--profile", help="Scale profile: tiny, demo, or full"
+    ),
+    json_output: bool = typer.Option(True, "--json/--no-json"),  # noqa: B008
+) -> None:
+    """Load v2 CSV fixtures into VANTARA_RAW using the DEV service identity.
+
+    Does not use the product DEV connector. Prints table names and row counts only.
+    """
+    from synthetic.vantara.export.snowflake_load import load_v2_csv
+
+    fixture_root = Path("synthetic/vantara/fixtures") / profile
+    try:
+        loaded = load_v2_csv(profile=profile, fixture_root=fixture_root)
+    except Exception as exc:
+        from aide.connectors.snowflake.errors import sanitize_error_message
+
+        typer.echo(sanitize_error_message(str(exc)), err=True)
+        raise typer.Exit(1) from None
+    payload = {
+        "database": "VANTARA_RAW",
+        "profile": profile,
+        "table_count": len(loaded),
+        "row_counts": loaded,
+        "total_rows": sum(loaded.values()),
+    }
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        typer.echo(f"Loaded {len(loaded)} tables, {sum(loaded.values())} rows")

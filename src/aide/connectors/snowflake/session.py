@@ -26,6 +26,41 @@ except ImportError:  # pragma: no cover - dependency is required; kept for typed
     DictCursor = None  # type: ignore[misc, assignment]
 
 
+# Official Python connector key-pair authenticator (snowflake-connector-python 3.18.1
+# KEY_PAIR_AUTHENTICATOR). Docs require this even though private_key also auto-selects it.
+KEY_PAIR_AUTHENTICATOR = "SNOWFLAKE_JWT"
+
+
+def connect_kwargs(
+    *,
+    account: str,
+    user: str,
+    private_key: bytes,
+    warehouse: str,
+    role: str,
+    database: str | None,
+    query_tag: str,
+    timeout_seconds: int,
+) -> dict[str, Any]:
+    """Keyword arguments for snowflake.connector.connect. Callers must not log values."""
+    return {
+        "account": account,
+        "user": user,
+        "private_key": private_key,
+        "authenticator": KEY_PAIR_AUTHENTICATOR,
+        "warehouse": warehouse,
+        "role": role,
+        "database": database,
+        "autocommit": True,
+        "client_session_keep_alive": False,
+        "session_parameters": {
+            "QUERY_TAG": query_tag,
+            "STATEMENT_TIMEOUT_IN_SECONDS": timeout_seconds,
+            "AUTOCOMMIT": True,
+        },
+    }
+
+
 def _pem_bytes(raw: str) -> bytes:
     text = raw.strip()
     if "\\n" in text and "BEGIN" in text:
@@ -71,19 +106,16 @@ class SnowflakeSession:
         try:
             key = private_key_der(private_key, passphrase)
             self._connection = snowflake.connector.connect(
-                account=account.get_secret_value(),
-                user=user.get_secret_value(),
-                private_key=key,
-                warehouse=warehouse.get_secret_value(),
-                role=settings.role,
-                database=settings.database,
-                autocommit=True,
-                client_session_keep_alive=False,
-                session_parameters={
-                    "QUERY_TAG": query_tag,
-                    "STATEMENT_TIMEOUT_IN_SECONDS": timeout_seconds,
-                    "AUTOCOMMIT": True,
-                },
+                **connect_kwargs(
+                    account=account.get_secret_value(),
+                    user=user.get_secret_value(),
+                    private_key=key,
+                    warehouse=warehouse.get_secret_value(),
+                    role=settings.role,
+                    database=settings.database,
+                    query_tag=query_tag,
+                    timeout_seconds=timeout_seconds,
+                )
             )
         except UnresolvedSecretError as exc:
             raise SnowflakeMappedError(
