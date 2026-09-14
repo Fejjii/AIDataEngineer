@@ -21,6 +21,7 @@ from aide.persistence.repositories import WorkflowRepository
 from aide.persistence.twin import TwinRepository
 from aide.twin.identity import (
     AssetCapture,
+    ContinuityProofKind,
     RelationshipCapture,
     RenameContinuity,
     TwinIdentityError,
@@ -35,10 +36,10 @@ AUTHORITY = SourceAuthorityRef(
 )
 
 
-def _evidence() -> EvidenceReference:
+def _evidence(evidence_type: str = "snowflake.metadata") -> EvidenceReference:
     return EvidenceReference(
         evidence_ref_id=uuid4(),
-        evidence_type="snowflake.metadata",
+        evidence_type=evidence_type,
         media_type="application/json",
         sha256="a" * 64,
         size_bytes=100,
@@ -72,14 +73,30 @@ async def test_asset_versions_rename_recreation_snapshot_pin_and_immutability(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     evidence = _evidence()
+    rename_evidence = _evidence("snowflake.rename")
     async with session_factory() as session, session.begin():
         repository = TwinRepository(session)
         workflow = await WorkflowRepository(session).add(state=WorkflowState.PLANNING)
         await repository.add_evidence_reference(evidence)
+        await repository.add_evidence_reference(rename_evidence)
         first = await repository.capture_asset(_capture(evidence))
         repeated = await repository.capture_asset(_capture(evidence))
         changed = await repository.capture_asset(_capture(evidence, columns=6))
         recreated = await repository.capture_asset(_capture(evidence, columns=6, incarnation=2))
+        with pytest.raises(TwinIdentityError, match="requires snowflake.rename"):
+            await repository.capture_asset(
+                _capture(
+                    evidence,
+                    locator=("VANTARA_RAW", "BILLING", "BILLING_INVOICES"),
+                    columns=6,
+                ),
+                rename_continuity=RenameContinuity(
+                    asset_id=changed.asset_id,
+                    evidence_ref_id=evidence.evidence_ref_id,
+                    source_authority=AUTHORITY,
+                    proof_kind=ContinuityProofKind.AUTHORITATIVE_RENAME,
+                ),
+            )
         renamed = await repository.capture_asset(
             _capture(
                 evidence,
@@ -88,8 +105,9 @@ async def test_asset_versions_rename_recreation_snapshot_pin_and_immutability(
             ),
             rename_continuity=RenameContinuity(
                 asset_id=changed.asset_id,
-                evidence_ref_id=evidence.evidence_ref_id,
+                evidence_ref_id=rename_evidence.evidence_ref_id,
                 source_authority=AUTHORITY,
+                proof_kind=ContinuityProofKind.AUTHORITATIVE_RENAME,
             ),
         )
         relationship = await repository.capture_relationship(

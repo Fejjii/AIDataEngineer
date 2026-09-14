@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -23,12 +24,18 @@ class TwinIdentityError(ValueError):
     """Raised when continuity is ambiguous or contradicts authoritative identity."""
 
 
+class ContinuityProofKind(str, Enum):
+    AUTHORITATIVE_RENAME = "AUTHORITATIVE_RENAME"
+    DECLARED_DBT_IDENTITY = "DECLARED_DBT_IDENTITY"
+
+
 class RenameContinuity(TwinModel):
     """Explicit authoritative proof that a renamed locator is the same object."""
 
     asset_id: UUID
     evidence_ref_id: UUID
     source_authority: SourceAuthorityRef
+    proof_kind: ContinuityProofKind
 
 
 class AssetCapture(TwinModel):
@@ -183,6 +190,7 @@ def _relationship_facts_equal(relationship: TwinRelationship, capture: Relations
 
 __all__ = [
     "AssetCapture",
+    "ContinuityProofKind",
     "RelationshipCapture",
     "RenameContinuity",
     "TwinIdentityError",

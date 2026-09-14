@@ -14,6 +14,7 @@ from aide.twin.context import (
 from aide.twin.errors import TwinFailureCode, TwinValidationError
 from aide.twin.identity import (
     AssetCapture,
+    ContinuityProofKind,
     RelationshipCapture,
     RenameContinuity,
     TwinIdentityError,
@@ -25,6 +26,7 @@ from aide.twin.snapshot import build_twin_snapshot, snapshot_manifest_payload
 __all__ = [
     "AssetCapture",
     "CanonicalEstateContext",
+    "ContinuityProofKind",
     "EstateAccessPolicy",
     "EstateContextLimits",
     "EstateContextRequest",

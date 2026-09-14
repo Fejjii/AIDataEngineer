@@ -38,6 +38,7 @@ from aide.persistence.models import (
 )
 from aide.twin.identity import (
     AssetCapture,
+    ContinuityProofKind,
     RelationshipCapture,
     RenameContinuity,
     TwinIdentityError,
@@ -481,6 +482,14 @@ class TwinRepository:
             raise TwinIdentityError("authoritative rename evidence is not persisted")
         if SourceAuthorityRef.model_validate(evidence.source_authority) != capture.source_authority:
             raise TwinIdentityError("persisted rename evidence has a different source authority")
+        expected_evidence_type = {
+            ContinuityProofKind.AUTHORITATIVE_RENAME: "snowflake.rename",
+            ContinuityProofKind.DECLARED_DBT_IDENTITY: "dbt.manifest",
+        }[continuity.proof_kind]
+        if evidence.evidence_type != expected_evidence_type:
+            raise TwinIdentityError(
+                f"{continuity.proof_kind.value} requires {expected_evidence_type} evidence"
+            )
         if not await self._asset_rows(continuity.asset_id):
             raise TwinIdentityError("rename continuity refers to an unknown asset")
 
