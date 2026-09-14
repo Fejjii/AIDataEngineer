@@ -130,6 +130,7 @@ layers = [
     "aide.api | aide.cli",
     "aide.app",
     "aide.orchestration",
+    "aide.modelling",
     "aide.tools | aide.persistence | aide.approvals | aide.quality | aide.discovery | aide.profiling",
     "aide.policy | aide.reasoning",
     "aide.capabilities | aide.connectors.base | aide.secrets | aide.auth | aide.llm",
