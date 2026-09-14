@@ -349,8 +349,8 @@ warehouse/resource monitor provides an external hard boundary.
 
 | Identity | Environment | Permissions | Used by |
 |---|---|---|---|
-| `AIDE_DEV_RO` (Snowflake role) | DEV/RAW | `USAGE` + `SELECT` on RAW and DEV; no writes | `snowflake_ro` connector (profiling/discovery) |
-| `AIDE_DEV_RW` (Snowflake role) | DEV | `AIDE_DEV_RO` + `CREATE SCHEMA/TABLE/VIEW` in `AIDE_DEV`, restricted warehouse | `snowflake_dev`, `dbt_dev` |
+| `AIDE_DEV_RO` (Snowflake role) | DEV/RAW | `USAGE` + `SELECT` on allow-listed RAW and DEV objects; no writes | `snowflake_ro` connector (profiling/discovery) |
+| `AIDE_DEV_RW` (Snowflake role) | DEV | `USAGE` + workflow-scoped `CREATE SCHEMA/TABLE/VIEW` in `AIDE_DEV`; no RAW read or write grant | `snowflake_dev`, `dbt_dev`; Interview MVP sources use the PIVOT001 manifest-mediated dual load |
 | `AIDE_STAGING_DEPLOY` | STAGING | run dbt against `AIDE_STAGING`; no RAW writes | `dbt_staging` (approval-gated) |
 | `AIDE_PROD_*` | PROD | **not created in V1** | — |
 | `aide_source_ro` (PostgreSQL) | source | `SELECT` on synthetic schemas | `postgres_source` |

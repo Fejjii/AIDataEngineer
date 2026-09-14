@@ -1,112 +1,124 @@
-# MVP Scope — Recruiter-Ready V1
+# MVP Scope — Data Pilot AI Interview
 
-**Task:** DE 001 · **Status:** ACCEPTED
+**Task:** PIVOT001
+**Status:** PROPOSED — active after DE-ADR-028 acceptance
+**Authoritative contract:** `docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md`
 
-The MVP is one strong, repeatable, end-to-end workflow on a synthetic enterprise, executed
-against real Snowflake development objects and a real dbt project, with a real GitHub pull
-request, and with the whole thing also runnable **offline** against deterministic fakes.
+## 1. Interview promise
 
----
+Data Pilot AI demonstrates one complete governed closed loop:
 
-## 1. The MVP promise (what a recruiter sees in five minutes)
+1. Inspect the Vantara `tiny` estate in Snowflake and dbt.
+2. Persist the minimum Enterprise Data Digital Twin in PostgreSQL.
+3. Accept one customer and revenue request.
+4. Pin one `TwinSnapshot` and assemble bounded, authorized context.
+5. Produce a deterministic engineering plan using the existing modelling engine.
+6. Generate and execute the required dbt subset in workflow-scoped Snowflake DEV objects.
+7. Validate dbt tests and deterministic revenue/payment reconciliation.
+8. Inject the Vantara `INVOICE_STATUS` → `STATUS` schema drift.
+9. Detect, diagnose, and apply one allow-listed column-reference correction.
+10. Revalidate, run the read-only Independent Verifier, and emit a final evidence report.
 
-1. A natural-language requirement is typed in:
-   *"Build a customer revenue data product from CRM and billing. Deduplicate customers,
-   reconcile billing to payments, track plan changes historically, add quality tests,
-   document lineage and prepare it for deployment."*
-2. The system restates the requirement, lists assumptions, and asks one clarification
-   (how to define *active customer*). The human answers.
-3. The system discovers the relevant Snowflake schemas and tables (13 found, 10 selected)
-   — no table names were hard-coded — and profiles them: duplicates, nulls, identifier
-   mismatch, key candidates.
-4. The system decides a modelling strategy (layered staging → intermediate → star schema,
-   SCD2 on customer and plan) and explains why the rule table chose it.
-5. The system generates dbt models, tests and docs and runs them in Snowflake DEV.
-6. A run **fails** (renamed source column). The system classifies the failure, diagnoses
-   it with evidence, patches the staging model, re-runs, and the build goes green.
-7. A **test fails** (duplicate payments break fact grain). The system diagnoses, adds a
-   deterministic deduplication rule in the intermediate layer, re-runs, tests pass.
-8. Documentation and a lineage graph appear. A GitHub branch and pull request are created
-   with a generated summary.
-9. The system materializes `deploy_staging` in the same DELIVERY phase run, then asks for
-   a typed `OperationApproval` bound to that operation. Nothing deploys until the complete
-   subject is approved.
-10. The audit timeline shows every plan, policy decision, tool call, model call with cost,
-    repair, and approval. A metrics panel shows first-attempt success, repairs, tokens,
-    cost, and estimated engineering time saved.
+The required modes are a deterministic offline run and one credentialed Snowflake/dbt DEV
+smoke. No production or staging action is part of the interview.
 
----
+## 2. Fixed product boundary
 
-## 2. In scope (V1)
-
-| Area | V1 deliverable |
+| Area | Interview MVP |
 |---|---|
-| Interface | Minimal web SPA: request form, clarification dialog, plan view, task timeline, artifact viewer (SQL/YAML/docs/lineage), validation results, approval buttons, connector status, metrics. Plus CLI for the same flows. |
-| Requirement understanding | `interpret_requirement` → typed `RequirementSpec`; ambiguity detection → clarification questions; max 2 clarification rounds. |
-| Discovery | Snowflake `INFORMATION_SCHEMA` / `SHOW` based catalogue for allow-listed databases/schemas; PostgreSQL synthetic source discovery. |
-| Profiling | Deterministic profile SQL with budgets; candidate keys; candidate relationships; duplicate and null detection. |
-| Ad-hoc development SQL | `generate_sql_query` (read-only SELECT or single DEV `CREATE TABLE AS`) for investigation-type requests and the DE 002 slice; always classified, EXPLAIN-validated and policy-checked. |
-| Modelling | Rule-table selection among: layered staging/intermediate/marts; star schema; SCD1/SCD2; incremental vs full refresh. Data Vault detection only (recommend, not generate). |
-| Generation | dbt models (staging, intermediate, dims, facts, one mart), `schema.yml` with tests, `sources.yml`, model docs; Snowflake dialect. |
-| Execution | `dbt build` in DEV schema via dbt connector; `execute_query` for validation; timeouts and cost caps. |
-| Quality | dbt tests + Quality Engine checks (uniqueness, not-null, referential integrity, accepted values, reconciliation of totals, row counts, freshness). |
-| Failure & repair | Deterministic classifier; bounded repair for `SQL_SYNTAX`, `MISSING_OBJECT`, `SCHEMA_MISMATCH`, `TYPE_MISMATCH`, `DBT_COMPILE`, `DBT_RUNTIME`, `DBT_TEST`, `DATA_QUALITY`; max 2 repairs per task, 4 per workflow. |
-| Documentation & lineage | Model + column docs; lineage graph from dbt manifest + SQL parsing; rendered in UI and stored as artifact. |
-| Delivery | Git branch + commit + push + PR; `deploy_staging` is operation-approval-gated; separate `deploy_production` is disabled and unadvertised in V1. |
-| Identity, policy & approvals | Local opaque server session → trusted principal; server-authorized workflow grants. Typed operation/design/budget subjects; operation approval binds operation key, resolved-input digest, artifact/provenance hashes, connector/version, target, expiry and relevant external state. |
-| Audit & observability | Audit timeline; model call accounting; tool call accounting; cost per workflow. |
-| Evaluation | Benchmark harness with ≥ 3 repeatable scenarios (happy path, schema drift failure, quality failure). |
-| Synthetic enterprise | `docs/DEMO_COMPANY.md` company generated into PostgreSQL and loaded to Snowflake RAW. |
-| Offline mode | Whole flow against fake Snowflake/dbt/GitHub/LLM replays for CI and demos without credentials. |
+| Systems | PostgreSQL 16 control state, Snowflake, dbt Core |
+| Company | Vantara `tiny`, v1 and v2 |
+| Request | One customer-revenue data product from CRM, billing, payments, and plans |
+| Digital Twin | `TwinAsset`, `TwinRelationship`, `TwinObservation`, `TwinSnapshot`, `EvidenceReference`; PostgreSQL only |
+| Context | One pinned snapshot; server-authorized scope; deterministic bounds; no source rows in model context |
+| Control | Deterministic Supervisor application responsibility over the existing state machine |
+| Reasoning | Typed, tool-less capabilities grouped as Estate Intelligence, Data Engineering, and Reliability |
+| Modelling | Existing DE007 deterministic modelling engine |
+| Execution | Existing Snowflake/dbt foundations through the sole Governed Tool Gateway; workflow-scoped `AIDE_DEV` objects |
+| Quality | dbt compile/build/tests plus deterministic billed/paid and row-count reconciliation |
+| Fault | One injected rename: `BILLING.INVOICES.INVOICE_STATUS` → `STATUS` |
+| Repair | One allow-listed reference-only dbt SQL correction; at most one automatic application |
+| Verification | Read-only deterministic verifier over immutable evidence; optional LLM explanation cannot set verdict |
+| Output | One immutable evidence bundle and one human-readable report with cost/timing metadata |
+| Interface | CLI/demo command and report only; no frontend requirement |
 
----
+## 3. Explicitly out of scope
 
-## 3. Explicitly not attempted in V1
+- Databricks, Fabric, Airflow, Power BI, Tableau, or any second data-platform vendor.
+- Graph database, Temporal, LangGraph, LangChain, CrewAI, AutoGen, or any multi-agent
+  framework.
+- Enterprise IAM, multi-tenancy, policy administration UI, or generalized governance
+  catalogue.
+- Production writes, staging deployment, destructive actions, infrastructure changes, or
+  security administration.
+- GitHub delivery, a real LLM provider requirement, generalized monitoring, streaming,
+  migration, optimization, or a large frontend.
+- A second business request, duplicate-payment repair, or any second automatic repair
+  class.
+- Unbounded tool selection, retry, repair, context retrieval, or estate traversal.
 
-| Not in V1 | Reason | Earliest phase |
-|---|---|---|
-| Production deployment execution | No production target exists; keep approval boundary demonstrable without risk | After staging identity and rollback path exist |
-| Streaming / CDC ingestion | Different runtime model; not needed for demo value | V2+ |
-| Ingestion connectors for APIs, S3, Azure Storage | Sources land in RAW via synthetic loader | V2 |
-| Spark / Databricks / Fabric / Airflow / BI connectors | Connector interface designed for them; none implemented | V2+ as separate connector tasks |
-| Semantic layer generation | Requires BI target | V2 |
-| Query and warehouse optimization *actions* | V1 collects execution metrics and cost, emits recommendations only | V2 |
-| Live monitoring loop | V1 registers monitor definitions (freshness/tests) as artifacts; no scheduler runs them | V2 |
-| Multi-tenant/federated IAM and RBAC administration UI | V1 uses one local account with distinct operator/approver role checks and server-side grants | Enterprise showcase |
-| Data Vault generation | Detection and recommendation only | V2 |
-| Python/Spark transformation generation | dbt SQL only in V1; Python hook reserved | V2 |
-| Vector search over enterprise docs | Not needed at catalogue scale | Only if asset counts demand |
-| Autonomous destructive operations | Never automatic | Never |
-| Security/identity/network changes | Disabled | Never for the agent |
+These may appear only as deferred extension points. They carry no MVP implementation or
+acceptance burden.
 
----
+## 4. Acceptance criteria
 
-## 4. MVP acceptance criteria (objective)
+1. The twin captures the selected physical assets, fields, dbt models/tests, declared
+   lineage, schema/profile/test observations, source authority, freshness, environment,
+   and immutable evidence references.
+2. Every workflow pins one `TwinSnapshot`; later captures cannot change its context, plan,
+   or evidence digest.
+3. Context contains only authorized snapshot members, respects all hard bounds, and blocks
+   instead of silently truncating required facts.
+4. The existing modelling engine selects the expected customer-revenue architecture from
+   objective signals and cited twin evidence.
+5. Every Snowflake/dbt execute, cancel, and reconcile call enters the Governed Tool
+   Gateway and has a persisted intent, risk decision, result, evidence, and audit record.
+6. `AIDE_DEV_RW` cannot read or write `VANTARA_RAW`; the manifest-mediated dual load
+   reconciles selected RAW and workflow DEV sources to the same immutable Vantara input.
+7. dbt compile/build/tests and deterministic revenue/payment reconciliation pass before
+   drift.
+8. The injected rename is detected and classified as `SCHEMA_MISMATCH`.
+9. Exactly one allow-listed, reference-only patch is applied; broader changes, a second
+   repair, test weakening, or failed revalidation block.
+10. Full post-repair validation passes and every ambiguous side effect is reconciled before
+    retry or verdict.
+11. The Independent Verifier has no connector or workflow-write authority and returns
+    `PASS` only from complete, immutable, digest-valid deterministic evidence.
+12. The final bundle contains request, twin snapshot/context, plan, risk decisions, tool
+    actions, code before/after, tests, reconciliation, failure, repair, final validation,
+    verifier result, and cost/timing metadata.
+13. Two offline runs produce identical plan, context, repair, validation, verifier, and
+    evidence digests.
+14. One credentialed Snowflake/dbt DEV smoke completes without a production/staging action
+    or new RAW grant.
 
-1. Discovery finds all demo tables without hard-coded names; catalogue artifact persisted.
-2. Profiling identifies the planted duplicates, nulls, and identifier mismatch (see `docs/DEMO_COMPANY.md` §6).
-3. Modelling engine selects the expected architecture for the demo requirement and the rationale cites objective signals.
-4. Generated dbt project compiles and `dbt build` succeeds in Snowflake DEV after ≤ 2 repair cycles on the planted failures.
-5. Both planted failures are detected, classified into the expected classes, and repaired automatically; the repair history shows distinct hypotheses.
-6. All Quality Engine checks pass on the final data product; reconciliation of billed vs paid totals is reported.
-7. Lineage artifact contains the expected edges (`docs/DEMO_COMPANY.md` §9).
-8. GitHub PR is created; `deploy_staging` is materialized in the same DELIVERY run and remains `AWAITING_APPROVAL` / workflow `APPROVAL_REQUIRED` until its typed operation subject is approved.
-9. Audit timeline is complete: every tool call and model call linked to a task; no secret appears in any artifact, log or prompt record (verified by automated scan in tests).
-10. Same scenario completes in offline mode with fakes in CI in under 5 minutes.
-11. Evaluation report shows the metrics in `docs/EVALUATION_STRATEGY.md` §3 for all three scenarios.
+The executable test mapping is `docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md` §14.
 
----
-
-## 5. Non-functional bounds for V1
+## 5. Hard bounds
 
 | Bound | Value |
-|---|---|
-| Max concurrent workflows | 5 (single node) |
-| Max tasks per phase | 50 |
-| Max clarification rounds | 2 |
-| Max replans per phase | 2 |
-| Max repair attempts per task / per workflow | 2 / 4 |
-| Default task timeout | 300 s; `dbt build` 900 s |
-| Query row cap for samples sent to LLM | 20 rows, masked columns |
-| Warehouse | Snowflake X-Small with auto-suspend; estimated preflight budget plus hard statement/query bounds and attribution tags. No hard credit cap without isolated warehouse/resource monitor |
-| LLM cost cap per workflow | Configurable; default USD 5; atomic reservation prevents dispatch above cap; continuation needs explicit new-cap/delta approval |
+|---|---:|
+| Business requests | 1 |
+| Synthetic companies / profiles | 1 / Vantara `tiny` |
+| Real warehouse / transformation vendors | 1 / 1 |
+| Pinned twin snapshots per workflow | 1 |
+| Top-level context assets | 12 |
+| Context fields / relationships / observations | 120 / 64 / 32 |
+| Relationship traversal depth | 2 |
+| Serialized estate context | 64 KiB |
+| Source rows in reasoning context | 0 |
+| Repair proposals | 2 |
+| Automatic repair applications per task/workflow | 1 / 1 |
+| Post-repair full revalidation | 1 |
+| Recursive repairs | 0 |
+| Automatic repair classes | 1 |
+
+Existing operation `max_attempts` remains authoritative but is capped at two for this
+workflow. Every ambiguous side effect reconciles before another attempt.
+
+## 6. Deferred extension points
+
+Only provider-neutral versioned ports may be named for a future graph store, external
+principal provider, monitor scheduler, evidence exporter/signer, additional connector
+kinds, and specialist sub-workflows. MVP001–MVP004 do not implement those ports unless an
+executable acceptance test above requires the core interface directly.

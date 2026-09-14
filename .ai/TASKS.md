@@ -126,7 +126,73 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 
 ---
 
-# Implementation backlog (from `docs/IMPLEMENTATION_PLAN.md` §3 — authoritative detail there)
+# Active Interview MVP plan (PIVOT001 / DE-ADR-028)
+
+## PIVOT001 — Interview MVP contract boundary
+- Priority: P0
+- Status: IN_PROGRESS (documentation complete on task branch; human acceptance pending)
+- Environment: CURSOR_CLOUD
+- Dependencies: PIVOT000 accepted and merged
+- Risk: High (architecture and active-roadmap boundary)
+- Goal: Lock the smallest safe Twin, context, Supervisor, Tool Gateway, verifier, repair,
+  RAW-to-DEV, evidence, implementation, and executable-acceptance contracts.
+- Scope: Architecture and roadmap documentation only.
+- Exclusions: Product code, production tests, deployment, merge.
+- Expected files: `docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md`, architecture/roadmap
+  documents, one ADR, one run report, private handoffs.
+- Forbidden files: `src/**`, product tests, dependencies, migrations, CI, production config.
+- Completion gate: documentation validation and gitleaks pass; PR reviewed and accepted.
+
+## MVP001 — Digital Twin
+- Priority: P0
+- Status: TODO (blocked until PIVOT001 acceptance)
+- Dependencies: PIVOT001 accepted and merged
+- Goal: Implement the five minimal twin contracts, PostgreSQL persistence, capture,
+  immutable snapshot pinning, and bounded authorized context assembly.
+- Ownership: sole writer for domain/twin contracts, persistence models/migration, twin tests.
+- Acceptance: PIVOT001 AT-01 through AT-07.
+- Estimated effort: 14–22 focused engineering hours.
+
+## MVP002 — Supervisor and Tool Gateway flow
+- Priority: P0
+- Status: TODO
+- Dependencies: MVP001 merged
+- Goal: Compose the deterministic Supervisor, sole Governed Tool Gateway, bounded dbt
+  generation, manifest-mediated DEV source preparation, and pre-drift build/validation.
+- Ownership: sole writer for app/orchestration/tools/capabilities/generation/import contracts.
+- Acceptance: PIVOT001 AT-08, AT-09, and AT-13 through AT-15.
+- Estimated effort: 20–30 focused engineering hours.
+
+## MVP003 — Repair and Verifier
+- Priority: P0
+- Status: TODO
+- Dependencies: MVP002 merged
+- Goal: Implement the one drift/reference repair, strict limits, revalidation, read-only
+  verifier, and immutable evidence bundle.
+- Ownership: sole writer for repair/verification/evidence, policy additions, related state.
+- Acceptance: PIVOT001 AT-10 through AT-12, AT-16, AT-17, AT-20, and AT-21.
+- Estimated effort: 18–28 focused engineering hours.
+
+## MVP004 — End-to-end benchmark and demo hardening
+- Priority: P0
+- Status: TODO
+- Dependencies: MVP003 merged
+- Goal: Run the deterministic offline scenario twice, one credentialed Snowflake/dbt DEV
+  smoke, CLI/demo report, and final limitation review.
+- Ownership: sole integration writer; no architecture or contract redesign.
+- Acceptance: PIVOT001 AT-18, AT-19, and AT-22 through AT-24 plus affected regression.
+- Estimated effort: 14–22 focused engineering hours.
+
+Integration order is strictly PIVOT001 → MVP001 → MVP002 → MVP003 → MVP004. The four MVP
+tasks do not run concurrently because their shared high-conflict contracts are sequential.
+
+---
+
+# Historical DE implementation backlog
+
+DE002A–DE008A are preserved implementation history. Uncompleted DE008B and DE009–DE019
+entries below are deferred and are not active Interview MVP prerequisites. Re-cut them
+only after MVP004 evidence. `docs/IMPLEMENTATION_PLAN.md` §3 is the active plan.
 
 Common: Git authority = branch-only; commit/push + one PR only when the task prompt says
 `GitWrite: authorized`; never merge. Deployment authority = none unless stated. Statuses
@@ -179,7 +245,7 @@ Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
   R1 `docs/agent/runs/DE004/DE004-SESSION-20260912T154500Z-r1.md`.
 
 ## DE 005 — Real Snowflake connector
-- `DE005` · P0 · IN_PROGRESS · Env LOCAL (live validation) / CURSOR_CLOUD (DE005A implementation) · Cloud yes for DE005A credential-free contracts · Branch `feat/DE005_snowflake_connector` · Deps DE 002C (parallel Lane B with DE 004; DE004 now merged on `main`)
+- `DE005` · P0 · DONE (merged to `main`, 2026-09-14; merge commit `7094b7d`; live validation completed) · Env LOCAL / CURSOR_CLOUD · Branch `feat/DE005_snowflake_connector` · Deps DE 002C
 - Goal: real connector, identities `snowflake_ro`/`snowflake_dev`, error mapper w/ recorded fixtures, dialect, DEV namespace, `aide connectors check`, live contract tests.
 - Model Grok 4.6 · Reasoning High · Risk Medium · Duration 4–6 h · Token L · Human gate: `REVIEW_REQUIRED` for secret entry (env var names only: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER_RO`, `SNOWFLAKE_PRIVATE_KEY_RO`, `SNOWFLAKE_USER_DEV`, `SNOWFLAKE_PRIVATE_KEY_DEV`, `SNOWFLAKE_WAREHOUSE_DEV`).
 - **DE005A (Cloud, R1 accepted):** real + fake Snowflake connector and credential-free contract
@@ -188,10 +254,11 @@ Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
 - **DE005A SYNC:** `feat/DE005_snowflake_connector` synchronized with `main` at
   `3813042f4e0b34889139c453dae70c9a507e853b` so DE004 synthetic fixtures and DE005A connector
   contracts coexist. Do not execute DE005B in Cloud.
-- **DE005B (LOCAL live validation complete; pending Development Control):** tiny v2 loaded
+- **DE005B (LOCAL live validation complete and merged):** tiny v2 loaded
   into `VANTARA_RAW` via the DEV service identity (not the product DEV connector). Live RO/DEV
   connector tests passed on a credentialed host. Do not paste Snowflake credentials into chat.
-  Temporary `AIDE_DEV_RW` `CREATE TABLE` on `VANTARA_RAW` should be revoked after bootstrap.
+  The temporary `AIDE_DEV_RW` `CREATE TABLE` grant on `VANTARA_RAW` was revoked before
+  PIVOT000. Do not restore it.
 
 ## DE 006 — Profiling and relationship inference
 - `DE006` · P0 · DONE (R1 accepted 2026-09-12) · Env CLOUD · Cloud yes · Branch `feat/DE006_profiling` · Deps DE 002C, DE 004
@@ -208,7 +275,9 @@ Implementation backlog unlocked after DE 001 acceptance (2026-09-11).
 - PR 16 is accepted and remains dependent on DE006 integration before main merge.
 
 ## DE 008 — dbt connector, generation and execution
-- `DE008` · P0 · TODO · Env LOCAL · Cloud no · Branch `feat/DE008_dbt_generation` · Deps DE 005, DE 007 (008a connector may start after DE 005)
+- `DE008A` · P0 · DONE (connector foundation and live validation merged to `main`,
+  2026-09-14; merge commit `565bea1`) · `DE008B` · TODO (deferred; generation/gateway
+  scope re-cut into MVP002) · Env LOCAL · Branch `feat/DE008A_dbt_connector`
 - **Architecture note:** DE 008a must evaluate real dbt Core (`dbtRunner`) against an offline DuckDB-compatible target (`dbt-duckdb`) for integration/contract tests, keeping the deterministic lightweight fake for unit tests; record the evaluation and do not adopt `dbt-duckdb` if compatibility evidence rejects it — `docs/CONNECTOR_ARCHITECTURE.md` §5.2, `docs/IMPLEMENTATION_PLAN.md` §3 DE 008. Also: `reconcile` for all side-effecting dbt capabilities.
 - Model Grok 4.6 · Reasoning High · Risk High · Duration 8–12 h (two sessions) · Token XL.
 

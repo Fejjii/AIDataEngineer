@@ -17,11 +17,11 @@ test, observe, correct, and escalate.
 
 ## Current phase
 
-Development operating system installed (DE 000). Product architecture is **ACCEPTED**
-(DE 001 + DE 001R1 + DE 001R2A + DE 001R2B; operator acceptance 2026-09-11 on
-`docs/DE001_mvp_architecture`). Independent GPT 5.6 Sol High review and Fable R2V
-verification residuals are closed. DE 002A is unblocked and Cloud-eligible. Compact contract:
-`.ai/ARCHITECTURE.md`; full set: `docs/ARCHITECTURE.md` and companions.
+The DE001 product architecture is **ACCEPTED** and DE002–DE008A foundations are merged.
+PIVOT000 is accepted. PIVOT001 now proposes the constrained Interview MVP contract and
+DE-ADR-028; implementation remains human-gated until that PR is accepted and merged.
+Compact contract: `.ai/ARCHITECTURE.md`; active proposed boundary:
+`docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md`.
 
 ## Initial intended stack (direction only, not a freeze)
 
@@ -41,9 +41,16 @@ validate results, self-correct failures, and prepare safe deployment actions wit
 
 ## Current MVP direction
 
-One strong end-to-end workflow first: discover source tables, propose a model, generate dbt/SQL,
-run in development, add tests, repair at least one failure, prepare a pull request, and require
-human approval for production actions. Do not start with every cloud connector or a large UI.
+One Vantara customer-revenue closed loop: pin a minimal PostgreSQL Digital Twin, assemble
+bounded authorized context, use the existing modelling engine, execute Snowflake/dbt DEV
+work only through the Governed Tool Gateway, repair the single allow-listed
+`INVOICE_STATUS → STATUS` drift, verify immutable evidence read-only, and emit the final
+report. Active sequence after PIVOT001 acceptance:
+`MVP001 Digital Twin → MVP002 Supervisor and Tool Gateway flow → MVP003 Repair and
+Verifier → MVP004 End-to-end benchmark and demo hardening`.
+
+GitHub delivery, frontend, monitoring, additional vendors/use cases/repair classes, graph
+or agent frameworks, enterprise IAM, and production or staging actions are deferred.
 
 ## Development operating philosophy
 

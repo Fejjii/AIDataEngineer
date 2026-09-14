@@ -12,6 +12,11 @@ independent review/verification artifacts. Implementation (DE 002+) may proceed 
 DE-ADR-026: the *architecture* is baselined and breaking deviations need an ADR; *contracts*
 may evolve additively when existing tests stay valid.
 
+**PIVOT001 amendment:** DE-ADR-028 is `PROPOSED`. After human acceptance, the active
+Interview MVP contract and implementation sequence are defined by
+`docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md`. It constrains the next build to one Vantara
+customer-revenue closed loop and preserves the accepted kernel contracts below.
+
 ## Authoritative documents
 
 Full architecture lives in tracked `docs/` (readable by Cloud agents):
@@ -28,9 +33,9 @@ Full architecture lives in tracked `docs/` (readable by Cloud agents):
 | `docs/DATA_MODELLING_STRATEGY.md`, `docs/QUALITY_STRATEGY.md` | Deterministic modelling rules and validation |
 | `docs/OBSERVABILITY.md`, `docs/EVALUATION_STRATEGY.md` | Telemetry, audit, cost; benchmarks and metrics |
 | `docs/TECH_STACK.md`, `docs/TECHNICAL_RISKS.md` | Technology decisions; risk register |
-| `docs/IMPLEMENTATION_PLAN.md` | Repository layout, module boundaries, roadmap DE 002–DE 019, parallel lanes, DE 002 definition |
+| `docs/IMPLEMENTATION_PLAN.md` | Repository layout, module boundaries, active MVP001–MVP004 roadmap, historical DE 002 definition |
 | `docs/DEMO_COMPANY.md` | Synthetic enterprise *Vantara Systems* |
-| `docs/adr/` | DE-ADR-008 … DE-ADR-027 |
+| `docs/adr/` | DE-ADR-008 … DE-ADR-028 |
 
 ## Compact implementation contract (for implementation models)
 
@@ -86,9 +91,12 @@ unresolved, connector permission missing) → task `PARKED`, workflow `BLOCKED`;
 `APPROVAL_REQUIRED`. The plan validator runs the same rules as a pre-check so the planner
 re-plans before tasks exist. PROD, INFRASTRUCTURE, SECURITY disabled in V1.
 
-**Repair.** Only repairable failure classes; evidence → novel-hypothesis proposal →
-deterministic validation → rebuild → re-validate; 2 per task, 4 per workflow; never
-weaken tests; escalate to `BLOCKED`.
+**Repair.** The platform ceiling remains: only repairable failure classes; evidence →
+novel-hypothesis proposal → deterministic validation → rebuild → re-validate; 2 per task,
+4 per workflow; never weaken tests; escalate to `BLOCKED`. The Interview MVP is narrower:
+one automatic application per task/workflow, only the allow-listed Vantara
+`INVOICE_STATUS → STATUS` generated-dbt column reference correction, with one full
+revalidation. Every other class or broader diff blocks or remains an advisory proposal.
 
 **Security.** `SecretRef` indirection with separate non-enumerable resolver scopes for
 connector and LLM provider adapters; transitive REAL/MOCK artifact provenance blocks mock
@@ -106,6 +114,21 @@ changes (optional fields with defaults, new enum members/reason codes, new capab
 rules, commands, columns) are allowed when all existing tests remain valid and pass
 unchanged. Snowflake (DE 005) and dbt (DE 008) are expected to exercise and additively
 adjust these contracts; nothing is frozen "forever" before that.
+
+**Interview MVP boundary (PIVOT001).** PostgreSQL stores append-only `TwinAsset`,
+`TwinRelationship`, `TwinObservation`, `TwinSnapshot`, and `EvidenceReference` records.
+Each workflow pins one immutable twin snapshot and receives bounded, grant-filtered estate
+context. Supervisor is a deterministic application responsibility; Estate Intelligence,
+Data Engineering, and Reliability are logical capability groups, not autonomous agents.
+Every connector execution enters one Governed Tool Gateway. The Independent Verifier has
+no connector or workflow-write authority and derives `PASS|FAIL` only from deterministic
+checks over immutable evidence. RAW remains RO-only for the product; the synthetic
+benchmark uses a manifest-mediated dual load into workflow-scoped DEV sources.
+
+Active implementation after DE-ADR-028 acceptance:
+`MVP001 Digital Twin → MVP002 Supervisor and Tool Gateway flow → MVP003 Repair and
+Verifier → MVP004 End-to-end benchmark and demo hardening`. Unstarted DE009–DE019 scope is
+deferred for re-cutting after MVP004; completed DE work remains historical foundation.
 
 **Before DE 004:** the synthetic generator must support scale profiles `tiny` /
 `demo` / `full` (`tiny` = CI, `demo` = local recruiter demonstration, `full` =
