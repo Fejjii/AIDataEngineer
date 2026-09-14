@@ -202,3 +202,18 @@ emitter, retry summary).
   from trusted principal, role and environment policy. One V1 human may hold distinct
   operator+approver roles; production stays disabled.
 - **Rejected:** caller-supplied grants; browser token storage; enterprise IAM in MVP.
+
+## DE-ADR-028 — Constrain the active roadmap to one Interview MVP closed loop
+- **Date:** 2026-09-14
+- **Status:** Proposed
+- **Decision:** After acceptance, replace DE-ADR-021's active roadmap with the sequential
+  `MVP001 Digital Twin → MVP002 Supervisor and Tool Gateway flow → MVP003 Repair and
+  Verifier → MVP004 End-to-end benchmark and demo hardening` path. Prove one Vantara
+  customer-revenue workflow, one schema-drift reference repair, deterministic verification,
+  and one evidence report before adding broader product surfaces.
+- **Preserved:** Completed DE002–DE008A foundations; modular monolith; PostgreSQL;
+  deterministic orchestration; typed tool-less reasoning; policy, approval, provenance,
+  connector, operation/attempt identity, fencing, and reconcile-before-retry contracts.
+- **Deferred:** Unstarted DE009–DE019 scope, additional failures/vendors, GitHub delivery,
+  monitor, UI, real LLM requirement, graph/workflow/agent frameworks, and production actions.
+- **Full record:** `docs/adr/DE-ADR-028-interview-mvp-boundary.md`.

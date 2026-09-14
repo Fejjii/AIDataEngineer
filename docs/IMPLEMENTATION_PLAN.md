@@ -1,10 +1,10 @@
 # Implementation Plan
 
-**Task:** DE 001 (corrected by DE 001R1, DE 001R2A and DE 001R2B) · **Status:** ACCEPTED · ADRs: DE-ADR-020, DE-ADR-021, DE-ADR-026
+**Task:** DE 001 baseline; active roadmap constrained by PIVOT001 · **Status:** PIVOT001 PROPOSED · ADRs: DE-ADR-020, DE-ADR-021, DE-ADR-026, DE-ADR-028
 
-Contents: §1 repository layout and ownership · §2 module boundaries · §3 roadmap as
-vertical slices · §4 parallel lanes and when Cloud agents become safe · §5 DE 002 exact
-definition.
+Contents: §1 repository layout and ownership · §2 module boundaries · §3 active Interview
+MVP roadmap · §4 current parallel/ownership plan · §5 historical DE 002 exact definition.
+The superseded DE001 roadmap remains in §3.3 as planning history, not active scope.
 
 ---
 
@@ -123,7 +123,50 @@ to detect composition-root cycles.
 
 ---
 
-## 3. Roadmap — vertical slices
+## 3. Active roadmap — Interview MVP
+
+DE-ADR-028 replaces the old active DE009–DE019 sequence after human acceptance. The
+authoritative boundary, contracts, and acceptance-test mapping are in
+`docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md`.
+
+```text
+PIVOT001 accepted
+→ MVP001 Digital Twin
+→ MVP002 Supervisor and Tool Gateway flow
+→ MVP003 Repair and Verifier
+→ MVP004 End-to-end benchmark and demo hardening
+```
+
+Common authority: isolated task branch; one implementation writer; commit/push and one PR
+only when the task prompt authorizes Git writes; never merge or deploy.
+
+### 3.1 Active tasks
+
+| Task | Dependency | Scope | Primary ownership | Executable exit | Effort |
+|---|---|---|---|---|---:|
+| MVP001 Digital Twin | PIVOT001 accepted | Five twin contracts, PostgreSQL persistence/migration, Snowflake/dbt capture, snapshot pinning, bounded context | `domain`, twin package, persistence/migration | AT-01–AT-07 pass | 14–22 h |
+| MVP002 Supervisor and Tool Gateway flow | MVP001 merged | Deterministic composition, sole gateway, bounded dbt generation, manifest-mediated DEV preparation, pre-drift build/validation | `app`, `orchestration`, `tools`, capabilities, generation, import contracts | AT-08–AT-09 and AT-13–AT-15 pass | 20–30 h |
+| MVP003 Repair and Verifier | MVP002 merged | Exact drift, one allow-listed patch, limits, revalidation, read-only verifier, evidence bundle | repair, verification, evidence, policy additions, related persistence | AT-10–AT-12, AT-16–AT-17, AT-20–AT-21 pass | 18–28 h |
+| MVP004 End-to-end benchmark and demo hardening | MVP003 merged | Two deterministic offline runs, one live Snowflake/dbt DEV smoke, CLI/demo report and limitations | evaluation/demo integration; no contract redesign | AT-18–AT-19 and AT-22–AT-24 pass; full affected regression | 14–22 h |
+
+Total focused implementation effort: **66–102 hours**, excluding human review waits,
+credential provisioning, and every deferred feature.
+
+### 3.2 Preserved implementation history and deferred backlog
+
+| Work | Verified state on PIVOT001 baseline | Treatment |
+|---|---|---|
+| DE002A–DE004 | Merged/completed | Preserved foundation |
+| DE005A/B Snowflake | Merged connector plus completed live validation; temporary RAW bootstrap grant revoked | Preserved foundation; task-ledger wording corrected |
+| DE006 profiling | Merged/completed | Preserved foundation |
+| DE007 modelling | Merged/completed | Preserved foundation |
+| DE008A dbt | Merged connector plus completed live DEV validation | Preserved foundation |
+| DE008B and DE009–DE019 | Not completed as originally scoped | Deferred; re-cut only after MVP004 evidence |
+
+No historical task is deleted or relabelled complete. “Deferred” means it is not an active
+Interview MVP prerequisite.
+
+### 3.3 Superseded DE001 roadmap — historical reference only
 
 Common fields: **Env** LOCAL/CLOUD · **Cloud** eligibility · **Model** class · **Reasoning** · **Branch** · **Deps** · **Files** (expected) · **Own** (ownership class) · **Par** (parallel eligibility) · **Tests** · **DoD** · **Risk** · **Dur** (agent hours) · **Tok** (S/M/L/XL) · **Gate** (human) · **Git** authority.
 
@@ -235,7 +278,23 @@ Env LOCAL (may read private context) · Cloud no · Model Claude Fable 5.1 Max, 
 
 ---
 
-## 4. Parallel development
+## 4. Parallel development and ownership
+
+MVP001 through MVP004 are a sequential critical path. They must not run concurrently:
+MVP001–MVP003 each establishes high-conflict contracts consumed by its successor, and
+MVP004 is the integration gate.
+
+- One implementation writer owns each task branch.
+- Read-only review, test analysis, and fixture verification may run concurrently.
+- No two active writers may overlap `domain`, persistence/migrations, orchestration,
+  capabilities, tools, policy, repair, verification, evidence, or CI.
+- After MVP003 merges, MVP004 may split credential-free offline analysis from a
+  human-controlled live smoke only under distinct task IDs/branches and non-overlapping
+  files. Integrate offline evidence first.
+- Refresh each successor from merged `main`; do not stack implementation on unaccepted
+  contract branches.
+
+### 4.0 Superseded DE001 wave plan — historical reference only
 
 ### 4.1 Waves and lanes
 
