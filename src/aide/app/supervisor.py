@@ -29,7 +29,9 @@ from aide.auth.grants import GrantAuthorizer, GrantForgeryError
 from aide.auth.session import digest_session_token, issue_session_token
 from aide.capabilities.io import (
     CompileTransformationInput,
+    CompileTransformationOutput,
     CreateTransformationInput,
+    CreateTransformationOutput,
     DescribeAssetInput,
     DescribeAssetOutput,
     DiscoverAssetsInput,
@@ -37,11 +39,14 @@ from aide.capabilities.io import (
     DiscoveryScope,
     EvaluateExecutionPolicyInput,
     ExecuteTransformationInput,
+    ExecuteTransformationOutput,
     GenerateTransformationInput,
     GenerateTransformationOutput,
     LoadManifestSourcesInput,
+    LoadManifestSourcesOutput,
     ModelDesign,
     ParseTransformationInput,
+    ParseTransformationOutput,
     Plan,
     PlanConstraints,
     PlanPhaseInput,
@@ -49,6 +54,7 @@ from aide.capabilities.io import (
     ProfileEstateOutput,
     RequirementSpec,
     RunTestsInput,
+    RunTestsOutput,
     SelectRelevantAssetsOutput,
     TransformationProjectRef,
     ValidateInterviewQualityInput,
@@ -173,6 +179,7 @@ class InterviewResult:
     execute_ok: bool = False
     tests_ok: bool = False
     quality: ValidationReport | None = None
+    fixture_version: Literal["v1", "v2"] = "v1"
     parked: bool = False
     park_reason: str | None = None
     failed: bool = False
@@ -263,6 +270,7 @@ class InterviewSupervisor:
             principal=actor,
             grants=authorization,
             workflow_states=[WorkflowState.RECEIVED.value],
+            fixture_version=fixture_version,
         )
         result.requirement = interpret_customer_revenue_request(requirement_text)
         await self._store_artifact(
@@ -534,16 +542,22 @@ class InterviewSupervisor:
             result.failed = True
             result.fail_reason = "DESIGN_INCOMPLETE"
             return False
+        design = result.model_design
+        run = result.profiling_run
+        requirement = result.requirement
+        assert design is not None
+        assert run is not None
+        assert requirement is not None
         selected = demo_selected_assets()
         decision = decide_architecture(
-            result.requirement,
+            requirement,
             selected=selected,
-            run=result.profiling_run,
+            run=run,
             context=vantara_modelling_context(),
         )
-        profiles, _relationships, duplicates, _summary = _evidence(result.profiling_run)
+        profiles, _relationships, duplicates, _summary = _evidence(run)
         validation = validate_model_design(
-            result.model_design,
+            design,
             decision,
             selected=selected,
             profiles=profiles,
@@ -914,33 +928,36 @@ class InterviewSupervisor:
             result.profiling = profiled
             result.profiling_run = ProfilingRunResult.model_validate(profiled.run_payload)
         elif capability_id == "propose_model_design":
-            result.model_design = output
+            result.model_design = _align_invoice_status(
+                ModelDesign.model_validate(output), result.fixture_version
+            )
         elif capability_id == "generate_transformation":
             result.generated = GenerateTransformationOutput.model_validate(output)
         elif capability_id == "create_transformation":
-            result.project_state_id = output.project_state_id
+            created = CreateTransformationOutput.model_validate(output)
+            result.project_state_id = created.project_state_id
         elif capability_id == "parse_transformation":
-            result.parse_ok = bool(getattr(output, "ok", False))
+            result.parse_ok = ParseTransformationOutput.model_validate(output).ok
             if not result.parse_ok:
                 result.failed = True
                 result.fail_reason = "PARSE_FAILED"
         elif capability_id == "compile_transformation":
-            result.compile_ok = bool(getattr(output, "ok", False))
+            result.compile_ok = CompileTransformationOutput.model_validate(output).ok
             if not result.compile_ok:
                 result.failed = True
                 result.fail_reason = "COMPILE_FAILED"
         elif capability_id == "load_manifest_sources":
-            result.load_ok = bool(getattr(output, "reconcile_ok", False))
+            result.load_ok = LoadManifestSourcesOutput.model_validate(output).reconcile_ok
             if not result.load_ok:
                 result.failed = True
                 result.fail_reason = "LOAD_FAILED"
         elif capability_id == "execute_transformation":
-            result.execute_ok = bool(getattr(output, "ok", False))
+            result.execute_ok = ExecuteTransformationOutput.model_validate(output).ok
             if not result.execute_ok:
                 result.failed = True
                 result.fail_reason = "EXECUTE_FAILED"
         elif capability_id == "run_tests":
-            result.tests_ok = bool(getattr(output, "ok", False))
+            result.tests_ok = RunTestsOutput.model_validate(output).ok
             if not result.tests_ok:
                 result.failed = True
                 result.fail_reason = "TESTS_FAILED"
@@ -1044,6 +1061,27 @@ def _evidence(run: ProfilingRunResult) -> tuple[Any, Any, Any, Any]:
     from aide.modelling.evidence import evidence_from_run
 
     return evidence_from_run(run)
+
+
+def _align_invoice_status(design: ModelDesign, fixture_version: str) -> ModelDesign:
+    """Map the accepted STATUS column onto v1 INVOICE_STATUS before validation."""
+    if fixture_version != "v1":
+        return design
+    models = []
+    for model in design.models:
+        columns = []
+        for column in model.columns:
+            source = column.source_asset
+            if (
+                source is not None
+                and source.address[-1] == "INVOICES"
+                and (column.source_column or "").upper() == "STATUS"
+            ):
+                columns.append(column.model_copy(update={"source_column": "INVOICE_STATUS"}))
+            else:
+                columns.append(column)
+        models.append(model.model_copy(update={"columns": tuple(columns)}))
+    return design.model_copy(update={"models": tuple(models)})
 
 
 def _naive(value: datetime) -> datetime:

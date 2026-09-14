@@ -14,7 +14,32 @@ from aide.capabilities.io import (
 from aide.connectors.snowflake.namespace import workflow_short_id
 from aide.domain.identity import canonical_json_bytes
 from aide.generation.validate import validate_generated_files
-from aide.modelling.constants import REQUIRED_DEMO_MODELS
+
+# Sibling of modelling.constants.REQUIRED_DEMO_MODELS; kept here to avoid a
+# same-layer import. Unit tests assert the two tuples stay identical.
+INTERVIEW_REQUIRED_MODELS = (
+    "stg_crm__accounts",
+    "stg_crm__contacts",
+    "stg_crm__account_crosswalk",
+    "stg_billing__customers",
+    "stg_billing__subscriptions",
+    "stg_billing__invoices",
+    "stg_billing__invoice_lines",
+    "stg_payments__payments",
+    "stg_payments__refunds",
+    "stg_product__plans",
+    "int_customer_deduplicated",
+    "int_customer_conformed",
+    "int_payments_deduplicated",
+    "int_subscription_plan_history",
+    "snap_customer_conformed",
+    "dim_customer",
+    "dim_plan",
+    "dim_date",
+    "fct_invoice_line",
+    "fct_payment",
+    "mart_customer_revenue_daily",
+)
 
 CURRENCY = (
     "case upper(CURRENCY) when '€' then 'EUR' when 'EUR' then 'EUR' "
@@ -38,7 +63,7 @@ def generate_vantara_transformation(
         for item in files
         if item.path.endswith(".sql")
     )
-    required = set(REQUIRED_DEMO_MODELS)
+    required = set(INTERVIEW_REQUIRED_MODELS)
     missing = required.difference(names)
     if missing:
         raise ValueError(f"generation omitted required models: {sorted(missing)}")
@@ -47,7 +72,12 @@ def generate_vantara_transformation(
             {"files": [{"path": item.path, "content": item.content} for item in files]}
         )
     ).hexdigest()
-    del payload.model_design
+    designed = {unit.name for unit in payload.model_design.models}
+    if not required.issubset(designed):
+        raise ValueError(
+            "accepted model design is missing required Interview MVP models: "
+            f"{sorted(required.difference(designed))}"
+        )
     return GenerateTransformationOutput(
         files=files,
         model_names=tuple(sorted(required)),
@@ -90,9 +120,7 @@ def _sources_yml(short: str) -> TransformationFile:
         )
         blocks.append(
             f"""  - name: {name}
-    {{% if target.type == 'snowflake' %}}
-    database: AIDE_DEV
-    {{% endif %}}
+    database: "{{% if target.type == 'snowflake' %}}AIDE_DEV{{% endif %}}"
     schema: {schema}
     tables:
 {table_yaml}"""
@@ -411,6 +439,17 @@ select
   is_current
 from {{ ref('snap_customer_conformed') }}
 where is_current
+union all
+select
+  md5('-1') as customer_sk,
+  -1 as billing_customer_id,
+  cast(null as varchar) as crm_account_id,
+  'Unknown customer' as customer_name,
+  cast(null as varchar) as billing_country,
+  cast(null as varchar) as website_domain,
+  cast(null as timestamp) as valid_from,
+  cast(null as timestamp) as valid_to,
+  true as is_current
 """,
         ),
         _file(
@@ -455,9 +494,9 @@ from {{ ref('stg_billing__invoice_lines') }} lines
 inner join {{ ref('stg_billing__invoices') }} invoices
   on lines.invoice_id = invoices.invoice_id
 left join {{ ref('dim_customer') }} customers
-  on customers.billing_customer_id = invoices.customer_id
+  on cast(customers.billing_customer_id as varchar) = cast(invoices.customer_id as varchar)
 left join {{ ref('dim_plan') }} plans
-  on plans.plan_code = lines.plan_code
+  on cast(plans.plan_code as varchar) = cast(lines.plan_code as varchar)
 """,
         ),
         _file(
@@ -476,7 +515,7 @@ from {{ ref('int_payments_deduplicated') }} payments
 inner join {{ ref('stg_billing__invoices') }} invoices
   on payments.invoice_id = invoices.invoice_id
 left join {{ ref('dim_customer') }} customers
-  on customers.billing_customer_id = invoices.customer_id
+  on cast(customers.billing_customer_id as varchar) = cast(invoices.customer_id as varchar)
 """,
         ),
         _file(

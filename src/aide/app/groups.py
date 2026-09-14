@@ -79,6 +79,6 @@ def propose_relevant_assets(
     )
 
 
-def classify_reliability_noop() -> None:
+def classify_reliability_noop() -> bool:
     """Reliability is a documented group; MVP002 does not apply repairs."""
-    return None
+    return False

@@ -6,7 +6,7 @@ import pytest
 
 from aide.capabilities.io import GenerateTransformationInput, TransformationFile
 from aide.generation.validate import GeneratedSqlInvalid, validate_generated_files
-from aide.generation.vantara import generate_vantara_transformation
+from aide.generation.vantara import INTERVIEW_REQUIRED_MODELS, generate_vantara_transformation
 from aide.modelling.constants import REQUIRED_DEMO_MODELS
 from aide.modelling.demo_design import vantara_model_design
 
@@ -15,6 +15,10 @@ WORKFLOW = UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
 
 def _input() -> GenerateTransformationInput:
     return GenerateTransformationInput(workflow_id=WORKFLOW, model_design=vantara_model_design())
+
+
+def test_interview_required_models_match_modelling_contract() -> None:
+    assert INTERVIEW_REQUIRED_MODELS == REQUIRED_DEMO_MODELS
 
 
 def test_identical_inputs_produce_identical_artifacts() -> None:

@@ -98,4 +98,4 @@ def test_propose_relevant_assets_intersects_locked_set() -> None:
 
 
 def test_reliability_group_is_a_noop() -> None:
-    assert classify_reliability_noop() is None
+    assert classify_reliability_noop() is False

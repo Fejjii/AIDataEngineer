@@ -61,12 +61,13 @@ class GatewayDispatchRepository:
     async def get_by_attempt(
         self, attempt_id: UUID, action: str
     ) -> GatewayDispatchIntentModel | None:
-        return await self._session.scalar(
+        row = await self._session.scalar(
             select(GatewayDispatchIntentModel).where(
                 GatewayDispatchIntentModel.attempt_id == attempt_id,
                 GatewayDispatchIntentModel.action == action,
             )
         )
+        return row if isinstance(row, GatewayDispatchIntentModel) else None
 
     async def complete(
         self,

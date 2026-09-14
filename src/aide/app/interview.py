@@ -19,6 +19,7 @@ from aide.app.supervisor import (
     plan_phase_handler,
     propose_model_design_handler,
 )
+from aide.capabilities.io import LoadManifestSourcesInput
 from aide.capabilities.v1_kernel import kernel_registry
 from aide.connectors.base.context import CallContext, RecoveryContext
 from aide.connectors.base.health import ConnectorHealthSnapshot
@@ -40,14 +41,17 @@ ReconcileValue = EffectFound | NoEffect | InProgress | Unknown
 class ManifestDualLoadBinding:
     """One gateway operation: Snowflake DEV CSV load plus dbt workspace source load."""
 
-    def __init__(self, snowflake_dev: object, dbt: FakeDbtConnector, spec: ConnectorSpec) -> None:
+    spec: ConnectorSpec | None
+
+    def __init__(
+        self, snowflake_dev: FakeSnowflakeConnector, dbt: FakeDbtConnector, spec: ConnectorSpec
+    ) -> None:
         self._snowflake = snowflake_dev
         self._dbt = dbt
         self.spec = spec
 
     async def health(self) -> ConnectorHealthSnapshot | None:
-        health = self._snowflake.health
-        snapshot = await health()
+        snapshot = await self._snowflake.health()
         assert isinstance(snapshot, ConnectorHealthSnapshot)
         return snapshot
 
@@ -55,9 +59,9 @@ class ManifestDualLoadBinding:
         self, capability_id: str, payload: BaseModel, context: CallContext
     ) -> BaseModel:
         del capability_id
-        method = self._snowflake.load_manifest_sources
-        self._dbt.ensure_workflow_sources(payload, context)
-        result = await method(payload, context)
+        typed = LoadManifestSourcesInput.model_validate(payload)
+        self._dbt.ensure_workflow_sources(typed, context)
+        result = await self._snowflake.load_manifest_sources(typed, context)
         assert isinstance(result, BaseModel)
         return result
 
@@ -70,8 +74,7 @@ class ManifestDualLoadBinding:
         return None
 
     async def reconcile(self, recovery: RecoveryContext) -> ReconcileValue:
-        reconcile = self._snowflake.reconcile
-        result = await reconcile(recovery)
+        result = await self._snowflake.reconcile(recovery)
         if not isinstance(result, (EffectFound, NoEffect, InProgress, Unknown)):
             raise TypeError("connector reconcile returned an untyped result")
         return result

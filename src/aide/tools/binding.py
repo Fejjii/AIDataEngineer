@@ -37,6 +37,8 @@ class ConnectorBinding(Protocol):
 class AttributeConnectorBinding:
     """Dispatch via ``getattr(connector, capability_id)``. No vendor type imports."""
 
+    spec: ConnectorSpec | None
+
     def __init__(self, connector: object, spec: ConnectorSpec) -> None:
         self._connector = connector
         self.spec = spec
@@ -66,7 +68,9 @@ class AttributeConnectorBinding:
         return None
 
     async def reconcile(self, recovery: RecoveryContext) -> ReconcileValue:
-        reconcile = self._connector.reconcile
+        reconcile = getattr(self._connector, "reconcile", None)
+        if reconcile is None:
+            raise TypeError("connector does not implement reconcile")
         result = await reconcile(recovery)
         if not isinstance(result, (EffectFound, NoEffect, InProgress, Unknown)):
             raise TypeError("connector reconcile returned an untyped result")
@@ -75,6 +79,8 @@ class AttributeConnectorBinding:
 
 class LocalHandlerBinding:
     """In-process typed handler with no vendor client."""
+
+    spec: ConnectorSpec | None
 
     def __init__(self, handler: CapabilityHandler) -> None:
         self._handler = handler
