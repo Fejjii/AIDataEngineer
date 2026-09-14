@@ -1,0 +1,15 @@
+[
+  {"errno": 1003, "sqlstate": "42601", "message": "SQL compilation error: syntax error line 1", "expected": "SQL_SYNTAX"},
+  {"errno": 2003, "sqlstate": "42S02", "message": "SQL compilation error: Object 'RAW.SALES.MISSING' does not exist", "expected": "MISSING_OBJECT"},
+  {"errno": 904, "sqlstate": "42000", "message": "SQL compilation error: error line 1 at position 7 invalid identifier 'NOPE'", "expected": "SCHEMA_MISMATCH"},
+  {"errno": 100038, "sqlstate": "22018", "message": "Numeric value 'abc' is not recognized", "expected": "TYPE_MISMATCH"},
+  {"errno": 100040, "sqlstate": "22007", "message": "Timestamp 'abc' is not recognized", "expected": "TYPE_MISMATCH"},
+  {"errno": 3001, "sqlstate": "42501", "message": "SQL access control error: Insufficient privileges to operate on table", "expected": "PERMISSION_FAILURE"},
+  {"errno": 1011, "sqlstate": "42501", "message": "SQL compilation error: not authorized to operate on object", "expected": "PERMISSION_FAILURE"},
+  {"errno": 630, "sqlstate": "57014", "message": "Statement reached time limit or was canceled", "expected": "TIMEOUT"},
+  {"errno": 604, "sqlstate": "57014", "message": "SQL execution canceled", "expected": "TIMEOUT"},
+  {"errno": 390114, "sqlstate": "08001", "message": "JWT token is invalid. Please try again.", "expected": "TRANSIENT_PROVIDER"},
+  {"errno": 606, "sqlstate": "57014", "message": "Warehouse exceeded resource monitor quota", "expected": "RESOURCE_LIMIT"},
+  {"errno": 608, "sqlstate": "57014", "message": "Statement reached credit quota for this warehouse", "expected": "RESOURCE_LIMIT"},
+  {"errno": null, "sqlstate": null, "message": "Could not connect: connection reset by peer", "expected": "TRANSIENT_PROVIDER"}
+]
