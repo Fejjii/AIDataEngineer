@@ -1,0 +1,2731 @@
+{
+  "layers": [
+    "staging",
+    "intermediate",
+    "marts"
+  ],
+  "physical_layer_names": [
+    [
+      "staging",
+      "staging"
+    ],
+    [
+      "intermediate",
+      "intermediate"
+    ],
+    [
+      "marts",
+      "marts"
+    ]
+  ],
+  "models": [
+    {
+      "name": "stg_crm__accounts",
+      "model_kind": "STAGING",
+      "layer": "staging",
+      "source_assets": [
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "CRM",
+            "ACCOUNTS"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        }
+      ],
+      "grain": [
+        "account_id"
+      ],
+      "columns": [
+        {
+          "name": "account_id",
+          "expression": "ACCOUNT_ID",
+          "data_type": "VARCHAR",
+          "tests": [
+            "unique",
+            "not_null"
+          ],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "CRM",
+              "ACCOUNTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "ACCOUNT_ID",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "account_name",
+          "expression": "trim(ACCOUNT_NAME)",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "CRM",
+              "ACCOUNTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "ACCOUNT_NAME",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "website_domain",
+          "expression": "regexp_replace(lower(trim(WEBSITE_DOMAIN)), '^www.', '')",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "CRM",
+              "ACCOUNTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "WEBSITE_DOMAIN",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "industry",
+          "expression": "INDUSTRY",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "CRM",
+              "ACCOUNTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "INDUSTRY",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "country",
+          "expression": "COUNTRY",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "CRM",
+              "ACCOUNTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "COUNTRY",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "is_deleted",
+          "expression": "IS_DELETED",
+          "data_type": "BOOLEAN",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "CRM",
+              "ACCOUNTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "IS_DELETED",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "created_at",
+          "expression": "CREATED_AT",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "CRM",
+              "ACCOUNTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "CREATED_AT",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "updated_at",
+          "expression": "UPDATED_AT",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "CRM",
+              "ACCOUNTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "UPDATED_AT",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "_loaded_at",
+          "expression": "_LOADED_AT",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "CRM",
+              "ACCOUNTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "_LOADED_AT",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "view",
+      "unique_key": [
+        "account_id"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": null,
+      "history_strategy": null,
+      "tracked_scd2_columns": [],
+      "tests": [],
+      "dependencies": [],
+      "assumptions": [],
+      "rule_refs": [
+        "L1",
+        "M1"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    },
+    {
+      "name": "stg_crm__contacts",
+      "model_kind": "STAGING",
+      "layer": "staging",
+      "source_assets": [
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "CRM",
+            "CONTACTS"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        }
+      ],
+      "grain": [
+        "contact_id"
+      ],
+      "columns": [
+        {
+          "name": "contact_id",
+          "expression": "CONTACT_ID",
+          "data_type": "VARCHAR",
+          "tests": [
+            "unique",
+            "not_null"
+          ],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "CRM",
+              "CONTACTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "CONTACT_ID",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "account_id",
+          "expression": "ACCOUNT_ID",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "CRM",
+              "CONTACTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "ACCOUNT_ID",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "email",
+          "expression": "EMAIL",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "CRM",
+              "CONTACTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "EMAIL",
+          "is_pii": true,
+          "pii_handling": "masked",
+          "description": null
+        },
+        {
+          "name": "phone",
+          "expression": "PHONE",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "CRM",
+              "CONTACTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "PHONE",
+          "is_pii": true,
+          "pii_handling": "masked",
+          "description": null
+        }
+      ],
+      "materialization": "view",
+      "unique_key": [
+        "contact_id"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": null,
+      "history_strategy": null,
+      "tracked_scd2_columns": [],
+      "tests": [],
+      "dependencies": [],
+      "assumptions": [],
+      "rule_refs": [
+        "L1",
+        "M1"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    },
+    {
+      "name": "stg_crm__account_crosswalk",
+      "model_kind": "STAGING",
+      "layer": "staging",
+      "source_assets": [
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "CRM",
+            "ACCOUNT_CROSSWALK"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        }
+      ],
+      "grain": [
+        "account_id"
+      ],
+      "columns": [
+        {
+          "name": "account_id",
+          "expression": "ACCOUNT_ID",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "CRM",
+              "ACCOUNT_CROSSWALK"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "ACCOUNT_ID",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "billing_customer_id",
+          "expression": "BILLING_CUSTOMER_ID",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "CRM",
+              "ACCOUNT_CROSSWALK"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "BILLING_CUSTOMER_ID",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "view",
+      "unique_key": [
+        "account_id"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": null,
+      "history_strategy": null,
+      "tracked_scd2_columns": [],
+      "tests": [],
+      "dependencies": [],
+      "assumptions": [],
+      "rule_refs": [
+        "L1",
+        "M1"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    },
+    {
+      "name": "stg_billing__customers",
+      "model_kind": "STAGING",
+      "layer": "staging",
+      "source_assets": [
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "BILLING",
+            "CUSTOMERS"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        }
+      ],
+      "grain": [
+        "customer_id"
+      ],
+      "columns": [
+        {
+          "name": "customer_id",
+          "expression": "CUSTOMER_ID",
+          "data_type": "NUMBER",
+          "tests": [
+            "unique",
+            "not_null"
+          ],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "CUSTOMERS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "CUSTOMER_ID",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "customer_name",
+          "expression": "CUSTOMER_NAME",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "CUSTOMERS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "CUSTOMER_NAME",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "crm_account_id",
+          "expression": "CRM_ACCOUNT_ID",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "CUSTOMERS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "CRM_ACCOUNT_ID",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "billing_country",
+          "expression": "BILLING_COUNTRY",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "CUSTOMERS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "BILLING_COUNTRY",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "updated_at",
+          "expression": "UPDATED_AT",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "CUSTOMERS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "UPDATED_AT",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "view",
+      "unique_key": [
+        "customer_id"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": null,
+      "history_strategy": null,
+      "tracked_scd2_columns": [],
+      "tests": [],
+      "dependencies": [],
+      "assumptions": [],
+      "rule_refs": [
+        "L1",
+        "M1"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    },
+    {
+      "name": "stg_billing__subscriptions",
+      "model_kind": "STAGING",
+      "layer": "staging",
+      "source_assets": [
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "BILLING",
+            "SUBSCRIPTIONS"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        }
+      ],
+      "grain": [
+        "subscription_id"
+      ],
+      "columns": [
+        {
+          "name": "subscription_id",
+          "expression": "SUBSCRIPTION_ID",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "SUBSCRIPTIONS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "SUBSCRIPTION_ID",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "customer_id",
+          "expression": "CUSTOMER_ID",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "SUBSCRIPTIONS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "CUSTOMER_ID",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "plan_code",
+          "expression": "PLAN_CODE",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "SUBSCRIPTIONS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "PLAN_CODE",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "status",
+          "expression": "lower(STATUS)",
+          "data_type": "VARCHAR",
+          "tests": [
+            "accepted_values"
+          ],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "SUBSCRIPTIONS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "STATUS",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "start_date",
+          "expression": "START_DATE",
+          "data_type": "DATE",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "SUBSCRIPTIONS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "START_DATE",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "end_date",
+          "expression": "END_DATE",
+          "data_type": "DATE",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "SUBSCRIPTIONS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "END_DATE",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "updated_at",
+          "expression": "UPDATED_AT",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "SUBSCRIPTIONS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "UPDATED_AT",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "view",
+      "unique_key": [
+        "subscription_id"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": null,
+      "history_strategy": null,
+      "tracked_scd2_columns": [],
+      "tests": [],
+      "dependencies": [],
+      "assumptions": [],
+      "rule_refs": [
+        "L1",
+        "M1"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    },
+    {
+      "name": "stg_billing__invoices",
+      "model_kind": "STAGING",
+      "layer": "staging",
+      "source_assets": [
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "BILLING",
+            "INVOICES"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        }
+      ],
+      "grain": [
+        "invoice_id"
+      ],
+      "columns": [
+        {
+          "name": "invoice_id",
+          "expression": "INVOICE_ID",
+          "data_type": "NUMBER",
+          "tests": [
+            "unique",
+            "not_null"
+          ],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "INVOICES"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "INVOICE_ID",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "customer_id",
+          "expression": "CUSTOMER_ID",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "INVOICES"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "CUSTOMER_ID",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "currency",
+          "expression": "case upper(CURRENCY) when '\u20ac' then 'EUR' when 'EUR' then 'EUR' when 'USD' then 'USD' when 'GBP' then 'GBP' else upper(CURRENCY) end",
+          "data_type": "VARCHAR",
+          "tests": [
+            "accepted_values"
+          ],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "INVOICES"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "CURRENCY",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "issue_date",
+          "expression": "ISSUE_DATE",
+          "data_type": "DATE",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "INVOICES"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "ISSUE_DATE",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "due_date",
+          "expression": "DUE_DATE",
+          "data_type": "DATE",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "INVOICES"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "DUE_DATE",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "total_amount",
+          "expression": "TOTAL_AMOUNT",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "INVOICES"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "TOTAL_AMOUNT",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "status",
+          "expression": "STATUS",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "INVOICES"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "STATUS",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "updated_at",
+          "expression": "_LOADED_AT",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "INVOICES"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "_LOADED_AT",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "view",
+      "unique_key": [
+        "invoice_id"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": null,
+      "history_strategy": null,
+      "tracked_scd2_columns": [],
+      "tests": [],
+      "dependencies": [],
+      "assumptions": [],
+      "rule_refs": [
+        "L1",
+        "M1"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    },
+    {
+      "name": "stg_billing__invoice_lines",
+      "model_kind": "STAGING",
+      "layer": "staging",
+      "source_assets": [
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "BILLING",
+            "INVOICE_LINES"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        }
+      ],
+      "grain": [
+        "invoice_line_id"
+      ],
+      "columns": [
+        {
+          "name": "invoice_line_id",
+          "expression": "INVOICE_LINE_ID",
+          "data_type": "NUMBER",
+          "tests": [
+            "unique",
+            "not_null"
+          ],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "INVOICE_LINES"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "INVOICE_LINE_ID",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "invoice_id",
+          "expression": "INVOICE_ID",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "INVOICE_LINES"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "INVOICE_ID",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "plan_code",
+          "expression": "PLAN_CODE",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "INVOICE_LINES"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "PLAN_CODE",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "quantity",
+          "expression": "QUANTITY",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "INVOICE_LINES"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "QUANTITY",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "unit_price",
+          "expression": "UNIT_PRICE",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "INVOICE_LINES"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "UNIT_PRICE",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "amount",
+          "expression": "try_to_number(AMOUNT::varchar)",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "INVOICE_LINES"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "AMOUNT",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "_loaded_at",
+          "expression": "_LOADED_AT",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "BILLING",
+              "INVOICE_LINES"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "_LOADED_AT",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "view",
+      "unique_key": [
+        "invoice_line_id"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": null,
+      "history_strategy": null,
+      "tracked_scd2_columns": [],
+      "tests": [],
+      "dependencies": [],
+      "assumptions": [],
+      "rule_refs": [
+        "L1",
+        "M1"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    },
+    {
+      "name": "stg_payments__payments",
+      "model_kind": "STAGING",
+      "layer": "staging",
+      "source_assets": [
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "PAYMENTS",
+            "PAYMENTS"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        }
+      ],
+      "grain": [
+        "payment_id"
+      ],
+      "columns": [
+        {
+          "name": "payment_id",
+          "expression": "PAYMENT_ID",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "PAYMENTS",
+              "PAYMENTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "PAYMENT_ID",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "invoice_id",
+          "expression": "INVOICE_ID",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "PAYMENTS",
+              "PAYMENTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "INVOICE_ID",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "payment_ref",
+          "expression": "PAYMENT_REF",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "PAYMENTS",
+              "PAYMENTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "PAYMENT_REF",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "amount",
+          "expression": "AMOUNT",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "PAYMENTS",
+              "PAYMENTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "AMOUNT",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "paid_at",
+          "expression": "convert_timezone('UTC', PAID_AT)",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "PAYMENTS",
+              "PAYMENTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "PAID_AT",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "_loaded_at",
+          "expression": "_LOADED_AT",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "PAYMENTS",
+              "PAYMENTS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "_LOADED_AT",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "view",
+      "unique_key": [
+        "payment_id"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": null,
+      "history_strategy": null,
+      "tracked_scd2_columns": [],
+      "tests": [],
+      "dependencies": [],
+      "assumptions": [],
+      "rule_refs": [
+        "L1",
+        "M1"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    },
+    {
+      "name": "stg_payments__refunds",
+      "model_kind": "STAGING",
+      "layer": "staging",
+      "source_assets": [
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "PAYMENTS",
+            "REFUNDS"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        }
+      ],
+      "grain": [
+        "refund_id"
+      ],
+      "columns": [
+        {
+          "name": "refund_id",
+          "expression": "REFUND_ID",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "PAYMENTS",
+              "REFUNDS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "REFUND_ID",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "payment_id",
+          "expression": "PAYMENT_ID",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "PAYMENTS",
+              "REFUNDS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "PAYMENT_ID",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "amount",
+          "expression": "AMOUNT",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "PAYMENTS",
+              "REFUNDS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "AMOUNT",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "refunded_at",
+          "expression": "REFUNDED_AT",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "PAYMENTS",
+              "REFUNDS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "REFUNDED_AT",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "view",
+      "unique_key": [
+        "refund_id"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": null,
+      "history_strategy": null,
+      "tracked_scd2_columns": [],
+      "tests": [],
+      "dependencies": [],
+      "assumptions": [],
+      "rule_refs": [
+        "L1",
+        "M1"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    },
+    {
+      "name": "stg_product__plans",
+      "model_kind": "STAGING",
+      "layer": "staging",
+      "source_assets": [
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "PRODUCT",
+            "PLANS"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        }
+      ],
+      "grain": [
+        "plan_code"
+      ],
+      "columns": [
+        {
+          "name": "plan_code",
+          "expression": "PLAN_CODE",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "PRODUCT",
+              "PLANS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "PLAN_CODE",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "plan_name",
+          "expression": "PLAN_NAME",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "PRODUCT",
+              "PLANS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "PLAN_NAME",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "valid_from",
+          "expression": "VALID_FROM",
+          "data_type": "DATE",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "PRODUCT",
+              "PLANS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "VALID_FROM",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "valid_to",
+          "expression": "VALID_TO",
+          "data_type": "DATE",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "PRODUCT",
+              "PLANS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "VALID_TO",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "monthly_price",
+          "expression": "MONTHLY_PRICE",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": {
+            "connector_id": "snowflake_ro",
+            "address": [
+              "VANTARA_RAW",
+              "PRODUCT",
+              "PLANS"
+            ],
+            "kind": "TABLE",
+            "platform_type": "snowflake"
+          },
+          "source_column": "MONTHLY_PRICE",
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "view",
+      "unique_key": [
+        "plan_code"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": null,
+      "history_strategy": null,
+      "tracked_scd2_columns": [],
+      "tests": [],
+      "dependencies": [],
+      "assumptions": [],
+      "rule_refs": [
+        "L1",
+        "M1"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    },
+    {
+      "name": "int_customer_deduplicated",
+      "model_kind": "INTERMEDIATE",
+      "layer": "intermediate",
+      "source_assets": [
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "CRM",
+            "ACCOUNTS"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        }
+      ],
+      "grain": [
+        "account_id"
+      ],
+      "columns": [
+        {
+          "name": "account_id",
+          "expression": "account_id",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "account_name",
+          "expression": "account_name",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "website_domain",
+          "expression": "website_domain",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "updated_at",
+          "expression": "updated_at",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "table",
+      "unique_key": [
+        "account_id"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": {
+        "partition": [
+          "website_domain"
+        ],
+        "order_by": [
+          "updated_at desc",
+          "is_deleted asc"
+        ],
+        "keep": "first",
+        "description": "latest UPDATED_AT within normalized WEBSITE_DOMAIN, not deleted",
+        "assumption": true
+      },
+      "history_strategy": null,
+      "tracked_scd2_columns": [],
+      "tests": [],
+      "dependencies": [
+        "stg_crm__accounts"
+      ],
+      "assumptions": [
+        "survivorship by latest UPDATED_AT is acceptable for CRM duplicates"
+      ],
+      "rule_refs": [
+        "F4"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    },
+    {
+      "name": "int_customer_conformed",
+      "model_kind": "INTERMEDIATE",
+      "layer": "intermediate",
+      "source_assets": [
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "CRM",
+            "ACCOUNTS"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        },
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "CRM",
+            "ACCOUNT_CROSSWALK"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        },
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "BILLING",
+            "CUSTOMERS"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        }
+      ],
+      "grain": [
+        "customer_id"
+      ],
+      "columns": [
+        {
+          "name": "customer_id",
+          "expression": "customer_id",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "account_id",
+          "expression": "account_id",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "customer_name",
+          "expression": "coalesce(customer_name, account_name)",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "updated_at",
+          "expression": "updated_at",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "table",
+      "unique_key": [
+        "customer_id"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": null,
+      "history_strategy": null,
+      "tracked_scd2_columns": [],
+      "tests": [],
+      "dependencies": [
+        "int_customer_deduplicated",
+        "stg_crm__account_crosswalk",
+        "stg_billing__customers"
+      ],
+      "assumptions": [
+        "unknown member used for billing customers without a crosswalk"
+      ],
+      "rule_refs": [
+        "F4"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    },
+    {
+      "name": "int_payments_deduplicated",
+      "model_kind": "INTERMEDIATE",
+      "layer": "intermediate",
+      "source_assets": [
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "PAYMENTS",
+            "PAYMENTS"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        }
+      ],
+      "grain": [
+        "payment_id"
+      ],
+      "columns": [
+        {
+          "name": "payment_id",
+          "expression": "payment_id",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "invoice_id",
+          "expression": "invoice_id",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "payment_ref",
+          "expression": "payment_ref",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "amount",
+          "expression": "amount",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "paid_at",
+          "expression": "paid_at",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "_loaded_at",
+          "expression": "_loaded_at",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "table",
+      "unique_key": [
+        "payment_id"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": {
+        "partition": [
+          "invoice_id",
+          "payment_ref"
+        ],
+        "order_by": [
+          "_loaded_at desc"
+        ],
+        "keep": "first",
+        "description": "keep latest _LOADED_AT for (invoice_id, payment_ref)",
+        "assumption": true
+      },
+      "history_strategy": null,
+      "tracked_scd2_columns": [],
+      "tests": [],
+      "dependencies": [
+        "stg_payments__payments"
+      ],
+      "assumptions": [],
+      "rule_refs": [
+        "F4"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    },
+    {
+      "name": "int_subscription_plan_history",
+      "model_kind": "INTERMEDIATE",
+      "layer": "intermediate",
+      "source_assets": [
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "PRODUCT",
+            "PLANS"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        },
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "BILLING",
+            "SUBSCRIPTIONS"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        }
+      ],
+      "grain": [
+        "plan_code",
+        "valid_from"
+      ],
+      "columns": [
+        {
+          "name": "plan_code",
+          "expression": "plan_code",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "plan_name",
+          "expression": "plan_name",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "valid_from",
+          "expression": "valid_from",
+          "data_type": "DATE",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "valid_to",
+          "expression": "valid_to",
+          "data_type": "DATE",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "monthly_price",
+          "expression": "monthly_price",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "table",
+      "unique_key": [
+        "plan_code",
+        "valid_from"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": null,
+      "history_strategy": "source_validity_intervals",
+      "tracked_scd2_columns": [],
+      "tests": [],
+      "dependencies": [
+        "stg_product__plans",
+        "stg_billing__subscriptions"
+      ],
+      "assumptions": [],
+      "rule_refs": [
+        "D1",
+        "D6"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    },
+    {
+      "name": "snap_customer_conformed",
+      "model_kind": "SNAPSHOT",
+      "layer": "intermediate",
+      "source_assets": [],
+      "grain": [
+        "customer_id"
+      ],
+      "columns": [
+        {
+          "name": "customer_id",
+          "expression": "customer_id",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "updated_at",
+          "expression": "updated_at",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "snapshot",
+      "unique_key": [
+        "customer_id"
+      ],
+      "watermark": "updated_at",
+      "incremental": null,
+      "dedup_rule": null,
+      "history_strategy": "snapshot_timestamp",
+      "tracked_scd2_columns": [],
+      "tests": [],
+      "dependencies": [
+        "int_customer_conformed"
+      ],
+      "assumptions": [],
+      "rule_refs": [
+        "D7"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    },
+    {
+      "name": "dim_customer",
+      "model_kind": "DIMENSION",
+      "layer": "marts",
+      "source_assets": [],
+      "grain": [
+        "customer_sk"
+      ],
+      "columns": [
+        {
+          "name": "customer_sk",
+          "expression": "surrogate_key(customer_id, valid_from)",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "customer_id",
+          "expression": "customer_id",
+          "data_type": "NUMBER",
+          "tests": [
+            "not_null"
+          ],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "customer_name",
+          "expression": "customer_name",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "valid_from",
+          "expression": "valid_from",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "valid_to",
+          "expression": "valid_to",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "is_current",
+          "expression": "is_current",
+          "data_type": "BOOLEAN",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "table",
+      "unique_key": [
+        "customer_sk"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": null,
+      "history_strategy": "snapshot_timestamp",
+      "tracked_scd2_columns": [
+        "customer_name",
+        "account_id"
+      ],
+      "tests": [
+        "unique",
+        "one_current_per_customer"
+      ],
+      "dependencies": [
+        "snap_customer_conformed"
+      ],
+      "assumptions": [],
+      "rule_refs": [
+        "D1",
+        "D7"
+      ],
+      "surrogate_key": "customer_sk",
+      "natural_keys": [
+        "customer_id"
+      ],
+      "scd_type": "SCD2"
+    },
+    {
+      "name": "dim_plan",
+      "model_kind": "DIMENSION",
+      "layer": "marts",
+      "source_assets": [],
+      "grain": [
+        "plan_sk"
+      ],
+      "columns": [
+        {
+          "name": "plan_sk",
+          "expression": "surrogate_key(plan_code, valid_from)",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "plan_code",
+          "expression": "plan_code",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "plan_name",
+          "expression": "plan_name",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "valid_from",
+          "expression": "valid_from",
+          "data_type": "DATE",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "valid_to",
+          "expression": "valid_to",
+          "data_type": "DATE",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "is_current",
+          "expression": "valid_to is null",
+          "data_type": "BOOLEAN",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "table",
+      "unique_key": [
+        "plan_sk"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": null,
+      "history_strategy": "source_validity_intervals",
+      "tracked_scd2_columns": [
+        "plan_name",
+        "monthly_price"
+      ],
+      "tests": [],
+      "dependencies": [
+        "int_subscription_plan_history"
+      ],
+      "assumptions": [],
+      "rule_refs": [
+        "D1",
+        "D6"
+      ],
+      "surrogate_key": "plan_sk",
+      "natural_keys": [
+        "plan_code",
+        "valid_from"
+      ],
+      "scd_type": "SCD2"
+    },
+    {
+      "name": "dim_date",
+      "model_kind": "DIMENSION",
+      "layer": "marts",
+      "source_assets": [],
+      "grain": [
+        "date_day"
+      ],
+      "columns": [
+        {
+          "name": "date_day",
+          "expression": "date_day",
+          "data_type": "DATE",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "year",
+          "expression": "year(date_day)",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "month",
+          "expression": "month(date_day)",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "table",
+      "unique_key": [
+        "date_day"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": null,
+      "history_strategy": "static",
+      "tracked_scd2_columns": [],
+      "tests": [],
+      "dependencies": [],
+      "assumptions": [],
+      "rule_refs": [
+        "D8"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": "STATIC"
+    },
+    {
+      "name": "fct_invoice_line",
+      "model_kind": "FACT",
+      "layer": "marts",
+      "source_assets": [
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "BILLING",
+            "INVOICE_LINES"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        },
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "BILLING",
+            "INVOICES"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        }
+      ],
+      "grain": [
+        "invoice_line_id"
+      ],
+      "columns": [
+        {
+          "name": "invoice_line_id",
+          "expression": "invoice_line_id",
+          "data_type": "NUMBER",
+          "tests": [
+            "unique",
+            "not_null"
+          ],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "invoice_id",
+          "expression": "invoice_id",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "customer_sk",
+          "expression": "customer_sk",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "plan_sk",
+          "expression": "plan_sk",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "date_day",
+          "expression": "issue_date",
+          "data_type": "DATE",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "amount",
+          "expression": "amount",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "currency",
+          "expression": "currency",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "incremental",
+      "unique_key": [
+        "invoice_line_id"
+      ],
+      "watermark": "_loaded_at",
+      "incremental": {
+        "strategy": "merge",
+        "unique_key": [
+          "invoice_line_id"
+        ],
+        "watermark_column": "_loaded_at",
+        "lookback_days": 3
+      },
+      "dedup_rule": null,
+      "history_strategy": null,
+      "tracked_scd2_columns": [],
+      "tests": [
+        "unique",
+        "not_null",
+        "reconciliation_sum"
+      ],
+      "dependencies": [
+        "stg_billing__invoice_lines",
+        "stg_billing__invoices",
+        "dim_customer",
+        "dim_plan",
+        "dim_date"
+      ],
+      "assumptions": [],
+      "rule_refs": [
+        "F1",
+        "M3"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    },
+    {
+      "name": "fct_payment",
+      "model_kind": "FACT",
+      "layer": "marts",
+      "source_assets": [
+        {
+          "connector_id": "snowflake_ro",
+          "address": [
+            "VANTARA_RAW",
+            "PAYMENTS",
+            "PAYMENTS"
+          ],
+          "kind": "TABLE",
+          "platform_type": "snowflake"
+        }
+      ],
+      "grain": [
+        "payment_id"
+      ],
+      "columns": [
+        {
+          "name": "payment_id",
+          "expression": "payment_id",
+          "data_type": "NUMBER",
+          "tests": [
+            "unique",
+            "not_null"
+          ],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "invoice_id",
+          "expression": "invoice_id",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "amount",
+          "expression": "amount",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "paid_at",
+          "expression": "paid_at",
+          "data_type": "TIMESTAMP",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "incremental",
+      "unique_key": [
+        "payment_id"
+      ],
+      "watermark": "_loaded_at",
+      "incremental": {
+        "strategy": "merge",
+        "unique_key": [
+          "payment_id"
+        ],
+        "watermark_column": "_loaded_at",
+        "lookback_days": 3
+      },
+      "dedup_rule": {
+        "partition": [
+          "invoice_id",
+          "payment_ref"
+        ],
+        "order_by": [
+          "_loaded_at desc"
+        ],
+        "keep": "first",
+        "description": "implemented in int_payments_deduplicated",
+        "assumption": true
+      },
+      "history_strategy": null,
+      "tracked_scd2_columns": [],
+      "tests": [
+        "unique",
+        "reconciliation_sum"
+      ],
+      "dependencies": [
+        "int_payments_deduplicated",
+        "dim_customer",
+        "dim_date"
+      ],
+      "assumptions": [],
+      "rule_refs": [
+        "F1",
+        "F4",
+        "M3"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    },
+    {
+      "name": "mart_customer_revenue_daily",
+      "model_kind": "MART",
+      "layer": "marts",
+      "source_assets": [],
+      "grain": [
+        "customer_sk",
+        "date_day"
+      ],
+      "columns": [
+        {
+          "name": "customer_sk",
+          "expression": "customer_sk",
+          "data_type": "VARCHAR",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "date_day",
+          "expression": "date_day",
+          "data_type": "DATE",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "invoiced_amount",
+          "expression": "sum(invoiced_amount)",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "paid_amount",
+          "expression": "sum(paid_amount)",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        },
+        {
+          "name": "mrr_estimate",
+          "expression": "mrr_estimate",
+          "data_type": "NUMBER",
+          "tests": [],
+          "source_asset": null,
+          "source_column": null,
+          "is_pii": false,
+          "pii_handling": null,
+          "description": null
+        }
+      ],
+      "materialization": "table",
+      "unique_key": [
+        "customer_sk",
+        "date_day"
+      ],
+      "watermark": null,
+      "incremental": null,
+      "dedup_rule": null,
+      "history_strategy": null,
+      "tracked_scd2_columns": [],
+      "tests": [
+        "unique",
+        "paid_lte_invoiced"
+      ],
+      "dependencies": [
+        "fct_invoice_line",
+        "fct_payment",
+        "dim_customer",
+        "dim_date"
+      ],
+      "assumptions": [],
+      "rule_refs": [
+        "F2",
+        "M6"
+      ],
+      "surrogate_key": null,
+      "natural_keys": [],
+      "scd_type": null
+    }
+  ],
+  "relationships": [
+    "fct_invoice_line.customer_sk -> dim_customer.customer_sk",
+    "fct_invoice_line.plan_sk -> dim_plan.plan_sk",
+    "fct_payment.invoice_id -> fct_invoice_line.invoice_id"
+  ],
+  "tests": [
+    "grain_unique",
+    "not_null_sk",
+    "reconciliation_sum"
+  ],
+  "open_questions": [],
+  "assumptions": [
+    "CRM survivorship uses latest UPDATED_AT within normalized domain",
+    "revenue is invoiced with paid alongside"
+  ],
+  "architecture_decision_digest": "0000000000000000000000000000000000000000000000000000000000000000"
+}

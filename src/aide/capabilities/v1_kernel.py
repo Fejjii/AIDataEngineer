@@ -30,10 +30,12 @@ from aide.capabilities.io import (
     InferRelationshipsOutput,
     InterpretRequirementInput,
     MetricsQueryInput,
+    ModelDesign,
     Plan,
     PlanPhaseInput,
     ProfileDatasetInput,
     ProfileDatasetOutput,
+    ProposeModelDesignInput,
     RequirementSpec,
     SampleDatasetInput,
     SampleDatasetOutput,
@@ -84,6 +86,7 @@ def _spec(
     cost_class: str = "warehouse",
     input_schema: type[BaseModel] = EmptyInput,
     output_schema: type[BaseModel] = EmptyOutput,
+    timeout_seconds: int = 60,
 ) -> CapabilitySpec:
     return CapabilitySpec(
         id=capability_id,
@@ -97,7 +100,7 @@ def _spec(
         required_permission=permission,
         risk=risk,
         approval=approval,
-        timeout_seconds=60,
+        timeout_seconds=timeout_seconds,
         retry=RetryPolicy(max_attempts=max_attempts, backoff="exp", retry_on=_TRANSIENT),
         failure_classes=_TRANSIENT,
         connector_requirement=ConnectorRequirement(mode=connector_mode, kinds=connector_kinds),  # type: ignore[arg-type]
@@ -241,6 +244,18 @@ KERNEL_CAPABILITIES: tuple[CapabilitySpec, ...] = (
         cost_class="llm",
         input_schema=GenerateSqlQueryInput,
         output_schema=GenerateSqlQueryOutput,
+    ),
+    _spec(
+        "propose_model_design",
+        PermissionLevel.READ,
+        kind="reasoning",
+        connector_mode="NONE",
+        connector_kinds=frozenset(),
+        risk=RiskLevel.MEDIUM,
+        cost_class="llm",
+        input_schema=ProposeModelDesignInput,
+        output_schema=ModelDesign,
+        timeout_seconds=180,
     ),
     _spec(
         "evaluate_execution_policy",
