@@ -156,10 +156,10 @@ repair, independent verification, and evidence evaluation.
 The tracked task ledger also lags merged implementation state:
 `.ai/TASKS.md` still labels DE005 `IN_PROGRESS` and the umbrella DE008 `TODO`, while this
 baseline includes the Snowflake and DE008A dbt connector merges. The same ledger records
-DE005B live validation as complete but pending Development Control and records temporary
-`AIDE_DEV_RW` `CREATE TABLE` on `VANTARA_RAW` for revocation. Run reports and Git history
-are therefore the stronger maturity evidence; the grant cleanup remains a human
-operational action, not a pivot implementation task.
+DE005B live validation as complete but pending Development Control and still references a temporary
+`AIDE_DEV_RW` `CREATE TABLE` grant on `VANTARA_RAW`. That temporary grant was revoked by
+the operator after DE005B and before PIVOT000. Run reports, Git history, and the operator
+record are therefore stronger maturity evidence than the stale task-ledger wording.
 
 ## 5. Reuse assessment
 
@@ -309,9 +309,10 @@ The live dbt run report records that the current Snowflake DEV role does not rea
 `VANTARA_RAW`; the test safely copied source fixtures into a workflow-specific `AIDE_DEV`
 schema. The prototype must preserve that least-privilege posture. It must not expand grants
 merely to make the demo path easier. The next architecture audit should explicitly choose
-between a governed RO-to-DEV handoff and workflow-local source copies. Separately, the
-temporary bootstrap `CREATE TABLE` grant on `VANTARA_RAW` recorded in `.ai/TASKS.md` must
-be revoked by the human operator; this audit cannot verify or perform that live action.
+between a governed RO-to-DEV handoff and workflow-local source copies. Separately, the temporary bootstrap `CREATE TABLE` grant on `VANTARA_RAW` recorded in
+`.ai/TASKS.md` was already revoked by the operator after DE005B. The tracked task ledger
+should be corrected during the next approved documentation update rather than reopening
+warehouse privileges.
 
 ## 8. Smallest credible prototype
 
