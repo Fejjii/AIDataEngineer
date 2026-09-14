@@ -13,6 +13,7 @@ from aide.connectors.snowflake.config import (
     required_secret_names_for,
     settings_for_identity,
     snowflake_credentials_available,
+    snowflake_dev_credentials_available,
 )
 from aide.connectors.snowflake.errors import FakeSnowflakeError, SnowflakeMappedError, map_error
 from aide.connectors.snowflake.fake import FakeSnowflakeConnector, build_fake_pair
@@ -52,5 +53,6 @@ __all__ = [
     "required_secret_names_for",
     "settings_for_identity",
     "snowflake_credentials_available",
+    "snowflake_dev_credentials_available",
     "workflow_short_id",
 ]

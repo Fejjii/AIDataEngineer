@@ -28,3 +28,19 @@ paths = ['''\.github/workflows/ci\.yml''', '''docs/agent/runs/DE003/DE003-SESSIO
 regexTarget = "line"
 condition = "AND"
 regexes = ['''ci-smoke-csrf-secret-at-least-32-characters-long|ci-smoke-password-not-a-production-secret''']
+
+[[rules.allowlists]]
+description = "Historical hex placeholder token=abcdef123456; working tree no longer contains it"
+commits = [
+  "5555da6218d8bc4079afaf1c1c3d8ef037aa0ced",
+  "2ef9b20a411594c7159bdda1696f26033190f4ef",
+  "9c961285b6ebe4bb43b2fa35895a2b4ce7b06ca2",
+]
+paths = [
+  '''tests/connectors/contract/test_dbt_workspace\.py''',
+  '''docs/agent/runs/DE007/DE007-SESSION-20260912T185800Z-bc01a096\.md''',
+  '''docs/agent/runs/DE008A/DE008A-R1-SESSION-20260912T202736Z-bc01a096fe\.md''',
+]
+regexTarget = "match"
+condition = "AND"
+regexes = ['''abcdef123456''']

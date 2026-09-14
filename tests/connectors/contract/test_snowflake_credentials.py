@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from tests.connectors.contract.conftest import clear_snowflake_env
 from typer.testing import CliRunner
 
 from aide.cli.main import app
@@ -39,6 +40,7 @@ def test_ro_and_dev_secretrefs_are_distinct() -> None:
 
 
 def test_partial_credentials_do_not_echo_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_snowflake_env(monkeypatch)
     monkeypatch.setenv("SNOWFLAKE_ACCOUNT", "dummy_account_value_xyz")
     runner = CliRunner()
     result = runner.invoke(app, ["connectors", "check", "--json"])
@@ -53,7 +55,10 @@ def test_partial_credentials_do_not_echo_values(monkeypatch: pytest.MonkeyPatch)
     assert "SECRET_UNRESOLVED:SNOWFLAKE_ACCOUNT" not in joined
 
 
-def test_missing_credentials_health_is_unavailable_with_env_names_only() -> None:
+def test_missing_credentials_health_is_unavailable_with_env_names_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_snowflake_env(monkeypatch)
     settings = settings_for_identity(IdentityClass.READ_ONLY)
     missing = missing_secret_names(settings)
     assert set(required_secret_names_for(IdentityClass.READ_ONLY)) <= set(missing)
@@ -63,7 +68,10 @@ def test_missing_credentials_health_is_unavailable_with_env_names_only() -> None
     assert "SNOWFLAKE_PRIVATE_KEY_DEV" not in missing
 
 
-def test_cli_connectors_check_reports_unavailable_without_secret_values() -> None:
+def test_cli_connectors_check_reports_unavailable_without_secret_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_snowflake_env(monkeypatch)
     runner = CliRunner()
     result = runner.invoke(app, ["connectors", "check", "--json"])
     assert result.exit_code == 0
@@ -94,9 +102,12 @@ def test_cli_connectors_check_reports_unavailable_without_secret_values() -> Non
             assert not code.startswith("SECRET_UNRESOLVED:") or code.split(":", 1)[1].isupper()
 
 
-def test_real_dev_health_is_unavailable_when_credentials_absent() -> None:
+def test_real_dev_health_is_unavailable_when_credentials_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import asyncio
 
+    clear_snowflake_env(monkeypatch)
     snapshot = asyncio.run(RealSnowflakeConnector(SNOWFLAKE_DEV).health())
     assert snapshot.status == "UNAVAILABLE"
     assert any(code.startswith("SECRET_UNRESOLVED:") for code in snapshot.reason_codes)
