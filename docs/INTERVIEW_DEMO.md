@@ -114,9 +114,20 @@ If those variables are absent, the command is **credential gated** (exit `2`). T
 is not weakened. Human action: set the named variables on a credentialed host. Do not
 grant `AIDE_DEV_RW` any new `VANTARA_RAW` privilege.
 
-Live checks: RO inspects RAW; DEV cannot read or write RAW; DEV stays in `AIDE_DEV`;
-the pinned fixture manifest reconciles RAW and DEV for selected tables; no production
-or staging action; no GRANT SQL.
+Live checks:
+
+- RO inspects RAW with read-only `SELECT`
+- RO/DEV write prohibition is proven from `SHOW GRANTS TO ROLE` / future grants, never
+  by issuing DML against `VANTARA_RAW`
+- DEV cannot read RAW
+- DEV stays in workflow-scoped `AIDE_DEV`
+- the pinned fixture manifest reconciles selected RAW vs DEV copies
+- the credentialed path then runs InterviewSupervisor → Governed Tool Gateway → real
+  Snowflake RO/DEV → real dbt, with policy, dispatch intents, evidence persistence, and
+  DEV-only execution
+- Independent Verifier and RAW drift injection remain the offline closed-loop proof;
+  live does not mutate RAW to recreate that drift
+- no production or staging action; no GRANT/REVOKE SQL
 
 The drift → repair → verifier closed loop is proven offline. Live `VANTARA_RAW` is the
 already-loaded tiny v2 estate and must not be mutated.

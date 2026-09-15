@@ -10,16 +10,23 @@ from aide.capabilities.io import QualityCheckResult, ValidationReport
 Execute = Callable[[str], Any]
 
 
+def _relation(schema: str, name: str, *, quoted: bool) -> str:
+    if quoted:
+        return f'"{schema}"."{name}"'
+    return f"{schema}.{name}"
+
+
 def evaluate_interview_quality(
     execute: Execute,
     *,
     required_models: tuple[str, ...],
     schema: str = "AIDE_DEV",
+    quoted_identifiers: bool = True,
 ) -> ValidationReport:
     checks: list[QualityCheckResult] = []
     missing: list[str] = []
     for name in required_models:
-        present = _exists(execute, schema, name)
+        present = _exists(execute, schema, name, quoted=quoted_identifiers)
         if not present:
             missing.append(name)
         checks.append(
@@ -29,8 +36,8 @@ def evaluate_interview_quality(
                 detail="present" if present else "missing",
             )
         )
-    mart = f'"{schema}"."mart_customer_revenue_daily"'
-    lines = f'"{schema}"."fct_invoice_line"'
+    mart = _relation(schema, "mart_customer_revenue_daily", quoted=quoted_identifiers)
+    lines = _relation(schema, "fct_invoice_line", quoted=quoted_identifiers)
     try:
         row = execute(f"SELECT COUNT(*) FROM {mart}").fetchone()
         mart_count = int(row[0]) if row is not None else 0
@@ -90,7 +97,7 @@ def evaluate_interview_quality(
             )
         )
     try:
-        payments = f'"{schema}"."fct_payment"'
+        payments = _relation(schema, "fct_payment", quoted=quoted_identifiers)
         recon_pay = execute(
             f"SELECT abs("
             f"(SELECT coalesce(sum(paid_amount), 0) FROM {mart}) - "
@@ -120,9 +127,9 @@ def evaluate_interview_quality(
     )
 
 
-def _exists(execute: Execute, schema: str, name: str) -> bool:
+def _exists(execute: Execute, schema: str, name: str, *, quoted: bool = True) -> bool:
     try:
-        execute(f'SELECT 1 FROM "{schema}"."{name}" LIMIT 0')
+        execute(f"SELECT 1 FROM {_relation(schema, name, quoted=quoted)} LIMIT 0")
         return True
     except Exception:
         return False

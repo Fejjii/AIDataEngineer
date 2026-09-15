@@ -72,7 +72,7 @@ def interview_benchmark(
 def interview_live_smoke(
     json_output: bool = typer.Option(True, "--json/--no-json"),
 ) -> None:
-    """Credential-gated live grant probe and RAW/DEV fixture reconciliation."""
+    """Credential-gated grant metadata probe plus governed live Interview path."""
     payload = asyncio.run(_run_live())
     if json_output:
         typer.echo(json.dumps(payload, indent=2, sort_keys=True))
@@ -124,9 +124,17 @@ async def _run_demo(url: str) -> dict[str, Any]:
 
 
 async def _run_live() -> dict[str, Any]:
-    from aide.connectors.snowflake.live_probe import run_live_interview_smoke
+    from aide.app.interview import run_credentialed_live_interview_smoke
+    from aide.connectors.snowflake.live_probe import missing_live_secret_names
 
-    report = await run_live_interview_smoke()
+    if missing_live_secret_names():
+        report = await run_credentialed_live_interview_smoke()
+        return report.model_dump(mode="json")
+    url = _database_url()
+    _migrate(url)
+    work_root = Path(tempfile.mkdtemp(prefix="aide-interview-live-"))
+    factory = session_factory_from_url(url)
+    report = await run_credentialed_live_interview_smoke(factory, work_root=work_root)
     return report.model_dump(mode="json")
 
 
