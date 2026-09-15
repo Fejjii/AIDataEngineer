@@ -51,6 +51,15 @@ def _asset_selection(result: InterviewResult) -> tuple[tuple[str, ...], ...]:
     return tuple(tuple(item.asset.address) for item in result.selection.selected)
 
 
+def _generated_digest(result: InterviewResult) -> str | None:
+    generated = result.generated
+    if generated is None:
+        return None
+    return normalized_digest(
+        {"files": [{"path": item.path, "content": item.content} for item in generated.files]}
+    )
+
+
 def _plan_digest(result: InterviewResult) -> str:
     plan = result.extra.get("last_plan")
     if isinstance(plan, Plan):
@@ -182,7 +191,7 @@ def _normalized_evidence_payload(result: InterviewResult) -> dict[str, Any]:
         "repair_count": int(result.extra.get("applied_count", 0)),
         "before_artifact_hash": result.before_artifact_hash,
         "after_artifact_hash": result.after_artifact_hash,
-        "generated_content_sha256": result.generated.content_sha256 if result.generated else None,
+        "generated_content_sha256": _generated_digest(result),
         "plan_digest": _plan_digest(result),
         "verifier_check_vector": [
             [item.check_id, item.passed, item.reason_code] for item in checks
@@ -210,7 +219,7 @@ def build_fingerprint(result: InterviewResult) -> StableFingerprint:
         asset_selection=_asset_selection(result),
         normalized_estate_context_digest=normalized_digest(_normalized_context_payload(result)),
         model_names=result.generated.model_names if result.generated is not None else (),
-        generated_content_sha256=result.generated.content_sha256 if result.generated else None,
+        generated_content_sha256=_generated_digest(result),
         plan_digest=_plan_digest(result),
         repair_class=result.failure_class.value if result.failure_class else None,
         repair_count=int(result.extra.get("applied_count", 0)),

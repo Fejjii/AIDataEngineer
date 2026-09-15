@@ -11,9 +11,7 @@ from aide.domain.twin import SHA256_PATTERN
 from aide.domain.verification import VerifierVerdict
 
 INTERVIEW_SCENARIO_ID = "interview_mvp_customer_revenue_schema_drift"
-INTERVIEW_REQUEST = (
-    "Build a customer revenue analytical data product from CRM and billing data."
-)
+INTERVIEW_REQUEST = "Build a customer revenue analytical data product from CRM and billing data."
 
 # Labelled baseline minutes from docs/EVALUATION_STRATEGY.md §4 for steps this
 # closed loop actually performs. Not a financial ROI claim.
@@ -240,6 +238,11 @@ NORMALIZATION_RULES: tuple[NormalizationRule, ...] = (
         rule="hash required section names plus content hashes after UUID substitution",
         reason="outer bundle digest includes workflow_id and evidence_ref_id",
     ),
+    NormalizationRule(
+        field="generated_content_sha256",
+        rule="hash generated files after substituting WF + 6-hex workflow short ids",
+        reason="models/sources.yml embeds AIDE_DEV.<WFxxxxxx>_* schema names",
+    ),
 )
 
 VARIABLE_FINGERPRINT_FIELDS: tuple[str, ...] = (
@@ -266,6 +269,7 @@ VARIABLE_FINGERPRINT_FIELDS: tuple[str, ...] = (
     "repair_duration_ms",
     "raw_estate_context_sha256",
     "raw_evidence_bundle_sha256",
+    "raw_generated_content_sha256",
 )
 
 

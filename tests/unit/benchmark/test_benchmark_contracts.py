@@ -65,6 +65,14 @@ def test_normalized_digest_is_stable_under_identifier_substitution() -> None:
     assert normalized_digest(left) == normalized_digest(right)
 
 
+def test_normalized_digest_is_stable_under_workflow_short_id_substitution() -> None:
+    left = {"sources": "schema: WFABC123_CRM"}
+    right = {"sources": "schema: WF999FFF_CRM"}
+    assert "<workflow_short_id>" in normalize_text("schema: WFABC123_CRM")
+    assert normalized_digest(left) == normalized_digest(right)
+    assert normalized_digest(left) != normalized_digest({"sources": "schema: CRM"})
+
+
 def test_determinism_fails_when_stable_model_names_differ() -> None:
     left = _fingerprint()
     right = _fingerprint(model_names=("dim_customer",))

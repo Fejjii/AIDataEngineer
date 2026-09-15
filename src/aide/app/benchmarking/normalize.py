@@ -13,6 +13,8 @@ ISO_TIMESTAMP_RE = re.compile(
     r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?"
 )
 SHA256_RE = re.compile(r"\b[0-9a-f]{64}\b")
+# AIDE_DEV schema prefix: WF + first 6 hex chars of workflow_id (not a full UUID).
+WORKFLOW_SHORT_ID_RE = re.compile(r"WF[0-9A-F]{6}")
 
 # Digests that encode identifiers (snapshot UUID, evidence_ref_id) are re-hashed
 # after substitution. Content-addressed hashes of SQL/plan bodies are kept.
@@ -32,6 +34,7 @@ _IDENTITY_DIGEST_KEYS = frozenset(
 
 def normalize_text(value: str) -> str:
     replaced = UUID_RE.sub("<uuid>", value)
+    replaced = WORKFLOW_SHORT_ID_RE.sub("<workflow_short_id>", replaced)
     replaced = ISO_TIMESTAMP_RE.sub("<timestamp>", replaced)
     return replaced
 

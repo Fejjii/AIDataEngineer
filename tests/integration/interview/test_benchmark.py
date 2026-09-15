@@ -25,8 +25,8 @@ async def test_at23_offline_scenario_runs_twice_with_equivalent_fingerprints(
     assert second.fail_reason is None, second.fail_reason
     assert first.verifier is not None and first.verifier.verdict is VerifierVerdict.PASS
     assert second.verifier is not None and second.verifier.verdict is VerifierVerdict.PASS
-    assert report.verdict is BenchmarkVerdict.PASS
-    assert report.determinism.equivalent
+    assert report.verdict is BenchmarkVerdict.PASS, report.determinism.mismatches
+    assert report.determinism.equivalent, report.determinism.mismatches
     assert not report.determinism.mismatches
     expected_phases = [phase.value for phase in LEGAL_INTERVIEW_PHASES] + [
         WorkflowState.REPAIR.value,
@@ -66,6 +66,7 @@ async def test_at23_offline_scenario_runs_twice_with_equivalent_fingerprints(
     assert report.value_metrics.human_interventions == 0
     assert report.value_metrics.estimated_engineering_steps_automated == 9
     assert "workflow_id" in report.determinism.variable_fields
+    assert "raw_generated_content_sha256" in report.determinism.variable_fields
     assert report.determinism.normalization_rules
     assert first.extra.get("step_durations_ms")
     assert int(first.extra.get("repair_duration_ms", 0)) >= 0
