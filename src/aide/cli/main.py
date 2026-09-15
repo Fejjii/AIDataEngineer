@@ -13,6 +13,7 @@ from alembic.config import Config
 
 from aide.app.runtime import build_offline_stack, session_factory_from_url
 from aide.cli.demo import demo_app
+from aide.cli.interview import interview_app
 from aide.domain.permissions import PermissionLevel
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -20,6 +21,7 @@ slice_app = typer.Typer(help="Offline DE 002C slice commands")
 connectors_app = typer.Typer(help="Connector health commands")
 app.add_typer(slice_app, name="slice")
 app.add_typer(demo_app, name="demo")
+app.add_typer(interview_app, name="interview")
 app.add_typer(connectors_app, name="connectors")
 
 

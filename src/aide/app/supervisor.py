@@ -830,9 +830,13 @@ class InterviewSupervisor:
                 result, action=action, task_id=claim.task_id
             ):
                 return True
+        started = _naive(datetime.now(UTC))
         outcome = await self._gateway.execute(
             claim, principal=result.principal, authorization=result.grants
         )
+        _record_capability_step(result, capability_id, started)
+        if outcome.status == "RETRY_WAIT":
+            result.extra["retry_count"] = int(result.extra.get("retry_count", 0)) + 1
         stopped = self._absorb_outcome(result, capability_id, outcome)
         if capability_id == "detect_schema_drift" and result.extra.get("last_detect") is not None:
             await self._record_drift(result)
@@ -1121,7 +1125,9 @@ class InterviewSupervisor:
                     result.failed = True
                     result.fail_reason = "COMPILE_FAILED"
         elif capability_id == "load_manifest_sources":
-            result.load_ok = LoadManifestSourcesOutput.model_validate(output).reconcile_ok
+            loaded = LoadManifestSourcesOutput.model_validate(output)
+            result.load_ok = loaded.reconcile_ok
+            result.extra["manifest_load"] = loaded
             if not result.load_ok:
                 result.failed = True
                 result.fail_reason = "LOAD_FAILED"
@@ -1141,7 +1147,9 @@ class InterviewSupervisor:
                 result.failed = True
                 result.fail_reason = "EXECUTE_FAILED"
         elif capability_id == "run_tests":
-            result.tests_ok = RunTestsOutput.model_validate(output).ok
+            tests = RunTestsOutput.model_validate(output)
+            result.tests_ok = tests.ok
+            result.extra["last_tests"] = tests
             if not result.tests_ok:
                 if result.repair_stage:
                     result.blocked = True
@@ -1175,6 +1183,19 @@ class InterviewSupervisor:
                 )
 
     async def _run_repair_and_verify(
+        self, result: InterviewResult, snapshot: ContractSnapshot
+    ) -> InterviewResult:
+        result.extra["repair_started_at"] = _naive(datetime.now(UTC))
+        try:
+            return await self._run_repair_and_verify_body(result, snapshot)
+        finally:
+            started = result.extra.get("repair_started_at")
+            if isinstance(started, datetime):
+                result.extra["repair_duration_ms"] = max(
+                    0, int((_naive(datetime.now(UTC)) - started).total_seconds() * 1000)
+                )
+
+    async def _run_repair_and_verify_body(
         self, result: InterviewResult, snapshot: ContractSnapshot
     ) -> InterviewResult:
         if self._drift_injector is None:
@@ -1811,10 +1832,23 @@ class InterviewSupervisor:
             require_real_chain=self._execution_mode is ExecutionMode.REAL,
             timing=TimingMetadata(
                 wall_time_ms=wall_ms,
-                retry_count=0,
+                step_durations_ms=tuple(
+                    (str(name), int(ms)) for name, ms in result.extra.get("step_durations_ms", [])
+                ),
+                snowflake_query_ms=None,
+                snowflake_timing_measured=False,
+                dbt_timing_ms=_dbt_step_ms(result),
+                dbt_timing_measured=_dbt_step_ms(result) is not None,
+                retry_count=int(result.extra.get("retry_count", 0)),
                 repair_count=int(result.extra.get("applied_count", 0)),
             ),
-            cost=CostMetadata(measured=False, estimated=True),
+            cost=CostMetadata(
+                model_tokens=None,
+                model_cost_usd=None,
+                warehouse_credits=None,
+                measured=False,
+                estimated=True,
+            ),
         )
 
     async def _persist_evidence_bundle(
@@ -2164,6 +2198,37 @@ def _align_invoice_status(design: ModelDesign, fixture_version: str) -> ModelDes
 
 def _naive(value: datetime) -> datetime:
     return value.replace(tzinfo=None) if value.tzinfo else value
+
+
+_DBT_STEP_NAMES = frozenset(
+    {
+        "create_transformation",
+        "parse_transformation",
+        "compile_transformation",
+        "execute_transformation",
+        "run_tests",
+    }
+)
+
+
+def _record_capability_step(result: InterviewResult, capability_id: str, started: datetime) -> None:
+    elapsed_ms = max(0, int((_naive(datetime.now(UTC)) - started).total_seconds() * 1000))
+    steps = list(result.extra.get("step_durations_ms", []))
+    steps.append((capability_id, elapsed_ms))
+    result.extra["step_durations_ms"] = steps
+    sequence = list(result.extra.get("capability_sequence", []))
+    sequence.append(capability_id)
+    result.extra["capability_sequence"] = sequence
+
+
+def _dbt_step_ms(result: InterviewResult) -> int | None:
+    total = 0
+    found = False
+    for name, ms in result.extra.get("step_durations_ms", []):
+        if name in _DBT_STEP_NAMES:
+            total += int(ms)
+            found = True
+    return total if found else None
 
 
 def _ensure_legal(current: WorkflowState | str, target: WorkflowState) -> None:
