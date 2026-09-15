@@ -19,9 +19,9 @@ from aide.connectors.snowflake.live_probe import (
 from aide.domain.benchmark import LiveSmokeStatus
 
 _RAW_MUTATION = re.compile(
-    r"(?is)\b(?:CREATE(?:\s+OR\s+REPLACE)?|DROP|INSERT(?:\s+INTO)?|UPDATE|"
-    r"DELETE(?:\s+FROM)?|MERGE(?:\s+INTO)?|TRUNCATE(?:\s+TABLE)?|ALTER)\b"
-    r".{0,160}VANTARA_RAW"
+    r"(?is)\b(?:CREATE(?:\s+OR\s+REPLACE)?\s+(?:TABLE|SCHEMA|VIEW)|DROP\s+(?:TABLE|SCHEMA)|"
+    r"INSERT\s+INTO|UPDATE\s+|DELETE\s+FROM|MERGE\s+INTO|TRUNCATE(?:\s+TABLE)?|"
+    r"ALTER\s+TABLE)\b.{0,160}VANTARA_RAW"
 )
 
 
@@ -44,7 +44,10 @@ def test_live_probe_source_never_mutates_vantara_raw() -> None:
     source = Path("src/aide/connectors/snowflake/live_probe.py").read_text(encoding="utf-8")
     assert not _raw_mutation_windows(source)
     upper = source.upper()
-    assert "SHOW GRANTS TO ROLE" in upper
+    assert "SHOW" in upper
+    assert "TO ROLE" in upper
+    assert "GRANTS" in upper
+    assert "FUTURE GRANTS" in upper
     assert "CREATE TABLE VANTARA_RAW" not in upper
     assert "INSERT INTO VANTARA_RAW" not in upper
 

@@ -12,6 +12,7 @@ from aide.domain.benchmark import EvidenceCompleteness
 from aide.domain.identity import canonical_json_bytes
 from aide.domain.verification import REQUIRED_EVIDENCE_SECTIONS, EvidenceBundle
 from aide.persistence.repositories import ArtifactRepository
+from aide.persistence.twin import TwinRepository
 from aide.verification.bundle import evidence_bundle_digest, missing_required_sections
 
 
@@ -81,49 +82,63 @@ async def validate_persisted_evidence(
     """Recompute the persisted EvidenceBundle digest. Do not trust result.extra."""
     async with session_factory() as session:
         artifacts = await ArtifactRepository(session).list_for_workflow(workflow_id)
-    latest_digest: dict[str, str] = {}
-    latest_body: dict[str, dict[str, object] | None] = {}
-    mismatches: list[str] = []
-    for row in artifacts:
-        if row.body is None:
-            continue
-        recomputed = hashlib.sha256(canonical_json_bytes(row.body)).hexdigest()
-        if recomputed != row.sha256 and row.artifact_type not in mismatches:
-            mismatches.append(row.artifact_type)
-        latest_digest[row.artifact_type] = recomputed
-        latest_body[row.artifact_type] = row.body
-    bundle_body = latest_body.get("evidence_bundle")
-    if not isinstance(bundle_body, dict):
-        return _failed(mismatches=tuple(mismatches) + ("evidence_bundle",))
-    try:
-        bundle = EvidenceBundle.model_validate(bundle_body)
-    except ValidationError:
-        return _failed(
-            present=tuple(latest_digest),
-            missing=tuple(name for name in REQUIRED_EVIDENCE_SECTIONS if name not in latest_digest),
-            mismatches=tuple(dict.fromkeys([*mismatches, "evidence_bundle"])),
+        twins = TwinRepository(session)
+        latest_digest: dict[str, str] = {}
+        latest_body: dict[str, dict[str, object] | None] = {}
+        mismatches: list[str] = []
+        for row in artifacts:
+            if row.body is None:
+                continue
+            recomputed = hashlib.sha256(canonical_json_bytes(row.body)).hexdigest()
+            if recomputed != row.sha256 and row.artifact_type not in mismatches:
+                mismatches.append(row.artifact_type)
+            latest_digest[row.artifact_type] = recomputed
+            latest_body[row.artifact_type] = row.body
+        bundle_body = latest_body.get("evidence_bundle")
+        if not isinstance(bundle_body, dict):
+            return _failed(mismatches=tuple(mismatches) + ("evidence_bundle",))
+        try:
+            bundle = EvidenceBundle.model_validate(bundle_body)
+        except ValidationError:
+            return _failed(
+                present=tuple(latest_digest),
+                missing=tuple(
+                    name for name in REQUIRED_EVIDENCE_SECTIONS if name not in latest_digest
+                ),
+                mismatches=tuple(dict.fromkeys([*mismatches, "evidence_bundle"])),
+            )
+        if bundle.workflow_id != workflow_id:
+            mismatches.append("workflow_id")
+        recomputed_bundle = evidence_bundle_digest(
+            workflow_id=bundle.workflow_id,
+            twin_snapshot_id=bundle.twin_snapshot_id,
+            estate_context_sha256=bundle.estate_context_sha256,
+            sections=bundle.sections,
         )
-    if bundle.workflow_id != workflow_id:
-        mismatches.append("workflow_id")
-    recomputed_bundle = evidence_bundle_digest(
-        workflow_id=bundle.workflow_id,
-        twin_snapshot_id=bundle.twin_snapshot_id,
-        estate_context_sha256=bundle.estate_context_sha256,
-        sections=bundle.sections,
-    )
-    if recomputed_bundle != bundle.bundle_sha256 and "evidence_bundle" not in mismatches:
-        mismatches.append("evidence_bundle")
-    if claimed_bundle_sha256 is None or claimed_bundle_sha256 != recomputed_bundle:
-        mismatches.append("stored_benchmark_digest")
-    missing = list(missing_required_sections(bundle.sections))
-    for section in bundle.sections:
-        persisted = latest_digest.get(section.name)
-        if persisted is None:
-            if section.name not in missing:
-                missing.append(section.name)
-            continue
-        if persisted != section.sha256 and section.name not in mismatches:
-            mismatches.append(section.name)
+        if recomputed_bundle != bundle.bundle_sha256 and "evidence_bundle" not in mismatches:
+            mismatches.append("evidence_bundle")
+        if claimed_bundle_sha256 is None or claimed_bundle_sha256 != recomputed_bundle:
+            mismatches.append("stored_benchmark_digest")
+        missing = list(missing_required_sections(bundle.sections))
+        for section in bundle.sections:
+            reference = await twins.get_evidence_reference(section.evidence_ref_id)
+            artifact_digest = latest_digest.get(section.name)
+            if reference is None and artifact_digest is None:
+                if section.name not in missing:
+                    missing.append(section.name)
+                continue
+            if (
+                reference is not None
+                and reference.sha256 != section.sha256
+                and section.name not in mismatches
+            ):
+                mismatches.append(section.name)
+            if (
+                artifact_digest is not None
+                and artifact_digest != section.sha256
+                and section.name not in mismatches
+            ):
+                mismatches.append(section.name)
     present = tuple(item.name for item in bundle.sections)
     required = len(REQUIRED_EVIDENCE_SECTIONS)
     present_required = required - len(missing)

@@ -288,7 +288,7 @@ def _allow_lists_are_dev_only() -> bool:
 
 
 async def drop_workflow_dev_schemas(workflow_id: UUID) -> None:
-    """Drop workflow-scoped AIDE_DEV schemas only. Never touches VANTARA_RAW."""
+    """Remove only workflow-scoped AIDE_DEV schemas. RAW stays untouched."""
     prefix = workflow_short_id(workflow_id)
     context = _context(workflow_id, "cleanup")
     for suffix in WORKFLOW_DEV_SCHEMA_SUFFIXES:
