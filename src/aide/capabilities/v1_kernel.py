@@ -78,6 +78,12 @@ from aide.domain.effects import EffectSemantics
 from aide.domain.enums import ApprovalRule, RiskLevel
 from aide.domain.failures import FailureClass
 from aide.domain.permissions import PermissionLevel
+from aide.domain.repair import (
+    ProposeRepairInput,
+    RepairProposal,
+    RepairValidation,
+    ValidateRepairInput,
+)
 
 
 class EmptyInput(BaseModel):
@@ -441,6 +447,28 @@ KERNEL_CAPABILITIES: tuple[CapabilitySpec, ...] = (
         cost_class="free",
         input_schema=ValidateInterviewQualityInput,
         output_schema=ValidationReport,
+        max_attempts=1,
+    ),
+    _spec(
+        "propose_repair",
+        PermissionLevel.READ,
+        connector_mode="NONE",
+        connector_kinds=frozenset(),
+        effect=EffectSemantics.SIDE_EFFECT_FREE,
+        cost_class="free",
+        input_schema=ProposeRepairInput,
+        output_schema=RepairProposal,
+        max_attempts=1,
+    ),
+    _spec(
+        "validate_repair",
+        PermissionLevel.READ,
+        connector_mode="NONE",
+        connector_kinds=frozenset(),
+        effect=EffectSemantics.SIDE_EFFECT_FREE,
+        cost_class="free",
+        input_schema=ValidateRepairInput,
+        output_schema=RepairValidation,
         max_attempts=1,
     ),
 )

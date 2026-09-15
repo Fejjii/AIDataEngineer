@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -28,4 +29,14 @@ async def unit_of_work(
 ) -> AsyncIterator[AsyncSession]:
     """Commit all repository mutations atomically, or roll all of them back."""
     async with session_factory() as session, session.begin():
+        yield session
+
+
+@asynccontextmanager
+async def read_only_unit_of_work(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[AsyncSession]:
+    """Read-only transaction over finalized records. The verifier cannot write."""
+    async with session_factory() as session, session.begin():
+        await session.execute(text("SET TRANSACTION READ ONLY"))
         yield session

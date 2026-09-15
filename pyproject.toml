@@ -131,7 +131,7 @@ layers = [
     "aide.app",
     "aide.orchestration",
     "aide.generation | aide.modelling",
-    "aide.tools | aide.persistence | aide.approvals | aide.quality | aide.discovery | aide.profiling",
+    "aide.tools | aide.persistence | aide.approvals | aide.quality | aide.discovery | aide.profiling | aide.verification",
     "aide.policy | aide.reasoning",
     "aide.capabilities | aide.connectors.base | aide.secrets | aide.auth | aide.llm",
     "aide.domain",
@@ -261,4 +261,30 @@ forbidden_modules = [
     "aide.connectors.snowflake.fake",
     "aide.connectors.dbt.real",
     "aide.connectors.dbt.fake",
+]
+
+[[tool.importlinter.contracts]]
+name = "Independent verifier cannot import execution or writers"
+type = "forbidden"
+source_modules = ["aide.verification"]
+forbidden_modules = [
+    "aide.app.gateway",
+    "aide.app.supervisor",
+    "aide.repair.writer",
+    "aide.approvals",
+    "aide.orchestration",
+    "aide.persistence",
+    "aide.connectors.snowflake",
+    "aide.connectors.dbt",
+]
+
+[[tool.importlinter.contracts]]
+name = "Repair cannot import gateway or vendor execution"
+type = "forbidden"
+source_modules = ["aide.repair"]
+forbidden_modules = [
+    "aide.app.gateway",
+    "aide.app.supervisor",
+    "aide.connectors.snowflake",
+    "aide.connectors.dbt",
 ]

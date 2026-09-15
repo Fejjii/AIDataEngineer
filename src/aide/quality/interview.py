@@ -89,6 +89,28 @@ def evaluate_interview_quality(
                 check_id="invoice_line_sum_matches_mart", passed=False, detail=str(exc)
             )
         )
+    try:
+        payments = f'"{schema}"."fct_payment"'
+        recon_pay = execute(
+            f"SELECT abs("
+            f"(SELECT coalesce(sum(paid_amount), 0) FROM {mart}) - "
+            f"(SELECT coalesce(sum(amount), 0) FROM {payments})"
+            f")"
+        ).fetchone()
+        pay_delta = (
+            float(recon_pay[0]) if recon_pay is not None and recon_pay[0] is not None else -1.0
+        )
+        checks.append(
+            QualityCheckResult(
+                check_id="payment_sum_matches_mart",
+                passed=pay_delta <= 0.01,
+                detail=f"abs_delta={pay_delta}",
+            )
+        )
+    except Exception as exc:
+        checks.append(
+            QualityCheckResult(check_id="payment_sum_matches_mart", passed=False, detail=str(exc))
+        )
     passed = all(item.passed for item in checks) and not missing
     return ValidationReport(
         passed=passed,

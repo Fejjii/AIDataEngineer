@@ -783,3 +783,31 @@ class GatewayDispatchIntentModel(Base):
     result_digest: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class RepairEventModel(Base):
+    """Append-only repair/verifier event used for budget reconstruction."""
+
+    __tablename__ = "repair_events"
+
+    event_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    workflow_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("workflows.workflow_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    task_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("materialized_tasks.task_id", ondelete="SET NULL")
+    )
+    event_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason_code: Mapped[str | None] = mapped_column(String(64))
+    evidence_ref_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("evidence_references.evidence_ref_id", ondelete="RESTRICT"),
+    )
+    artifact_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("artifacts.artifact_id", ondelete="RESTRICT")
+    )
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)

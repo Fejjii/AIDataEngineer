@@ -49,6 +49,8 @@ async def test_fixed_customer_revenue_request_completes_pre_drift_workflow(
     assert result.twin_snapshot is not None
     assert result.estate_context_sha256
     assert result.generated is not None
+    assert result.verifier is None
+    assert result.repair_application is None
     assert set(REQUIRED_DEMO_MODELS).issubset(set(result.generated.model_names))
     assert result.extra.get("intent_ids")
     assert result.extra.get("evidence_ref_ids")

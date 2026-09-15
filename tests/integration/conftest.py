@@ -44,6 +44,7 @@ async def session_factory(
             text(
                 """
                 TRUNCATE TABLE
+                    repair_events,
                     gateway_dispatch_intents,
                     workflow_twin_snapshots, twin_snapshot_evidence,
                     twin_snapshot_observations, twin_snapshot_relationships,

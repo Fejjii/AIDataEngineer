@@ -8,7 +8,7 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import TypeAdapter
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aide.connectors.base.health import ConnectorHealthSnapshot
@@ -338,6 +338,25 @@ class ArtifactRepository:
         self._session.add(row)
         await self._session.flush()
         return row
+
+    async def list_for_workflow(self, workflow_id: UUID) -> tuple[ArtifactModel, ...]:
+        rows = (
+            await self._session.scalars(
+                select(ArtifactModel)
+                .where(ArtifactModel.workflow_id == workflow_id)
+                .order_by(ArtifactModel.created_at, ArtifactModel.artifact_id)
+            )
+        ).all()
+        return tuple(rows)
+
+    async def next_version(self, workflow_id: UUID, artifact_type: str) -> int:
+        current = await self._session.scalar(
+            select(func.max(ArtifactModel.version)).where(
+                ArtifactModel.workflow_id == workflow_id,
+                ArtifactModel.artifact_type == artifact_type,
+            )
+        )
+        return int(current or 0) + 1
 
 
 class ConnectorHealthRepository:

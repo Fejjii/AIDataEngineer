@@ -138,6 +138,26 @@ class FakeDbtConnector:
     def mark_in_progress(self, operation_key: str) -> None:
         self._in_progress.add(operation_key)
 
+    def rename_loaded_column(
+        self,
+        workflow_id: UUID,
+        schema: str,
+        table: str,
+        from_name: str,
+        to_name: str,
+    ) -> None:
+        """Rename one loaded DEV source column. Test/demo drift injection only."""
+        short = workflow_short_id(workflow_id)
+        qualified_schema = schema if schema.startswith(short) else f"{short}_{schema}"
+        relation = f'"{qualified_schema}"."{table}"'
+        description = self._conn.execute(f"SELECT * FROM {relation} LIMIT 0").description or []
+        existing = [str(col[0]) for col in description]
+        actual_from = next(
+            (name for name in existing if name.upper() == from_name.upper()),
+            from_name,
+        )
+        self._conn.execute(f'ALTER TABLE {relation} RENAME COLUMN "{actual_from}" TO "{to_name}"')
+
     async def health(self) -> ConnectorHealthSnapshot:
         now = datetime.now(UTC).replace(tzinfo=None)
         return ConnectorHealthSnapshot(

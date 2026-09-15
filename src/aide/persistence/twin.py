@@ -104,6 +104,12 @@ class TwinRepository:
         await self._session.flush()
         return reference
 
+    async def get_evidence_reference(self, evidence_ref_id: UUID) -> EvidenceReference | None:
+        row = await self._session.get(EvidenceReferenceModel, evidence_ref_id)
+        if row is None:
+            return None
+        return _evidence_from_row(row)
+
     async def capture_asset(
         self,
         capture: AssetCapture,
@@ -217,6 +223,26 @@ class TwinRepository:
         )
         await self._session.flush()
         return observation
+
+    async def list_observations_by_kind(
+        self,
+        *,
+        kind: TwinObservationKind,
+        subject_asset_ids: tuple[UUID, ...] | None = None,
+    ) -> tuple[TwinObservation, ...]:
+        statement = select(TwinObservationModel).where(TwinObservationModel.kind == kind.value)
+        if subject_asset_ids is not None:
+            if not subject_asset_ids:
+                return ()
+            statement = statement.where(
+                TwinObservationModel.subject_asset_id.in_(subject_asset_ids)
+            )
+        statement = statement.order_by(
+            TwinObservationModel.observed_at.desc(),
+            TwinObservationModel.observation_id,
+        )
+        rows = (await self._session.scalars(statement)).all()
+        return tuple(_observation_from_row(item) for item in rows)
 
     async def persist_capture_batch(self, batch: TwinCaptureBatch) -> PersistedCapture:
         assets_by_key: dict[str, TwinAsset] = {}
@@ -348,6 +374,20 @@ class TwinRepository:
         if binding is None:
             raise LookupError(f"workflow {workflow_id} has no pinned Twin snapshot")
         return await self.load_snapshot(binding.twin_snapshot_id)
+
+    async def list_evidence_for_artifacts(
+        self, artifact_ids: tuple[UUID, ...]
+    ) -> tuple[EvidenceReference, ...]:
+        if not artifact_ids:
+            return ()
+        rows = (
+            await self._session.scalars(
+                select(EvidenceReferenceModel).where(
+                    EvidenceReferenceModel.artifact_id.in_(artifact_ids)
+                )
+            )
+        ).all()
+        return tuple(_evidence_from_row(item) for item in rows)
 
     async def load_snapshot(self, twin_snapshot_id: UUID) -> TwinSnapshotRecords:
         row = await self._session.get(TwinSnapshotModel, twin_snapshot_id)
