@@ -308,15 +308,17 @@ async def record_run(
     session_factory: async_sessionmaker[AsyncSession],
     result: InterviewResult,
 ) -> BenchmarkRunRecord:
-    completeness = await validate_persisted_evidence(
+    claimed = result.extra.get("evidence_bundle_sha256")
+    claimed_digest = claimed if isinstance(claimed, str) else None
+    completeness, persisted_digest = await validate_persisted_evidence(
         session_factory,
         result.workflow_id,
-        result.extra.get("typed_evidence", {}),
+        claimed_bundle_sha256=claimed_digest,
     )
     snapshot = _run_snapshot(result, completeness.completeness_pct)
     fingerprint = build_fingerprint(result)
     wall_ms = snapshot.wall_clock_duration_ms
-    bundle = result.extra.get("evidence_bundle_sha256")
+    bundle = persisted_digest
     return BenchmarkRunRecord(
         workflow_id=result.workflow_id,
         workflow_outcome=_workflow_outcome(result),
