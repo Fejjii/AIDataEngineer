@@ -134,6 +134,7 @@ async def test_e_rc_ver_verifier_pack_is_read_only(
     supervisor, _ro, _dev, _dbt = build_eval_stack(session_factory, tmp_path)
     result = await supervisor.run_customer_revenue(INTERVIEW_REQUEST, include_schema_drift=True)
     assert result.verifier is not None
+    assert result.twin_snapshot is not None
 
     async def _forbid_write(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("verifier pack must not persist artifacts")
