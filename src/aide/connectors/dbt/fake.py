@@ -497,11 +497,6 @@ class FakeDbtConnector:
             project = project_dir(self.work_root, recovery.workflow_id)
             return reconcile_create_transformation(expected_hashes=expected, project_root=project)
         recorded = self._outputs.get(key)
-        if recorded is not None:
-            payload = {
-                item: value for item, value in recorded["output"].items() if item != "run_results"
-            }
-            return EffectFound(output=payload, external_ref=key)
         run_results = None
         manifest_present = False
         required: tuple[str, ...] = ()
@@ -513,12 +508,22 @@ class FakeDbtConnector:
                 run_results = parse_run_results(rr_path)
             if journal is not None:
                 required = journal.selected_nodes
-        return reconcile_invocation(
+        invocation = reconcile_invocation(
             journal=journal,
             run_results=run_results,
             manifest_present=manifest_present,
             required_nodes=required,
         )
+        if (
+            isinstance(invocation, EffectFound)
+            and recorded is not None
+            and recovery.capability.capability_id != "create_transformation"
+        ):
+            payload = {
+                item: value for item, value in recorded["output"].items() if item != "run_results"
+            }
+            return EffectFound(output=payload, external_ref=invocation.external_ref or key)
+        return invocation
 
     async def _run_models(
         self,
