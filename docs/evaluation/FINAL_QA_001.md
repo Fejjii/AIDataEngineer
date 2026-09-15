@@ -48,7 +48,7 @@
 | `E-TM-DRIFT` | Drift identity mismatch fails verifier | `PASS` | pytest tests/evaluation passed for E-TM-DRIFT |
 | `E-TM-HASH` | Artifact hash mismatch fails verifier | `PASS` | pytest tests/evaluation passed for E-TM-HASH |
 | `E-RP-01` | Two offline benchmark runs match after documented normalization | `PASS` | tests/evaluation/test_repeatability.py; BenchmarkVerdict.PASS; equivalent fingerprints |
-| `E-BM-01` | MEASURED / ESTIMATED / UNAVAILABLE classification is honest | `PASS` | tests/evaluation/test_benchmark.py; wall_clock MEASURED; tokens/cost/credits UNAVAILABLE; engineering minutes ESTIMATED; no ROI |
+| `E-BM-01` | MEASURED / ESTIMATED / UNAVAILABLE classification is honest | `PASS` | tests/evaluation/test_evaluation_benchmark.py; wall_clock MEASURED; tokens/cost/credits UNAVAILABLE; engineering minutes ESTIMATED; no ROI |
 | `E-RC-PHASE` | Failed workflow persists FAILED and cannot create phases | `PASS` | pytest tests/evaluation passed for E-RC-PHASE |
 | `E-RC-INTENT` | Failed dispatches are not left DISPATCHED | `PASS` | pytest tests/evaluation passed for E-RC-INTENT |
 | `E-RC-BUDGET` | Repair budget survives restart from persisted events | `PASS` | pytest tests/evaluation passed for E-RC-BUDGET |
