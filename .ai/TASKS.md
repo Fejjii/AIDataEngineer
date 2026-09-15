@@ -192,6 +192,15 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 Integration order is strictly PIVOT001 → MVP001 → MVP002 → MVP003 → MVP004. The four MVP
 tasks do not run concurrently because their shared high-conflict contracts are sequential.
 
+## SHOWCASE-001 — Recruiter GitHub landing page
+- Priority: P1
+- Status: DONE (PR to `main`; do not merge from the agent)
+- Environment: CURSOR_CLOUD
+- Branch: `docs/recruiter-github-showcase`
+- Goal: Presentation and documentation only. Replace the stale README with a Data Pilot AI
+  recruiter showcase. Do not change product architecture or runtime behavior.
+- Validation: README links, Mermaid parse, CLI commands, MVP004 measured metrics, gitleaks.
+
 ---
 
 # Historical DE implementation backlog
