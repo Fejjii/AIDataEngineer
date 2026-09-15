@@ -12,6 +12,7 @@ RUN apt-get update \
 
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
+COPY synthetic ./synthetic
 
 RUN uv sync --frozen --no-dev
 
@@ -24,16 +25,20 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /usr/bin/bash aide
 
+COPY --from=ghcr.io/astral-sh/uv:0.6 /uv /usr/local/bin/uv
 COPY --from=builder /app/.venv /app/.venv
 COPY pyproject.toml uv.lock alembic.ini README.md asgi.py ./
 COPY src ./src
+COPY synthetic ./synthetic
+COPY dbt ./dbt
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    AIDE_SYNTHETIC_DEMO_HTTP=0
 
 EXPOSE 8000
 

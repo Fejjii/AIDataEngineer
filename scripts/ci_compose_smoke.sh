@@ -72,6 +72,33 @@ wait_app_healthy() {
   fail "Application /healthz did not succeed within 120 seconds"
 }
 
+wait_app_ready() {
+  local attempt response
+  for attempt in $(seq 1 60); do
+    if response="$(curl -fsS "http://127.0.0.1:${AIDE_HTTP_PORT}/readyz" 2>/dev/null)"; then
+      log "Application ready response: ${response}"
+      [[ "$response" == *"ok"* ]] || fail "unexpected /readyz payload: ${response}"
+      return 0
+    fi
+    sleep 2
+  done
+  fail "Application /readyz did not succeed within 120 seconds"
+}
+
+verify_interview_runtime() {
+  "${COMPOSE[@]}" exec -T app test -d /app/dbt/vantara_project \
+    || fail "dbt/vantara_project missing in image"
+  "${COMPOSE[@]}" exec -T app test -d /app/synthetic/vantara/fixtures/tiny \
+    || fail "synthetic Vantara fixtures missing in image"
+  "${COMPOSE[@]}" exec -T app aide interview demo --help >/dev/null \
+    || fail "aide interview demo is not available in the image"
+  if "${COMPOSE[@]}" exec -T app uv run --frozen --no-dev aide interview demo --help >/dev/null; then
+    log "uv run aide interview demo --help succeeded inside the app container"
+  else
+    fail "uv run aide interview demo --help failed inside the app container"
+  fi
+}
+
 verify_app_database_connectivity() {
   "${COMPOSE[@]}" exec -T app python -c "
 import os
@@ -110,7 +137,9 @@ else
 fi
 
 wait_app_healthy
+wait_app_ready
 verify_app_database_connectivity
 verify_migrations_applied
+verify_interview_runtime
 
 log "Docker Compose smoke test succeeded"

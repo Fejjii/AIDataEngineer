@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import json
 from collections.abc import AsyncIterator
 from typing import Any, Protocol
@@ -11,6 +12,7 @@ from fastapi import Cookie, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from aide.app.benchmarking.errors import DemoBusyError
 from aide.app.events import EventBus
 from aide.auth.context import (
     ClientForgeryError,
@@ -27,8 +29,11 @@ from aide.auth.session import (
     SessionInvalidError,
     SessionMissingError,
 )
+from aide.domain.benchmark import InterviewDemoSummary
 from aide.domain.permissions import PermissionLevel
 from aide.domain.principal import PrincipalRef
+
+DEMO_TOKEN_HEADER = "X-AIDE-Demo-Token"
 
 
 class SliceRunner(Protocol):
@@ -57,6 +62,14 @@ class SessionGate(Protocol):
     ) -> TrustedAuthenticationContext: ...
 
 
+class InterviewDemoRunner(Protocol):
+    async def run_synthetic_demo(self) -> InterviewDemoSummary: ...
+
+
+class ReadinessCheck(Protocol):
+    async def ready(self) -> None: ...
+
+
 class SubmitRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -65,11 +78,22 @@ class SubmitRequest(BaseModel):
     effective_grants: tuple[str, ...] | None = None
 
 
+def _demo_token_ok(expected: str | None, provided: str | None) -> bool:
+    if expected is None or expected == "":
+        return True
+    if provided is None:
+        return False
+    return hmac.compare_digest(expected, provided)
+
+
 def create_app(
     service: SliceRunner,
     events: EventBus | None = None,
     *,
     sessions: SessionGate | None = None,
+    interview_demo: InterviewDemoRunner | None = None,
+    readiness: ReadinessCheck | None = None,
+    demo_token: str | None = None,
 ) -> FastAPI:
     bus = events or service.events
     app = FastAPI(title="AIDataEngineer", version="0.1.0")
@@ -157,5 +181,44 @@ def create_app(
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/readyz")
+    async def readyz() -> dict[str, str]:
+        if readiness is None:
+            return {"status": "ok"}
+        try:
+            await readiness.ready()
+        except Exception:
+            raise HTTPException(status_code=503, detail="not ready") from None
+        return {"status": "ok"}
+
+    @app.post("/v1/interview/demo")
+    async def run_interview_demo(
+        request: Request,
+        x_aide_demo_token: str | None = Header(default=None, alias=DEMO_TOKEN_HEADER),
+    ) -> dict[str, Any]:
+        if interview_demo is None:
+            raise HTTPException(status_code=404, detail="synthetic interview demo is disabled")
+        if not _demo_token_ok(demo_token, x_aide_demo_token):
+            raise HTTPException(status_code=401, detail="demo token required")
+        raw = await request.body()
+        if raw.strip():
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail="synthetic demo does not accept client input",
+                ) from exc
+            if payload != {}:
+                raise HTTPException(
+                    status_code=400,
+                    detail="synthetic demo does not accept client input",
+                )
+        try:
+            summary = await interview_demo.run_synthetic_demo()
+        except DemoBusyError as exc:
+            raise HTTPException(status_code=409, detail="synthetic interview demo is busy") from exc
+        return summary.model_dump(mode="json")
 
     return app
