@@ -249,7 +249,8 @@ and asserted by `tests/integration/interview/test_benchmark.py`.
 |---|---:|
 | Relevant assets analyzed | 10 |
 | Generated models | 21 |
-| Governed tool / policy operations | 36 |
+| Governed tool operations | 36 |
+| Policy evaluations | 36 |
 | Tests executed | 23 |
 | Quality checks | 25 |
 | Detected incidents | 1 (`SCHEMA_MISMATCH`) |

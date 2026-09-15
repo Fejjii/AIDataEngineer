@@ -10,6 +10,9 @@ The superseded DE001 roadmap remains in §3.3 as planning history, not active sc
 
 ## 1. Repository layout
 
+Target DE001 module map. Interview MVP does not ship `frontend/`, a GitHub connector, or a
+PostgreSQL source connector; see repository `README.md`.
+
 ```text
 AIDataEngineer/
 ├── .ai/                          # governance (tracked *.md; private/ local/ ignored)
