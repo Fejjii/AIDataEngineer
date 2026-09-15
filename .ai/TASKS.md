@@ -246,7 +246,7 @@ tasks do not run concurrently because their shared high-conflict contracts are s
 
 - Compact ID: `DEPLOY001_SYNTHETIC_CLOUD_DEMO`
 - Priority: P1
-- Status: DONE (PR 26; security remediation in progress on the same branch)
+- Status: DONE (PR 26; security remediation complete on the same branch; do not merge from the agent)
 - Owner: Cursor Cloud agent (Grok 4.6)
 - Environment: CURSOR_CLOUD
 - Branch: `deploy/synthetic_cloud_demo`
@@ -267,10 +267,12 @@ tasks do not run concurrently because their shared high-conflict contracts are s
 
 - Compact ID: `DEPLOY001_SECURITY_REMEDIATION`
 - Priority: P0
-- Status: IN_PROGRESS (same PR 26; do not merge from the agent)
+- Status: DONE (PR 26; do not merge from the agent)
 - Owner: Cursor Cloud agent (Grok 4.6)
 - Environment: CURSOR_CLOUD
 - Branch: `deploy/synthetic_cloud_demo`
+- Base commit: `289203b3bbe4cf4854ebd6827afd288b2728ad48`
+- Implementation commit: `714a95083a3f4c1635fc47cdffa62a7b079e38cf`
 - Dependencies: DEPLOY001_SYNTHETIC_CLOUD_DEMO
 - Risk: Medium (cloud security defaults; no new architecture)
 - Goal: PostgreSQL unpublished; no deterministic DB password; HTTP demo disabled
@@ -280,6 +282,8 @@ tasks do not run concurrently because their shared high-conflict contracts are s
   new services, merge to `main`.
 - Git authority: commit/push on existing branch; update PR 26; do not merge.
 - Deployment authority: none.
+- Completion evidence: GitHub CI run `35013798575` green; run report
+  `docs/agent/runs/DEPLOY001_SECURITY_REMEDIATION/DEPLOY001_SECURITY_REMEDIATION-SESSION-20260915T190000Z-0004.md`.
 
 ---
 
