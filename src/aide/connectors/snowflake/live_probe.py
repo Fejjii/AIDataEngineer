@@ -360,6 +360,8 @@ async def run_live_interview_smoke() -> LiveProbeReport:
             await ro.close()
 
         ro_grants = await _show_grants_to_role(IdentityClass.READ_ONLY, context, ROLE_READ_ONLY)
+        if ro_grants is None:
+            return _failed("could not inspect current grants for AIDE_DEV_RO")
         ro_future = await _show_grants_to_role(
             IdentityClass.READ_ONLY, context, ROLE_READ_ONLY, future=True
         )
@@ -409,6 +411,8 @@ async def run_live_interview_smoke() -> LiveProbeReport:
             dev_grants = await _show_grants_to_role(
                 IdentityClass.DEVELOPMENT, context, ROLE_DEVELOPMENT
             )
+            if dev_grants is None:
+                return _failed("could not inspect current grants for AIDE_DEV_RW")
             dev_future = await _show_grants_to_role(
                 IdentityClass.DEVELOPMENT, context, ROLE_DEVELOPMENT, future=True
             )
