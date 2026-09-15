@@ -1,12 +1,14 @@
 """Credential-gated live probes for the Interview MVP Snowflake boundary.
 
-Never logs secret values. Never issues GRANT statements. Never mutates
-VANTARA_RAW, production, or staging.
+Never logs secret values. Never issues GRANT or REVOKE. Never mutates
+VANTARA_RAW, production, or staging. Write prohibition is proven from
+read-only grant metadata, not DML against RAW.
 """
 
 from __future__ import annotations
 
 import csv
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
@@ -65,6 +67,13 @@ HANDOFF_TABLES: tuple[tuple[str, str, str], ...] = (
     ("VANTARA_RAW", "BILLING", "INVOICES"),
     ("VANTARA_RAW", "PRODUCT", "PLANS"),
 )
+WORKFLOW_DEV_SCHEMA_SUFFIXES: tuple[str, ...] = (
+    "CRM",
+    "BILLING",
+    "PAYMENTS",
+    "PRODUCT",
+    "DBT",
+)
 
 LIVE_SECRET_NAMES: tuple[str, ...] = (
     SHARED_SECRET_NAMES + RO_IDENTITY_SECRET_NAMES + DEV_IDENTITY_SECRET_NAMES
@@ -76,6 +85,16 @@ HUMAN_ACTION = (
     "new VANTARA_RAW privilege."
 )
 _BUDGET = Budget(max_rows=32, max_bytes=65536, max_seconds=60)
+_RAW_TOKEN = "VANTARA_RAW"
+_SAFE_RO_RAW_PRIVILEGES = frozenset(
+    {
+        "USAGE",
+        "SELECT",
+        "REFERENCES",
+        "MONITOR",
+        "IMPORTED PRIVILEGES",
+    }
+)
 
 
 class LiveProbeModel(BaseModel):
@@ -95,6 +114,16 @@ class LiveProbeReport(LiveProbeModel):
     raw_dev_reconciled: bool = False
     production_or_staging_action: bool = False
     grant_sql_executed: bool = False
+    future_grants_inspected: bool = False
+    governed_path_exercised: bool = False
+    gateway_connector_ids: tuple[str, ...] = ()
+    policy_evaluated: bool = False
+    evidence_persisted: bool = False
+    dev_only_execution: bool = False
+    independent_verifier_ran: bool = False
+    tests_ok: bool = False
+    quality_ok: bool = False
+    include_schema_drift: bool = False
     detail: str = ""
 
 
@@ -107,6 +136,64 @@ def missing_live_secret_names() -> tuple[str, ...]:
 
 def interview_live_credentials_available() -> bool:
     return snowflake_credentials_available() and snowflake_dev_credentials_available()
+
+
+def _row_field(row: Mapping[str, Any], *names: str) -> str:
+    lookup = {str(key).upper(): value for key, value in row.items()}
+    for name in names:
+        value = lookup.get(name.upper())
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return ""
+
+
+def _privilege_name(row: Mapping[str, Any]) -> str:
+    return _row_field(row, "privilege", "privileges").upper().replace("_", " ").strip()
+
+
+def _targets_vantara_raw(row: Mapping[str, Any]) -> bool:
+    blob = " ".join(
+        (
+            _row_field(row, "name", "table_name", "object_name"),
+            _row_field(row, "granted_on", "grant_on"),
+            _row_field(row, "database_name"),
+            _row_field(row, "schema_name"),
+        )
+    )
+    return _RAW_TOKEN in blob.upper().replace('"', "")
+
+
+def _is_write_capable_privilege(privilege: str) -> bool:
+    """Fail closed: only a narrow read/usage set is tolerated on RAW for RO."""
+    cleaned = privilege.upper().replace("_", " ").strip()
+    if not cleaned:
+        return False
+    return cleaned not in _SAFE_RO_RAW_PRIVILEGES
+
+
+def ro_raw_write_violations(grants: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
+    """Privileges that would let AIDE_DEV_RO mutate VANTARA_RAW."""
+    found: list[str] = []
+    for row in grants:
+        if not _targets_vantara_raw(row):
+            continue
+        privilege = _privilege_name(row)
+        if _is_write_capable_privilege(privilege):
+            target = _row_field(row, "name") or _RAW_TOKEN
+            found.append(f"{privilege} on {target}")
+    return tuple(found)
+
+
+def dev_raw_access_violations(grants: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
+    """Any AIDE_DEV_RW grant whose object involves VANTARA_RAW."""
+    found: list[str] = []
+    for row in grants:
+        if not _targets_vantara_raw(row):
+            continue
+        privilege = _privilege_name(row) or "UNKNOWN"
+        target = _row_field(row, "name") or _RAW_TOKEN
+        found.append(f"{privilege} on {target}")
+    return tuple(found)
 
 
 def _context(workflow_id: UUID, label: str, *, deadline_seconds: int = 180) -> CallContext:
@@ -160,8 +247,21 @@ async def _dev_sql(context: CallContext, sql: str) -> list[dict[str, Any]]:
     return await _identity_sql(IdentityClass.DEVELOPMENT, context, sql)
 
 
-async def _ro_sql(context: CallContext, sql: str) -> list[dict[str, Any]]:
-    return await _identity_sql(IdentityClass.READ_ONLY, context, sql)
+async def _show_grants_to_role(
+    identity: IdentityClass,
+    context: CallContext,
+    role: str,
+    *,
+    future: bool = False,
+) -> list[dict[str, Any]] | None:
+    kind = "FUTURE GRANTS" if future else "GRANTS"
+    sql = f'SHOW {kind} TO ROLE "{role}"'
+    try:
+        return await _identity_sql(identity, context, sql)
+    except SnowflakeMappedError:
+        if future:
+            return None
+        raise
 
 
 def _csv_expected(address: tuple[str, str, str], version: str) -> tuple[int, str]:
@@ -187,16 +287,24 @@ def _allow_lists_are_dev_only() -> bool:
     return SNOWFLAKE_DEV.allow_list.databases == frozenset({DEV_DATABASE})
 
 
-async def _write_is_blocked(sql: str, context: CallContext, identity: IdentityClass) -> bool:
-    try:
-        await _identity_sql(identity, context, sql)
-    except SnowflakeMappedError as exc:
-        return _denied(exc)
-    return False
+async def drop_workflow_dev_schemas(workflow_id: UUID) -> None:
+    """Drop workflow-scoped AIDE_DEV schemas only. Never touches VANTARA_RAW."""
+    prefix = workflow_short_id(workflow_id)
+    context = _context(workflow_id, "cleanup")
+    for suffix in WORKFLOW_DEV_SCHEMA_SUFFIXES:
+        schema = f"{prefix}_{suffix}"
+        quoted = schema.replace('"', '""')
+        try:
+            await _dev_sql(
+                context,
+                f'DROP SCHEMA IF EXISTS {DEV_DATABASE}."{quoted}" CASCADE',
+            )
+        except Exception:
+            continue
 
 
 async def run_live_interview_smoke() -> LiveProbeReport:
-    """AT-18, AT-19, and AT-24 live checks. Fail closed. Never GRANT."""
+    """AT-18 and AT-19 live grant/handoff checks. Fail closed. Never GRANT."""
     missing = missing_live_secret_names()
     if missing:
         return LiveProbeReport(
@@ -208,11 +316,11 @@ async def run_live_interview_smoke() -> LiveProbeReport:
         return _failed("connector allow lists are not limited to the accepted DEV/RAW scopes")
     workflow_id = uuid4()
     context = _context(workflow_id, "mvp004live", deadline_seconds=300)
-    loaded_schemas: set[str] = set()
     ro_inspected = False
     ro_write_blocked = False
     dev_read_blocked = False
     dev_write_blocked = False
+    future_inspected = False
     digest: str | None = None
     reconciled = False
     raw_counts: dict[tuple[str, str, str], int] = {}
@@ -251,23 +359,29 @@ async def run_live_interview_smoke() -> LiveProbeReport:
         finally:
             await ro.close()
 
-        probe = f"AIDE_MVP004_{uuid4().hex[:10]}"
-        ro_write_blocked = await _write_is_blocked(
-            f"CREATE TABLE VANTARA_RAW.BILLING.{probe} AS SELECT 1 AS ID",
-            context,
-            IdentityClass.READ_ONLY,
+        ro_grants = await _show_grants_to_role(IdentityClass.READ_ONLY, context, ROLE_READ_ONLY)
+        ro_future = await _show_grants_to_role(
+            IdentityClass.READ_ONLY, context, ROLE_READ_ONLY, future=True
         )
-        if not ro_write_blocked:
-            await _ro_sql(context, f"DROP TABLE IF EXISTS VANTARA_RAW.BILLING.{probe}")
+        if ro_future is not None:
+            future_inspected = True
+        ro_violations = ro_raw_write_violations(list(ro_grants) + list(ro_future or ()))
+        if ro_violations:
             return LiveProbeReport(
                 status=LiveSmokeStatus.FAILED,
                 ro_inspected_raw=ro_inspected,
                 ro_write_blocked=False,
-                detail="RO identity was able to write VANTARA_RAW; probe did not grant access",
+                future_grants_inspected=future_inspected,
+                detail="AIDE_DEV_RO has write-capable privileges on VANTARA_RAW",
             )
+        ro_write_blocked = True
 
         try:
-            await _dev_sql(context, "SELECT COUNT(*) AS N FROM VANTARA_RAW.BILLING.INVOICES")
+            await _identity_sql(
+                IdentityClass.DEVELOPMENT,
+                context,
+                "SELECT COUNT(*) AS N FROM VANTARA_RAW.BILLING.INVOICES",
+            )
         except SnowflakeMappedError as exc:
             dev_read_blocked = _denied(exc)
         else:
@@ -276,6 +390,7 @@ async def run_live_interview_smoke() -> LiveProbeReport:
                 ro_inspected_raw=ro_inspected,
                 ro_write_blocked=ro_write_blocked,
                 dev_raw_read_blocked=False,
+                future_grants_inspected=future_inspected,
                 detail=(
                     "DEV identity can still read VANTARA_RAW; "
                     "previously revoked grants remain a blocker"
@@ -291,15 +406,26 @@ async def run_live_interview_smoke() -> LiveProbeReport:
             dev_role = str(next(iter(role_rows[0].values()))).upper() if role_rows else ""
             if dev_role != ROLE_DEVELOPMENT:
                 return _failed("DEV identity is not using AIDE_DEV_RW")
-            probe = f"AIDE_MVP004_{uuid4().hex[:10]}"
-            dev_write_blocked = await _write_is_blocked(
-                f"CREATE TABLE VANTARA_RAW.BILLING.{probe} AS SELECT 1 AS ID",
-                context,
-                IdentityClass.DEVELOPMENT,
+            dev_grants = await _show_grants_to_role(
+                IdentityClass.DEVELOPMENT, context, ROLE_DEVELOPMENT
             )
-            if not dev_write_blocked:
-                await _dev_sql(context, f"DROP TABLE IF EXISTS VANTARA_RAW.BILLING.{probe}")
-                return _failed("DEV identity was able to write VANTARA_RAW")
+            dev_future = await _show_grants_to_role(
+                IdentityClass.DEVELOPMENT, context, ROLE_DEVELOPMENT, future=True
+            )
+            if dev_future is not None:
+                future_inspected = True
+            dev_violations = dev_raw_access_violations(list(dev_grants) + list(dev_future or ()))
+            if dev_violations:
+                return LiveProbeReport(
+                    status=LiveSmokeStatus.FAILED,
+                    ro_inspected_raw=ro_inspected,
+                    ro_write_blocked=ro_write_blocked,
+                    dev_raw_read_blocked=dev_read_blocked,
+                    dev_raw_write_blocked=False,
+                    future_grants_inspected=future_inspected,
+                    detail="AIDE_DEV_RW has unintended VANTARA_RAW access",
+                )
+            dev_write_blocked = True
 
             digest = tiny_manifest_digest()
             loaded = await dev.load_manifest_sources(
@@ -310,8 +436,6 @@ async def run_live_interview_smoke() -> LiveProbeReport:
                 ),
                 context,
             )
-            for loaded_table in loaded.tables:
-                loaded_schemas.add(str(loaded_table.schema_name))
             if loaded.fixture_digest != digest or loaded.target_database != DEV_DATABASE:
                 return _failed("manifest load did not stay on the pinned digest and AIDE_DEV")
             prefix = workflow_short_id(workflow_id) + "_"
@@ -352,8 +476,9 @@ async def run_live_interview_smoke() -> LiveProbeReport:
             raw_dev_reconciled=reconciled,
             production_or_staging_action=False,
             grant_sql_executed=False,
+            future_grants_inspected=future_inspected,
             detail=(
-                "live grant probe and RAW/DEV fixture reconciliation completed"
+                "live grant metadata probe and RAW/DEV fixture reconciliation completed"
                 if passed
                 else "live probe failed a least-privilege or reconciliation check"
             ),
@@ -361,24 +486,17 @@ async def run_live_interview_smoke() -> LiveProbeReport:
     except Exception as exc:
         return _failed(sanitize_error_message(str(exc)))
     finally:
-        for schema in loaded_schemas:
-            if not schema.upper().startswith("WF"):
-                continue
-            quoted = schema.replace('"', '""')
-            try:
-                await _dev_sql(
-                    _context(workflow_id, "cleanup"),
-                    f'DROP SCHEMA IF EXISTS {DEV_DATABASE}."{quoted}" CASCADE',
-                )
-            except Exception:
-                continue
+        await drop_workflow_dev_schemas(workflow_id)
 
 
 __all__ = [
     "HUMAN_ACTION",
     "LIVE_SECRET_NAMES",
     "LiveProbeReport",
+    "dev_raw_access_violations",
+    "drop_workflow_dev_schemas",
     "interview_live_credentials_available",
     "missing_live_secret_names",
+    "ro_raw_write_violations",
     "run_live_interview_smoke",
 ]
