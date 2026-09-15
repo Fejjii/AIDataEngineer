@@ -1,8 +1,13 @@
 # Architecture Decision Records
 
-Product architecture ADRs for the AI Data Engineer platform. Numbering continues from the
-operating-system ADRs in `.ai/DECISIONS.md` (DE-ADR-001..007). Each ADR here also has a
-compact entry in `.ai/DECISIONS.md`; this directory holds the full record.
+Product architecture ADRs for Data Pilot AI (repository / governance name: AI Data Engineer).
+Numbering continues from the operating-system ADRs in `.ai/DECISIONS.md` (DE-ADR-001..007).
+Each ADR here also has a compact entry in `.ai/DECISIONS.md`; this directory holds the full
+record.
+
+Interview MVP claims follow `README.md` and DE-ADR-028. Several ACCEPTED ADRs still
+describe V1 design surfaces (SPA, GitHub delivery, `aide eval`) that are not Interview
+MVP implementation.
 
 Status values: PROPOSED · ACCEPTED · SUPERSEDED · REJECTED.
 

@@ -1,12 +1,28 @@
-# AI Data Engineer — Architecture V1
+# Data Pilot AI — Architecture V1
 
+**Product name:** Data Pilot AI  
+**Repository / governance name:** AI Data Engineer (`AIDataEngineer`)  
 **Task:** DE 001 (corrected by DE 001R1, DE 001R2A and DE 001R2B) · **Status:** ACCEPTED · **Date:** 2026-09-11
 **Owner of changes after acceptance:** ADR + higher-tier review (see `.ai/MASTER_WORKFLOW.md` §20)
 
-This is the buildable architecture for the AI Data Engineer control plane. It is the
-authoritative product architecture. Companion documents refine individual areas and are
-listed in §12. Where a companion document conflicts with this file, this file wins and the
-companion is corrected.
+This is the accepted DE001 architecture for the Data Pilot AI control plane. Companion
+documents refine individual areas and are listed in §12. Where a companion document
+conflicts with this file on **accepted architecture**, this file wins and the companion
+is corrected. Where this file describes a broader V1 surface than the Interview MVP,
+the Interview contract wins for **what `main` currently runs**.
+
+## How to read this document
+
+| Layer | Authority | Open this for |
+|---|---|---|
+| What the repository actually runs | `README.md`, `docs/MVP_SCOPE.md`, `docs/INTERVIEW_DEMO.md`, `docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md` | Recruiter and interview claims |
+| Accepted DE001 architecture | Numbered sections below | Kernel contracts, trust boundaries, extensibility |
+| Interview evaluation evidence | `docs/evaluation/` | Scorecard, adversarial tests, FINAL-QA-001 |
+
+Present-tense language in §1–§11 is **accepted V1 design**. It is not a shipping inventory.
+Frontend SPA, GitHub connector, documentation/lineage publication, staging deploy,
+`aide worker` as a separate process, and `aide eval` are design, not Interview MVP
+commands or features.
 
 ## PIVOT001 Interview MVP profile
 
@@ -28,14 +44,20 @@ Completed DE002–DE008A work remains the implementation foundation.
 
 ---
 
-## 1. What the system is
+## 1. What the V1 system is (accepted design)
 
-An **AI Data Engineering control plane**: a human describes a data engineering outcome in
-natural language; the system plans, discovers metadata, profiles data, decides a modelling
-strategy, generates transformations (SQL / dbt / Python), executes them in a development
-environment, validates deterministically, diagnoses and repairs bounded failures, produces
-documentation and lineage, prepares Git changes and a pull request, and stops at explicit
-human approval gates before anything reaches staging or production.
+An **autonomous data-engineering control plane**: a human describes a data engineering
+outcome in natural language; the designed V1 system plans, discovers metadata, profiles
+data, decides a modelling strategy, generates transformations (SQL / dbt / Python),
+executes them in a development environment, validates deterministically, diagnoses and
+repairs bounded failures, produces documentation and lineage, prepares Git changes and a
+pull request, and stops at explicit human approval gates before anything reaches staging or
+production.
+
+The **Interview MVP subset** of that design is the closed loop in `README.md`: one
+customer-revenue request, one pinned Digital Twin, Snowflake + dbt in workflow-scoped
+DEV, one schema-drift repair, and a read-only Independent Verifier. It does not prepare a
+GitHub pull request, ship a frontend, or deploy to staging.
 
 It is **not** a chatbot, a code generator, or an autonomous administrator. It is a
 governed executor of typed capabilities, in which an LLM proposes and deterministic code
@@ -56,6 +78,10 @@ decides, validates, and enforces.
 ---
 
 ## 2. System context
+
+Accepted V1 design context. Interview MVP runtime uses the CLI rather than a Frontend SPA,
+and does not ship a GitHub connector. Snowflake and dbt are the implemented data-plane
+connectors.
 
 ```mermaid
 flowchart LR
@@ -93,7 +119,7 @@ Trust boundaries (details in `docs/PERMISSION_MODEL.md` §8):
 All components below are Python modules in one package (`src/aide/`). None is a separate
 process in V1. The worker loop that executes tasks runs in-process with the API by default
 and can be started as a second process of the same image when isolation is wanted
-(`aide worker`). Component boundaries are enforced by module layout, import rules (see
+(V1 design: `aide worker`; Interview MVP runs the in-process worker). Component boundaries are enforced by module layout, import rules (see
 `docs/IMPLEMENTATION_PLAN.md` §2) and typed interfaces, not by network hops.
 
 Legend — **Det**: deterministic code. **LLM**: LLM reasoning, always via the LLM Gateway,

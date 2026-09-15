@@ -18,12 +18,13 @@ The repository, Git history, and verified execution evidence have higher authori
 | Field | Value |
 |-------|-------|
 | Project name | AI Data Engineer |
+| Product name | Data Pilot AI |
 | Repository | AIDataEngineer |
 | Task prefix | DE |
 | Compact task IDs | DE000, DE001, DE002 |
 | Canonical branch | `main` |
 | Local checkout | `~/Developer/AIDataEngineer` |
-| Current phase | DE 001 architecture ACCEPTED (2026-09-11); DE 002A Cloud-eligible |
+| Current phase | Interview MVP (MVP001–MVP004) implemented on `main`; DE 001 architecture ACCEPTED |
 
 ## How to use this layer
 

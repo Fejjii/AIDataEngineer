@@ -71,7 +71,9 @@ uv run alembic upgrade head
 ```
 
 PostgreSQL 16 must be reachable at `AIDE_DATABASE_URL` or
-`AIDE_TEST_DATABASE_URL` (default `postgresql+psycopg://ubuntu@127.0.0.1:5432/aide_dev`).
+`AIDE_TEST_DATABASE_URL`. The CLI fallback is
+`postgresql+psycopg://ubuntu@127.0.0.1:5432/aide_dev` (Cloud / OPS003 local role).
+Export a matching DSN if your PostgreSQL role or password differs.
 
 Offline demo uses fake Snowflake and fake dbt. No vendor credentials are required.
 

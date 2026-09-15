@@ -26,7 +26,7 @@ Interview MVP is CLI-first (`aide interview`); the SPA is a V1 design, not a shi
 | Agent framework | **None** | See `docs/AGENT_MODEL.md` | LangChain, CrewAI, AutoGen, Semantic Kernel (autonomy and abstraction not wanted) |
 | LLM abstraction | **Own thin gateway**: `LLMProvider` protocol + adapters using official provider SDKs; structured output via JSON schema; versioned prompt files rendered with **Jinja2 sandboxed** templates; replay fake | Minimal surface; provider swap = one adapter; prompts inspectable and versioned | LangChain (unneeded abstraction), LiteLLM (useful multi-provider proxy; may be adopted later as an adapter if >2 providers), Instructor (nice, but Pydantic + provider JSON-schema modes already cover it) |
 | Structured output enforcement | Provider JSON-schema/tool-call mode where available; fallback: JSON extraction + Pydantic validation + one repair retry | Correctness | Free-text parsing |
-| Background execution | In-process asyncio worker with PostgreSQL phase runs, advisory transaction serialization, `SKIP LOCKED`, renewable leases/fencing epochs and all-path reconciliation; separable `aide worker` | Explicit durable safety at MVP scale without broker | Celery/Redis, Temporal (deferred) |
+| Background execution | In-process asyncio worker with PostgreSQL phase runs, advisory transaction serialization, `SKIP LOCKED`, renewable leases/fencing epochs and all-path reconciliation; separable worker process is V1 design (`aide worker` is not an Interview CLI command) | Explicit durable safety at MVP scale without broker | Celery/Redis, Temporal (deferred) |
 | Queueing | **PostgreSQL tables** (see above) | Same | Redis, Kafka, SQS |
 | Blocking vendor SDK calls | `asyncio.to_thread` / bounded thread pool per connector | Snowflake connector is sync | Rewriting drivers |
 | SQL parsing / dialects | **sqlglot** plus dialect-versioned safe function/construct tables and parse/render/reparse checks | AST, canonical scope, fail-closed Snowflake safety, fake transpilation | sqlparse (no AST), regex |
@@ -40,7 +40,7 @@ Interview MVP is CLI-first (`aide interview`); the SPA is a V1 design, not a shi
 | Logging | **structlog** JSON with redaction processor | Structured, testable | stdlib only (formatting burden), loguru |
 | Tracing | **OpenTelemetry** Python SDK; console/no-op by default; OTLP exporter optional | Standard; vendor-neutral | Langfuse/LangSmith (LLM-specific SaaS; may be added as an exporter later), custom only |
 | Metrics store | PostgreSQL tables + derived views; optional OTel metrics | Enough for demo and evaluation | Prometheus (adds infra; V2 if needed) |
-| Evaluation | **Own harness** (`aide eval`) on pytest + YAML scenarios; recorded LLM fixtures | Same code path as product; deterministic offline | promptfoo/DeepEval/Ragas (prompt-centric, not workflow-centric), LLM judges (circular) |
+| Evaluation | **Interview MVP:** `uv run aide interview benchmark` + `tests/evaluation/` (no LLM judge). **V1 design:** `aide eval` YAML harness (not implemented as a CLI) | Same Supervisor/gateway/verifier path as the demo; deterministic offline | promptfoo/DeepEval/Ragas (prompt-centric, not workflow-centric), LLM judges (circular) |
 | Testing | **pytest**, `pytest-asyncio`, `hypothesis` (property tests for SQL classifier and state machine), `testcontainers` for PostgreSQL, `respx` for httpx mocking, `import-linter` for boundaries | Standard, strong | unittest |
 | Static analysis | **ruff** (lint + format), **mypy --strict**, `import-linter`, `gitleaks` (secret scan), `bandit` (optional) | Fast, comprehensive | black+isort+flake8 (three tools) |
 | Docker | `Dockerfile` (multi-stage, uv) for the app; `docker-compose.yml` for PostgreSQL (+ optional Jaeger); frontend built into the image or served separately in dev | Reproducible local and CI | Kubernetes manifests (not now) |
@@ -49,7 +49,7 @@ Interview MVP is CLI-first (`aide interview`); the SPA is a V1 design, not a shi
 | Secrets handling | `SecretRef`/`SecretStr`; separate non-enumerable resolver scopes for connector and LLM provider adapters; `.env` ignored | Simple least-privilege boundary | Vault now (overkill) |
 | Connector SDK | Internal `aide.connectors.base` (Protocol, `ConnectorSpec`, `@implements`, contract test kit, fake base classes) | Adding a connector = implement protocol + tests | External plugin frameworks (pluggy) — may adopt when out-of-repo connectors appear |
 | Synthetic data | Python generator with **Faker** + seeded RNG → CSV/Parquet + PostgreSQL load + Snowflake `COPY` loader | Deterministic fixtures | Hand-written CSVs (too small), dbt seeds only (volume) |
-| Task/CLI | **Typer** CLI (`aide api`, `aide worker`, `aide eval`, `aide connectors check`, `aide demo load`) | Typed CLI | argparse |
+| Task/CLI | **Typer** CLI. Interview: `aide interview demo` / `benchmark` / `live-smoke`. Also: `aide connectors check`, `aide demo build-fixtures`, `aide demo load-snowflake`, `aide slice run-offline`. V1 design names `aide api`, `aide worker`, and `aide eval` are not implemented commands | Typed CLI | argparse |
 | Docs | Markdown in `docs/`; Mermaid diagrams | Reviewable in PRs | Sphinx/MkDocs site (later) |
 
 ---

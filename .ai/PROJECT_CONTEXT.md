@@ -4,7 +4,7 @@ Keep this file concise. It orients agents. It is not a substitute for architectu
 
 ## Project name
 
-AI Data Engineer (repository: `AIDataEngineer`)
+Product: **Data Pilot AI**. Repository / governance: AI Data Engineer (`AIDataEngineer`).
 
 ## Product north star
 
