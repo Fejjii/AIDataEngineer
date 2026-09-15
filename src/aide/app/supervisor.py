@@ -82,6 +82,7 @@ from aide.domain.repair import (
     DriftEvidence,
     ProposeRepairInput,
     RepairApplication,
+    RepairBudgetSnapshot,
     RepairEventKind,
     RepairProposal,
     RepairResult,
@@ -146,7 +147,8 @@ from aide.persistence.twin import TwinRepository
 from aide.profiling.artifacts import ProfilingRunResult
 from aide.profiling.fixtures import asset_slug, demo_selected_assets
 from aide.reasoning.propose_model_design import propose_model_design
-from aide.repair.budget import snapshot_from_counts
+from aide.repair.allowlist import is_accepted_authority
+from aide.repair.budget import block_reason_for_action, snapshot_from_counts, snapshot_from_events
 from aide.repair.diff import sha256_text
 from aide.repair.drift import as_drift_column, build_drift_evidence
 from aide.repair.inject import SchemaDriftInjector
@@ -820,6 +822,14 @@ class InterviewSupervisor:
             if task.workflow_id != result.workflow_id or task.phase_run_id != phase_run_id:
                 raise RuntimeError("claim escaped the current workflow or phase")
             capability_id = task.capability_id
+        result.extra["last_task_id"] = str(claim.task_id)
+        if result.repair_stage:
+            await self._refresh_durable_repair_budget(result, task_id=claim.task_id)
+            action = _repair_budget_action(result, capability_id)
+            if action is not None and await self._enforce_repair_budget(
+                result, action=action, task_id=claim.task_id
+            ):
+                return True
         outcome = await self._gateway.execute(
             claim, principal=result.principal, authorization=result.grants
         )
@@ -828,7 +838,10 @@ class InterviewSupervisor:
             await self._record_drift(result)
         if capability_id == "propose_repair" and result.proposal is not None:
             await self._persist_repair_event(
-                result, RepairEventKind.PROPOSAL, result.proposal.model_dump(mode="json")
+                result,
+                RepairEventKind.PROPOSAL,
+                result.proposal.model_dump(mode="json"),
+                task_id=claim.task_id,
             )
         if capability_id == "validate_repair" and result.repair_validation is not None:
             await self._persist_repair_event(
@@ -840,6 +853,7 @@ class InterviewSupervisor:
                     if result.repair_validation.reason_codes
                     else None
                 ),
+                task_id=claim.task_id,
             )
         if (
             capability_id == "create_transformation"
@@ -850,7 +864,10 @@ class InterviewSupervisor:
                 result,
                 RepairEventKind.APPLICATION,
                 result.repair_application.model_dump(mode="json"),
+                task_id=claim.task_id,
             )
+        if result.repair_stage:
+            await self._refresh_durable_repair_budget(result, task_id=claim.task_id)
         return stopped
 
     def _absorb_outcome(
@@ -889,6 +906,8 @@ class InterviewSupervisor:
         self, result: InterviewResult, *, phase_run_id: UUID, snapshot: ContractSnapshot
     ) -> None:
         del snapshot
+        if result.repair_stage:
+            await self._refresh_durable_repair_budget(result)
         async with self._sessions() as session, session.begin():
             templates = (
                 await session.scalars(
@@ -1083,7 +1102,6 @@ class InterviewSupervisor:
                     project_state_id=created.project_state_id,
                     applied_at=_naive(datetime.now(UTC)),
                 )
-                result.extra["applied_count"] = int(result.extra.get("applied_count", 0)) + 1
         elif capability_id == "parse_transformation":
             result.parse_ok = ParseTransformationOutput.model_validate(output).ok
             if not result.parse_ok:
@@ -1146,7 +1164,6 @@ class InterviewSupervisor:
             result.proposal = RepairProposal.model_validate(output)
             result.before_artifact_hash = result.proposal.preimage_sha256
             result.after_artifact_hash = result.proposal.patched_sha256
-            result.extra["proposal_count"] = int(result.extra.get("proposal_count", 0)) + 1
         elif capability_id == "validate_repair":
             result.repair_validation = RepairValidation.model_validate(output)
             if not result.repair_validation.allowed:
@@ -1205,6 +1222,8 @@ class InterviewSupervisor:
                 return await self._block_repair(result)
             return await self._finalize_status(result)
         result.repair_stage = "post_validate"
+        if await self._enforce_repair_budget(result, action="revalidate"):
+            return await self._block_repair(result)
         execution_id = uuid4()
         if await self._advance(
             result,
@@ -1239,7 +1258,6 @@ class InterviewSupervisor:
             if result.blocked:
                 return await self._block_repair(result)
             return await self._finalize_status(result)
-        result.extra["post_repair_revalidation_count"] = 1
         await self._persist_repair_event(
             result,
             RepairEventKind.REVALIDATION,
@@ -1248,6 +1266,7 @@ class InterviewSupervisor:
                 "quality_passed": result.quality.passed if result.quality else False,
             },
         )
+        await self._refresh_durable_repair_budget(result)
         await self._run_verifier(result)
         if result.blocked:
             return await self._block_repair(result)
@@ -1261,7 +1280,9 @@ class InterviewSupervisor:
             application=result.repair_application,
             proposal_count=int(result.extra.get("proposal_count", 0)),
             applied_count=int(result.extra.get("applied_count", 0)),
-            post_repair_revalidation_count=1,
+            post_repair_revalidation_count=int(
+                result.extra.get("post_repair_revalidation_count", 0)
+            ),
         )
         await self._reduce_current(result)
         return await self._finalize_status(result)
@@ -1392,16 +1413,49 @@ class InterviewSupervisor:
         payload: dict[str, Any],
         *,
         reason_code: str | None = None,
+        task_id: UUID | None = None,
     ) -> None:
+        resolved_task = task_id or _uuid_or_none(result.extra.get("last_task_id"))
         async with self._sessions() as session, session.begin():
             await RepairEventRepository(session).add(
                 workflow_id=result.workflow_id,
                 event_kind=kind,
                 payload=payload,
                 reason_code=reason_code,
+                task_id=resolved_task,
             )
 
+    async def _refresh_durable_repair_budget(
+        self, result: InterviewResult, *, task_id: UUID | None = None
+    ) -> RepairBudgetSnapshot:
+        resolved_task = task_id or _uuid_or_none(result.extra.get("last_task_id"))
+        async with self._sessions() as session:
+            events = await RepairEventRepository(session).list_for_workflow(result.workflow_id)
+        snapshot = snapshot_from_events(events, task_id=resolved_task)
+        result.extra["proposal_count"] = snapshot.proposal_count
+        result.extra["applied_count"] = snapshot.applied_count
+        result.extra["applied_count_for_task"] = snapshot.applied_count_for_task
+        result.extra["post_repair_revalidation_count"] = snapshot.post_repair_revalidation_count
+        result.extra["repair_budget_source"] = "persisted_events"
+        return snapshot
+
+    async def _enforce_repair_budget(
+        self,
+        result: InterviewResult,
+        *,
+        action: str,
+        task_id: UUID | None = None,
+    ) -> bool:
+        snapshot = await self._refresh_durable_repair_budget(result, task_id=task_id)
+        reason = block_reason_for_action(snapshot, action)
+        if reason is None:
+            return False
+        result.blocked = True
+        result.block_reason = reason
+        return True
+
     async def _block_repair(self, result: InterviewResult) -> InterviewResult:
+        await self._refresh_durable_repair_budget(result)
         reason = result.block_reason or "REPAIR_BLOCKED"
         result.blocked = True
         result.block_reason = reason
@@ -1430,6 +1484,7 @@ class InterviewSupervisor:
                 event_kind=RepairEventKind.BLOCK,
                 payload={"reason": reason},
                 reason_code=reason,
+                task_id=_uuid_or_none(result.extra.get("last_task_id")),
             )
             await append_audit_event(
                 session,
@@ -1594,9 +1649,14 @@ class InterviewSupervisor:
         assert result.estate_context_sha256 is not None
         typed = result.extra.get("typed_evidence", {})
         evidence: list[EvidenceDigest] = []
+        bodies: dict[str, dict[str, Any]] = {}
         intents: tuple[Any, ...] = ()
         pinned_snapshot_id = result.twin_snapshot.twin_snapshot_id
         pinned_digest = result.twin_snapshot.manifest_sha256
+        now = _naive(datetime.now(UTC))
+        drift_evidence_ref_id: UUID | None = None
+        drift_stale = True
+        drift_authoritative = False
         async with read_only_unit_of_work(self._sessions) as session:
             intents = await GatewayDispatchRepository(session).list_for_workflow(result.workflow_id)
             pinned = await TwinRepository(session).pinned_snapshot(result.workflow_id)
@@ -1607,42 +1667,62 @@ class InterviewSupervisor:
                 reference = await twins.get_evidence_reference(UUID(payload["evidence_ref_id"]))
                 if reference is None:
                     continue
-                digest = reference.sha256
-                if name == "before_artifact_hash" and result.before_artifact_hash is not None:
-                    digest = result.before_artifact_hash
-                elif name == "after_artifact_hash" and result.after_artifact_hash is not None:
-                    digest = result.after_artifact_hash
-                stale = reference.sha256 != payload["sha256"]
+                catalog_digest = payload.get("sha256")
+                digest_mismatch = catalog_digest != reference.sha256
+                claimed_sha256: str | None = None
                 if reference.artifact_id is not None:
                     artifact = await session.get(ArtifactModel, reference.artifact_id)
-                    if artifact is not None and artifact.sha256 != reference.sha256:
-                        stale = True
+                    if artifact is None:
+                        digest_mismatch = True
+                    else:
+                        if artifact.sha256 != reference.sha256:
+                            digest_mismatch = True
+                        if artifact.body is not None:
+                            actual = hashlib.sha256(canonical_json_bytes(artifact.body)).hexdigest()
+                            if actual != artifact.sha256:
+                                digest_mismatch = True
+                            bodies[name] = artifact.body
+                            claimed_sha256 = _claimed_content_hash(artifact.body)
                 evidence.append(
                     EvidenceDigest(
                         evidence_ref_id=reference.evidence_ref_id,
                         evidence_type=name,
-                        sha256=digest,
-                        execution_mode=self._execution_mode,
-                        stale=stale,
-                        identity=f"{name}:{reference.evidence_ref_id}:{digest}",
+                        sha256=reference.sha256,
+                        execution_mode=reference.execution_mode,
+                        stale=False,
+                        digest_mismatch=digest_mismatch,
+                        claimed_sha256=claimed_sha256,
+                        identity=(f"{name}:{reference.evidence_ref_id}:{reference.sha256}"),
                     )
                 )
-        if not evidence:
-            for name, payload in typed.items():
-                digest = payload["sha256"]
-                if name == "before_artifact_hash" and result.before_artifact_hash is not None:
-                    digest = result.before_artifact_hash
-                elif name == "after_artifact_hash" and result.after_artifact_hash is not None:
-                    digest = result.after_artifact_hash
-                evidence.append(
-                    EvidenceDigest(
-                        evidence_ref_id=UUID(payload["evidence_ref_id"]),
-                        evidence_type=name,
-                        sha256=digest,
-                        execution_mode=self._execution_mode,
-                        identity=f"{name}:{payload['evidence_ref_id']}:{digest}",
-                    )
-                )
+            invoice_ids = tuple(
+                item.asset_id
+                for item in pinned.assets
+                if item.kind is TwinAssetKind.DATASET
+                and tuple(part.upper() for part in item.canonical_locator[:3])
+                == ACCEPTED_ASSET_ADDRESS
+            )
+            subject_ids = invoice_ids or tuple(item.asset_id for item in pinned.assets)
+            observations = await twins.list_observations_by_kind(
+                kind=TwinObservationKind.DRIFT, subject_asset_ids=subject_ids
+            )
+            observation = observations[0] if observations else None
+            if observation is not None:
+                drift_evidence_ref_id = observation.evidence_ref_id
+                drift_stale = observation.fresh_until is not None and now > observation.fresh_until
+                drift_authoritative = is_accepted_authority(
+                    observation.source_authority.authority_id
+                ) and bool(observation.value.get("authoritative", False))
+        schema_drift_item = next(
+            (item for item in evidence if item.evidence_type == "schema_drift"), None
+        )
+        if schema_drift_item is not None:
+            evidence = [
+                item.model_copy(update={"stale": drift_stale})
+                if item.evidence_type == "schema_drift"
+                else item
+                for item in evidence
+            ]
         result.extra["verifier_readonly"] = True
         gateway_records = tuple(
             GatewayIntentRecord(
@@ -1685,6 +1765,25 @@ class InterviewSupervisor:
             if isinstance(plan, Plan)
             else hashlib.sha256(b"plan").hexdigest()
         )
+        proposal_body = bodies.get("repair_proposal")
+        application_body = bodies.get("repair_application")
+        before_hash = _sha_field(proposal_body, "preimage_sha256")
+        after_hash = _sha_field(application_body, "postimage_sha256") or _sha_field(
+            proposal_body, "patched_sha256"
+        )
+        repair_in_scope = bool(
+            proposal_body is not None
+            and proposal_body.get("from_column") == ACCEPTED_FROM_COLUMN
+            and proposal_body.get("to_column") == ACCEPTED_TO_COLUMN
+        )
+        if proposal_body is None and result.proposal is not None:
+            repair_in_scope = (
+                result.proposal.from_column == ACCEPTED_FROM_COLUMN
+                and result.proposal.to_column == ACCEPTED_TO_COLUMN
+            )
+        repair_applied = bool(application_body and application_body.get("applied"))
+        if application_body is None:
+            repair_applied = bool(result.repair_application and result.repair_application.applied)
         return VerifierEvidencePack(
             workflow_id=result.workflow_id,
             twin_snapshot_id=pinned_snapshot_id,
@@ -1701,19 +1800,15 @@ class InterviewSupervisor:
             quality_passed=quality_passed,
             revenue_reconciliation_passed=recon_passed,
             failure_class=result.failure_class.value if result.failure_class else None,
-            drift_evidence_ref_id=result.drift.evidence_ref_id if result.drift else None,
-            drift_stale=False,
-            drift_authoritative=bool(result.drift and result.drift.authoritative),
-            before_artifact_hash=result.before_artifact_hash,
-            after_artifact_hash=result.after_artifact_hash,
-            repair_in_scope=bool(
-                result.proposal is not None
-                and result.proposal.from_column == ACCEPTED_FROM_COLUMN
-                and result.proposal.to_column == ACCEPTED_TO_COLUMN
-            ),
-            repair_applied=bool(result.repair_application and result.repair_application.applied),
+            drift_evidence_ref_id=drift_evidence_ref_id,
+            drift_stale=drift_stale,
+            drift_authoritative=drift_authoritative,
+            before_artifact_hash=before_hash,
+            after_artifact_hash=after_hash,
+            repair_in_scope=repair_in_scope,
+            repair_applied=repair_applied,
             post_repair_validation_passed=result.tests_ok and quality_passed and result.execute_ok,
-            require_real_chain=False,
+            require_real_chain=self._execution_mode is ExecutionMode.REAL,
             timing=TimingMetadata(
                 wall_time_ms=wall_ms,
                 retry_count=0,
@@ -1926,6 +2021,8 @@ def _validate_repair_payload(result: InterviewResult) -> ValidateRepairInput:
     assert result.proposal is not None
     assert result.drift is not None
     assert result.generated is not None
+    if result.extra.get("repair_budget_source") != "persisted_events":
+        raise RuntimeError("repair budget must be loaded from persisted RepairEvent records")
     original_files = tuple((item.path, item.content, item.kind) for item in result.generated.files)
     return ValidateRepairInput(
         proposal=result.proposal,
@@ -1935,6 +2032,7 @@ def _validate_repair_payload(result: InterviewResult) -> ValidateRepairInput:
         budget=snapshot_from_counts(
             proposal_count=int(result.extra.get("proposal_count", 0)),
             applied_count=int(result.extra.get("applied_count", 0)),
+            applied_count_for_task=int(result.extra.get("applied_count_for_task", 0)),
             post_repair_revalidation_count=int(
                 result.extra.get("post_repair_revalidation_count", 0)
             ),
@@ -1999,6 +2097,42 @@ async def append_audit_outside(
         await append_audit_event(
             session, workflow_id=workflow_id, event_type=event_type, payload=payload
         )
+
+
+def _repair_budget_action(result: InterviewResult, capability_id: str) -> str | None:
+    if capability_id == "propose_repair":
+        return "propose"
+    if capability_id == "create_transformation" and result.repair_stage == "apply":
+        return "apply"
+    return None
+
+
+def _uuid_or_none(value: object) -> UUID | None:
+    if isinstance(value, UUID):
+        return value
+    if isinstance(value, str) and value:
+        return UUID(value)
+    return None
+
+
+def _hex_digest(value: object) -> str | None:
+    if not isinstance(value, str) or len(value) != 64:
+        return None
+    if any(char not in "0123456789abcdef" for char in value):
+        return None
+    return value
+
+
+def _claimed_content_hash(body: dict[str, Any] | None) -> str | None:
+    if not isinstance(body, dict):
+        return None
+    return _hex_digest(body.get("sha256"))
+
+
+def _sha_field(body: dict[str, Any] | None, field: str) -> str | None:
+    if not isinstance(body, dict):
+        return None
+    return _hex_digest(body.get(field))
 
 
 def _evidence(run: ProfilingRunResult) -> tuple[Any, Any, Any, Any]:

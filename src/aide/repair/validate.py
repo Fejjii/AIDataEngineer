@@ -118,9 +118,9 @@ def validate_repair(payload: ValidateRepairInput) -> RepairValidation:
     )
     rule(
         "applied_budget",
-        payload.budget.applied_count < MAX_APPLIED_REPAIRS_PER_TASK
-        and payload.budget.applied_count < MAX_APPLIED_REPAIRS_PER_WORKFLOW,
-        str(payload.budget.applied_count),
+        payload.budget.applied_count < MAX_APPLIED_REPAIRS_PER_WORKFLOW
+        and payload.budget.applied_count_for_task < MAX_APPLIED_REPAIRS_PER_TASK,
+        str((payload.budget.applied_count, payload.budget.applied_count_for_task)),
     )
     rule(
         "recursive_budget",
@@ -203,6 +203,7 @@ def _reason_for(rule_id: str) -> str:
         "applied_budget": RepairBlockReason.SECOND_REPAIR.value,
         "recursive_budget": RepairBlockReason.RECURSIVE_REPAIR.value,
         "proposal_budget": RepairBlockReason.BUDGET_EXCEEDED.value,
+        "revalidation_budget": RepairBlockReason.BUDGET_EXCEEDED.value,
         "static_validators": RepairBlockReason.STATIC_VALIDATION_FAILED.value,
         "artifact_path": RepairBlockReason.WRONG_SOURCE.value,
     }

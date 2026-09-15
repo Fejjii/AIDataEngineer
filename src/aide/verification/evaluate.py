@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from aide.domain.artifacts import ExecutionMode
 from aide.domain.verification import (
+    EvidenceDigest,
     VerifierCheck,
     VerifierEvidencePack,
     VerifierReasonCode,
@@ -108,22 +109,20 @@ def evaluate_verifier(pack: VerifierEvidencePack) -> VerifierResult:
         VerifierReasonCode.DIGEST_MISMATCH,
         "schema drift evidence identity must match the claimed reference",
     )
+    add(
+        "evidence_reference_digests",
+        not any(item.digest_mismatch for item in pack.evidence),
+        VerifierReasonCode.DIGEST_MISMATCH,
+        "persisted evidence reference digests must match immutable artifact bodies",
+    )
     before_item = by_type.get("before_artifact_hash")
     after_item = by_type.get("after_artifact_hash")
     add(
         "artifact_hash_digests",
-        (
-            before_item is None
-            or pack.before_artifact_hash is None
-            or before_item.sha256 == pack.before_artifact_hash
-        )
-        and (
-            after_item is None
-            or pack.after_artifact_hash is None
-            or after_item.sha256 == pack.after_artifact_hash
-        ),
+        _claimed_hash_matches(before_item, pack.before_artifact_hash)
+        and _claimed_hash_matches(after_item, pack.after_artifact_hash),
         VerifierReasonCode.DIGEST_MISMATCH,
-        "before/after hashes must match referenced evidence digests",
+        "persisted claimed artifact hashes must match repair proposal/application hashes",
     )
     stale_items = [item.identity for item in pack.evidence if item.stale]
     add(
@@ -211,6 +210,12 @@ def evaluate_verifier(pack: VerifierEvidencePack) -> VerifierResult:
         estate_context_sha256=pack.estate_context_sha256,
         advisory_explanation=None,
     )
+
+
+def _claimed_hash_matches(item: EvidenceDigest | None, expected: str | None) -> bool:
+    if item is None or expected is None:
+        return True
+    return item.claimed_sha256 is not None and item.claimed_sha256 == expected
 
 
 def with_advisory_explanation(result: VerifierResult, text: str | None) -> VerifierResult:

@@ -71,4 +71,7 @@ async def test_accepted_schema_drift_repair_and_verifier_pass(
         assert "APPLICATION" in kinds
         assert "VERDICT" in kinds
         assert sum(1 for item in events if item.event_kind == "APPLICATION") == 1
+        applied = [item for item in events if item.event_kind == "APPLICATION"]
+        assert applied[0].task_id is not None
         assert result.extra.get("verifier_readonly") is True
+        assert result.extra.get("repair_budget_source") == "persisted_events"

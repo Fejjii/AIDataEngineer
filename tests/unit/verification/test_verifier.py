@@ -38,6 +38,9 @@ def _digest(evidence_type: str, digest: str | None = None) -> EvidenceDigest:
         evidence_type=evidence_type,
         sha256=value,
         execution_mode=ExecutionMode.MOCK,
+        claimed_sha256=(
+            value if evidence_type in {"before_artifact_hash", "after_artifact_hash"} else None
+        ),
         identity=f"{evidence_type}:{ref}:{value}",
     )
 
@@ -81,6 +84,7 @@ def _pack(**overrides: object) -> VerifierEvidencePack:
         item.model_copy(
             update={
                 "sha256": before,
+                "claimed_sha256": before,
                 "identity": f"before:{item.evidence_ref_id}:{before}",
             }
         )
@@ -92,6 +96,7 @@ def _pack(**overrides: object) -> VerifierEvidencePack:
         item.model_copy(
             update={
                 "sha256": after,
+                "claimed_sha256": after,
                 "identity": f"after:{item.evidence_ref_id}:{after}",
             }
         )
@@ -183,6 +188,19 @@ def test_digest_mismatch_fails() -> None:
     assert "DIGEST_MISMATCH" in result.reason_codes
 
 
+def test_evidence_reference_digest_mismatch_fails() -> None:
+    pack = _pack()
+    mismatched = tuple(
+        item.model_copy(update={"digest_mismatch": True})
+        if item.evidence_type == "before_artifact_hash"
+        else item
+        for item in pack.evidence
+    )
+    result = evaluate_verifier(pack.model_copy(update={"evidence": mismatched}))
+    assert result.verdict is VerifierVerdict.FAIL
+    assert "DIGEST_MISMATCH" in result.reason_codes
+
+
 def test_drift_identity_mismatch_fails() -> None:
     result = evaluate_verifier(_pack(drift_evidence_ref_id=uuid4()))
     assert result.verdict is VerifierVerdict.FAIL
@@ -206,6 +224,12 @@ def test_invalid_provenance_mix_fails() -> None:
         for item in pack.evidence
     )
     result = evaluate_verifier(pack.model_copy(update={"evidence": mixed}))
+    assert result.verdict is VerifierVerdict.FAIL
+    assert "PROVENANCE_MIX" in result.reason_codes
+
+
+def test_real_chain_rejects_mock_evidence() -> None:
+    result = evaluate_verifier(_pack(require_real_chain=True))
     assert result.verdict is VerifierVerdict.FAIL
     assert "PROVENANCE_MIX" in result.reason_codes
 

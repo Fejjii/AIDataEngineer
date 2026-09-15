@@ -136,6 +136,8 @@ class EvidenceDigest(VerificationModel):
     sha256: str = Field(pattern=SHA256_PATTERN)
     execution_mode: ExecutionMode
     stale: bool = False
+    digest_mismatch: bool = False
+    claimed_sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
     identity: str = Field(min_length=1)
 
 

@@ -348,6 +348,24 @@ def test_second_repair_is_rejected() -> None:
     assert "SECOND_REPAIR" in _reasons(result)
 
 
+def test_second_repair_per_task_is_rejected() -> None:
+    result = validate_repair(_input(budget=_budget(applied_count=0, applied_count_for_task=1)))
+    assert not result.allowed
+    assert "SECOND_REPAIR" in _reasons(result)
+
+
+def test_proposal_budget_is_rejected() -> None:
+    result = validate_repair(_input(budget=_budget(proposal_count=3)))
+    assert not result.allowed
+    assert "BUDGET_EXCEEDED" in _reasons(result)
+
+
+def test_revalidation_budget_is_rejected() -> None:
+    result = validate_repair(_input(budget=_budget(post_repair_revalidation_count=1)))
+    assert not result.allowed
+    assert "BUDGET_EXCEEDED" in _reasons(result)
+
+
 def test_recursive_repair_is_rejected() -> None:
     result = validate_repair(_input(budget=_budget(recursive_requested=True)))
     assert not result.allowed

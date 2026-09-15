@@ -169,6 +169,7 @@ class RepairResult(RepairModel):
 class RepairBudgetSnapshot(RepairModel):
     proposal_count: int = Field(ge=0)
     applied_count: int = Field(ge=0)
+    applied_count_for_task: int = Field(default=0, ge=0)
     post_repair_revalidation_count: int = Field(ge=0)
     recursive_requested: bool = False
     permission_changed: bool = False
