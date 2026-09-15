@@ -496,6 +496,12 @@ class FakeDbtConnector:
                 expected = dict(recovery.operation_locator)
             project = project_dir(self.work_root, recovery.workflow_id)
             return reconcile_create_transformation(expected_hashes=expected, project_root=project)
+        recorded = self._outputs.get(key)
+        if recorded is not None:
+            payload = {
+                item: value for item, value in recorded["output"].items() if item != "run_results"
+            }
+            return EffectFound(output=payload, external_ref=key)
         run_results = None
         manifest_present = False
         required: tuple[str, ...] = ()

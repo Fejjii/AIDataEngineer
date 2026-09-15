@@ -133,12 +133,14 @@ def evaluate_verifier(pack: VerifierEvidencePack) -> VerifierResult:
     )
     modes = {item.execution_mode for item in pack.evidence}
     mixed = ExecutionMode.REAL in modes and ExecutionMode.MOCK in modes
-    invalid_mix = mixed or (pack.require_real_chain and ExecutionMode.MOCK in modes)
+    mock_workflow_has_real = (not pack.require_real_chain) and ExecutionMode.REAL in modes
+    real_workflow_has_mock = pack.require_real_chain and ExecutionMode.MOCK in modes
+    invalid_mix = mixed or mock_workflow_has_real or real_workflow_has_mock
     add(
         "provenance_consistent",
         not invalid_mix,
         VerifierReasonCode.PROVENANCE_MIX,
-        "REAL and MOCK evidence must not mix in a live verdict",
+        "REAL and MOCK evidence must not mix; MOCK workflows reject REAL evidence",
     )
     unapproved = [
         item for item in pack.policy_decisions if item.approval_required and not item.approved

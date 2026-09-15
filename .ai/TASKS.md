@@ -192,6 +192,31 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 Integration order is strictly PIVOT001 → MVP001 → MVP002 → MVP003 → MVP004. The four MVP
 tasks do not run concurrently because their shared high-conflict contracts are sequential.
 
+## FINAL-QA-001 — Independent Interview MVP evaluation
+
+- Compact ID: `FINAL-QA-001`
+- Priority: P0
+- Status: IN_PROGRESS
+- Owner: Cursor Cloud agent (Grok 4.6)
+- Environment: CURSOR_CLOUD
+- Branch: `cursor/interview-evaluation-hardening-8bc5`
+- Base commit: `8324ef56d4c871c3f1303e28b722f2d78c163e98`
+- Dependencies: MVP001–MVP004 merged
+- Risk: Medium (evaluation and fail-closed defect fixes only)
+- Goal: Adversarial evaluation of the accepted Interview MVP. Do not add product
+  scope, repair classes, or vendors. Fix only in-scope reliability defects.
+  Produce `docs/evaluation/` with a deterministic PASS/FAIL/NOT_TESTED scorecard.
+- Explicit exclusions: new repair classes, new vendors, architecture redesign,
+  GRANT/REVOKE, VANTARA_RAW mutation, production/staging, merge to `main`.
+- Expected files: `src/aide/domain/evaluation.py`, `src/aide/app/evaluation/**`,
+  `tests/evaluation/**`, `docs/evaluation/**`, one run report.
+- Forbidden files: frontend, GitHub delivery, live credential files, new connectors.
+- Validation: focused evaluation tests, ruff, format, mypy, import-linter, unit,
+  integration, connector contracts, security, offline benchmark, tamper tests,
+  broader non-live suite, alembic check, gitleaks. Live Snowflake only if
+  credentials already exist.
+- Git authority: branch-only; one PR to `main`; do not merge.
+
 ---
 
 # Historical DE implementation backlog
