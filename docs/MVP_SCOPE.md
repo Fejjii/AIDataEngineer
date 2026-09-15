@@ -1,8 +1,9 @@
 # MVP Scope — Data Pilot AI Interview
 
 **Task:** PIVOT001
-**Status:** PROPOSED — active after DE-ADR-028 acceptance
+**Status:** IMPLEMENTED — MVP001–MVP004 merged to `main`
 **Authoritative contract:** `docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md`
+**Landing page:** repository `README.md` · **Demo:** `docs/INTERVIEW_DEMO.md`
 
 ## 1. Interview promise
 

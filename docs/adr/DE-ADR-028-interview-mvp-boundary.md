@@ -1,8 +1,9 @@
 # DE-ADR-028 — Constrain the active roadmap to one Interview MVP closed loop
 
 - **Date:** 2026-09-14
-- **Status:** PROPOSED
+- **Status:** ACCEPTED
 - **Task:** PIVOT001
+- **Implementation:** MVP001–MVP004 merged to `main`
 
 ## Context
 

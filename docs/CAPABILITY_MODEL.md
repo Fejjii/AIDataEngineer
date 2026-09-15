@@ -2,6 +2,11 @@
 
 **Task:** DE 001 (hardened by DE 001R2A and DE 001R2B) · **Status:** ACCEPTED · ADR: DE-ADR-013
 
+Interview MVP exercises discovery, profiling, modelling, dbt generation/execution, tests,
+quality, schema-drift repair, and verification through Snowflake and dbt. GitHub delivery,
+staging deploy, and production remain catalogued contracts, not Interview MVP surfaces.
+See repository `README.md` and `docs/MVP_SCOPE.md`.
+
 The orchestrator reasons about **capabilities**, never about vendors. A capability is a
 typed, versioned contract. A **tool** is the binding of a capability to an implementation
 (a connector handler or an LLM reasoner). A **connector** is an adapter to one external

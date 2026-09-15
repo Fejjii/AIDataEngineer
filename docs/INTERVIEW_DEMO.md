@@ -2,7 +2,8 @@
 
 **Task:** MVP004  
 **Audience:** recruiters, hiring managers, and interviewers  
-**Command:** `uv run aide interview demo`
+**Command:** `uv run aide interview demo`  
+**Landing page:** [`README.md`](../README.md)
 
 ## What this product demonstrates
 
@@ -33,7 +34,7 @@ The interview story is fixed:
 | This product | Not this product |
 |---|---|
 | Pins estate context and decides what may run | A place to store tables |
-| Routes every connector call through a Governed Tool Gateway | A scheduler that fires dbt jobs |
+| Routes every workflow connector action through a Governed Tool Gateway | A scheduler that fires dbt jobs |
 | Enforces policy, least privilege, and one bounded repair | An unbounded AI agent |
 | Proves PASS/FAIL from immutable evidence | An LLM judge of quality |
 | Works offline deterministically, then optionally on Snowflake DEV | A production automation platform |

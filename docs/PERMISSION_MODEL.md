@@ -4,7 +4,9 @@
 
 This document is the single reference for *who may do what*, *how it is enforced*, *how
 humans approve*, *how secrets and untrusted inputs are contained*, and *how failures are
-classified and bounded*.
+classified and bounded*. Interview MVP uses DEV-only grants, RAW RO inspection, and one
+automatic repair class. See repository
+[`README.md`](../README.md#safety-and-governance).
 
 ---
 

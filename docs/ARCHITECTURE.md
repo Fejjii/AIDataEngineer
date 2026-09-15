@@ -10,21 +10,21 @@ companion is corrected.
 
 ## PIVOT001 Interview MVP profile
 
-DE-ADR-028 is `PROPOSED`. After human acceptance, the active implementation profile is
-`docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md`, and its narrower scope overrides broader “V1”
+The Interview MVP is **implemented on `main`** (MVP001–MVP004). The active contract is
+`docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md`. Its narrower scope overrides broader “V1”
 delivery statements in this DE001 baseline. The underlying platform contracts remain
 accepted.
 
-The active profile adds a minimal PostgreSQL Digital Twin, a deterministic Supervisor
+The implemented profile is a minimal PostgreSQL Digital Twin, a deterministic Supervisor
 application responsibility, one complete Governed Tool Gateway, a read-only deterministic
 Independent Verifier, and an immutable evidence bundle. It proves one Vantara
 customer-revenue workflow, one `INVOICE_STATUS → STATUS` schema-drift correction, and one
-final report using Snowflake and dbt Core.
+final report using Snowflake and dbt Core. Recruiter landing page: repository `README.md`.
+Interview runbook: `docs/INTERVIEW_DEMO.md`.
 
 Frontend, GitHub delivery, staging, monitoring, a real LLM provider requirement, additional
-failure/repair classes, and all additional vendors are outside the Interview MVP. The
-active sequence is `MVP001 → MVP002 → MVP003 → MVP004`; completed DE002–DE008A work remains
-the implementation foundation.
+failure/repair classes, and all additional vendors remain outside the Interview MVP.
+Completed DE002–DE008A work remains the implementation foundation.
 
 ---
 

@@ -28,7 +28,7 @@ Status values: PROPOSED · ACCEPTED · SUPERSEDED · REJECTED.
 | [DE-ADR-025](DE-ADR-025-python-toolchain.md) | Python 3.12, uv, ruff, mypy strict, pytest | ACCEPTED |
 | [DE-ADR-026](DE-ADR-026-contract-stability.md) | Contract stability: baseline in DE 002, compatible evolution afterwards | ACCEPTED |
 | [DE-ADR-027](DE-ADR-027-trusted-principal-and-grants.md) | Trusted local principal and server-authorized workflow grants | ACCEPTED |
-| [DE-ADR-028](DE-ADR-028-interview-mvp-boundary.md) | Constrain the active roadmap to one Interview MVP closed loop | PROPOSED |
+| [DE-ADR-028](DE-ADR-028-interview-mvp-boundary.md) | Constrain the active roadmap to one Interview MVP closed loop | ACCEPTED |
 
 Amended by DE 001R1 (2026-09-11): DE-ADR-011 (operation vs attempt identity, `PARKED`),
 DE-ADR-014 (`allowed_permissions`, `reconcile`), DE-ADR-015 (permission sets, denial
@@ -54,6 +54,6 @@ fresh Cloud Agent verification passed; DE 002B and DE 002C reclassified from LOC
 Credential boundaries unchanged (real Snowflake, live dbt on Snowflake, live staging,
 production, and secret entry remain LOCAL or Hybrid per existing gates).
 
-Proposed by PIVOT001 (2026-09-14): DE-ADR-028 supersedes DE-ADR-021 as the active
-implementation ordering after acceptance. It preserves completed DE002–DE008A work and
-constrains the next implementation to MVP001–MVP004.
+Accepted with PIVOT001 (2026-09-14): DE-ADR-028 supersedes DE-ADR-021 as the active
+implementation ordering. It preserves completed DE002–DE008A work and constrained
+implementation to MVP001–MVP004, now merged to `main`.
