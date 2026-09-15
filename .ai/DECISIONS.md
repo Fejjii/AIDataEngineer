@@ -229,3 +229,17 @@ emitter, retry summary).
   no new connectors, no UI, no production or staging.
 - **Consequences:** Docker image includes `synthetic/` and `dbt/vantara_project`.
   Snowflake live smoke stays credential-gated and off the Compose environment map.
+
+## DEPLOY001 — Synthetic cloud demo is private by default
+
+- **Date:** 2026-09-15
+- **Status:** Accepted (task-scoped; additive under DE-ADR-026)
+- **Decision:** Standing Compose does not publish PostgreSQL to the host. There is
+  no deterministic `POSTGRES_PASSWORD` fallback; Compose requires the value from the
+  environment or `.env`. `AIDE_SYNTHETIC_DEMO_HTTP` defaults to disabled. Enabling
+  HTTP demo requires a nonempty `AIDE_SYNTHETIC_DEMO_TOKEN` or startup fails closed.
+  The published application port binds `127.0.0.1` unless `AIDE_HTTP_BIND` is set
+  to publish. CLI demo does not use the HTTP token. Public bind does not bypass the
+  token.
+- **Consequences:** Operators set secrets locally. CI smoke uses `docker compose exec`
+  and ephemeral random passwords, not a host Postgres port.

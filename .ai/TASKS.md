@@ -246,7 +246,7 @@ tasks do not run concurrently because their shared high-conflict contracts are s
 
 - Compact ID: `DEPLOY001_SYNTHETIC_CLOUD_DEMO`
 - Priority: P1
-- Status: DONE (PR 26; do not merge from the agent)
+- Status: DONE (PR 26; security remediation in progress on the same branch)
 - Owner: Cursor Cloud agent (Grok 4.6)
 - Environment: CURSOR_CLOUD
 - Branch: `deploy/synthetic_cloud_demo`
@@ -262,6 +262,24 @@ tasks do not run concurrently because their shared high-conflict contracts are s
   Interview demo HTTP, tests, `docs/ops/SYNTHETIC_CLOUD_DEMO.md`, run report.
 - Git authority: branch-only; commit/push; one PR to `main`; do not merge.
 - Deployment authority: synthetic demo only; no production credentials.
+
+## DEPLOY001_SECURITY_REMEDIATION — Secure-by-default synthetic cloud demo
+
+- Compact ID: `DEPLOY001_SECURITY_REMEDIATION`
+- Priority: P0
+- Status: IN_PROGRESS (same PR 26; do not merge from the agent)
+- Owner: Cursor Cloud agent (Grok 4.6)
+- Environment: CURSOR_CLOUD
+- Branch: `deploy/synthetic_cloud_demo`
+- Dependencies: DEPLOY001_SYNTHETIC_CLOUD_DEMO
+- Risk: Medium (cloud security defaults; no new architecture)
+- Goal: PostgreSQL unpublished; no deterministic DB password; HTTP demo disabled
+  and token-mandatory when enabled; localhost app bind by default; one Dockerfile
+  ENV block. Preserve CLI demo and validated Interview behavior.
+- Explicit exclusions: reverse proxies, Kubernetes, Terraform, frontend, Redis,
+  new services, merge to `main`.
+- Git authority: commit/push on existing branch; update PR 26; do not merge.
+- Deployment authority: none.
 
 ---
 

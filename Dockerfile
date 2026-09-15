@@ -43,11 +43,6 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     UV_NO_SYNC=1 \
     UV_CACHE_DIR=/tmp/uv-cache
 
-ENV PATH="/app/.venv/bin:${PATH}" \
-    PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    AIDE_SYNTHETIC_DEMO_HTTP=0
-
 EXPOSE 8000
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \

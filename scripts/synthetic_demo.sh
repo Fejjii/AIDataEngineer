@@ -7,15 +7,54 @@ cd "$ROOT"
 
 export AIDE_DATABASE_URL="${AIDE_DATABASE_URL:-${AIDE_TEST_DATABASE_URL:-postgresql+psycopg://ubuntu@127.0.0.1:5432/aide_dev}}"
 export AIDE_HTTP_PORT="${AIDE_HTTP_PORT:-8000}"
-export AIDE_SYNTHETIC_DEMO_HTTP="${AIDE_SYNTHETIC_DEMO_HTTP:-1}"
-
-if [[ -z "${AIDE_CSRF_SECRET:-}" ]]; then
-  AIDE_CSRF_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
-  export AIDE_CSRF_SECRET
-fi
+export AIDE_SYNTHETIC_DEMO_HTTP="${AIDE_SYNTHETIC_DEMO_HTTP:-0}"
 
 log() { printf '%s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+
+env_file_has_nonempty() {
+  local key="$1"
+  python3 - "$ROOT/.env" "$key" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+key = sys.argv[2]
+if not path.is_file():
+    raise SystemExit(1)
+prefix = f"{key}="
+for raw in path.read_text(encoding="utf-8").splitlines():
+    line = raw.strip()
+    if not line or line.startswith("#"):
+        continue
+    if line.startswith("export "):
+        line = line[7:].strip()
+    if not line.startswith(prefix):
+        continue
+    value = line.split("=", 1)[1].strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        value = value[1:-1]
+    raise SystemExit(0 if value else 1)
+raise SystemExit(1)
+PY
+}
+
+require_compose_postgres_password() {
+  if [[ -n "${POSTGRES_PASSWORD:-}" ]]; then
+    return 0
+  fi
+  if env_file_has_nonempty POSTGRES_PASSWORD; then
+    return 0
+  fi
+  fail "POSTGRES_PASSWORD must be set in the environment or .env for Compose. Do not use a default password."
+}
+
+if [[ -z "${AIDE_CSRF_SECRET:-}" ]]; then
+  if ! env_file_has_nonempty AIDE_CSRF_SECRET; then
+    AIDE_CSRF_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+    export AIDE_CSRF_SECRET
+  fi
+fi
 
 have_docker() {
   command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1
@@ -66,23 +105,19 @@ cmd_benchmark() {
 }
 
 cmd_demo_http() {
-  local headers=(-H "Content-Type: application/json")
-  if [[ -n "${AIDE_SYNTHETIC_DEMO_TOKEN:-}" ]]; then
-    headers+=(-H "X-AIDE-Demo-Token: ${AIDE_SYNTHETIC_DEMO_TOKEN}")
+  if [[ -z "${AIDE_SYNTHETIC_DEMO_TOKEN:-}" ]]; then
+    fail "AIDE_SYNTHETIC_DEMO_TOKEN is required for the HTTP demo. CLI demo does not need this token."
   fi
+  local headers=(-H "Content-Type: application/json" -H "X-AIDE-Demo-Token: ${AIDE_SYNTHETIC_DEMO_TOKEN}")
   curl -fsS -X POST "${headers[@]}" -d '{}' "http://127.0.0.1:${AIDE_HTTP_PORT}/v1/interview/demo"
   printf '\n'
 }
 
 cmd_up() {
-    if have_docker; then
+  if have_docker; then
     export POSTGRES_DB="${POSTGRES_DB:-aide_dev}"
     export POSTGRES_USER="${POSTGRES_USER:-aide}"
-    export POSTGRES_PORT="${POSTGRES_PORT:-5432}"
-    if [[ -z "${POSTGRES_PASSWORD:-}" ]]; then
-      POSTGRES_PASSWORD="aide-demo-pg-$(printf '%s' "synthetic-demo" | sha256sum | cut -c1-24)"
-      export POSTGRES_PASSWORD
-    fi
+    require_compose_postgres_password
     docker compose up --build -d
     log "Compose stack started. Health: curl -fsS http://127.0.0.1:${AIDE_HTTP_PORT}/readyz"
     return 0
@@ -118,11 +153,13 @@ Usage: scripts/synthetic_demo.sh <command>
   demo          uv run aide interview demo
   demo-json     uv run aide interview demo --json
   benchmark     uv run aide interview benchmark
-  demo-http     POST /v1/interview/demo (empty JSON only)
+  demo-http     POST /v1/interview/demo (token required; empty JSON only)
   down          docker compose down -v (no-op without Docker)
   validate      migrate + demo + demo --json + benchmark against local PostgreSQL
 
-Does not require Snowflake credentials. Do not print or export secret values.
+CLI demo does not require AIDE_SYNTHETIC_DEMO_TOKEN.
+Compose requires POSTGRES_PASSWORD in the environment or .env.
+PostgreSQL is not published to the host. Do not print or export secret values.
 EOF
 }
 

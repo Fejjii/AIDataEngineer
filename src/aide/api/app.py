@@ -12,6 +12,7 @@ from fastapi import Cookie, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from aide.api.demo_http import parse_demo_token, resolve_http_demo
 from aide.app.benchmarking.errors import DemoBusyError
 from aide.app.events import EventBus
 from aide.auth.context import (
@@ -79,11 +80,11 @@ class SubmitRequest(BaseModel):
 
 
 def _demo_token_ok(expected: str | None, provided: str | None) -> bool:
-    if expected is None or expected == "":
-        return True
-    if provided is None:
+    expected_token = parse_demo_token(expected)
+    provided_token = parse_demo_token(provided)
+    if expected_token is None or provided_token is None:
         return False
-    return hmac.compare_digest(expected, provided)
+    return hmac.compare_digest(expected_token, provided_token)
 
 
 def create_app(
@@ -96,6 +97,9 @@ def create_app(
     demo_token: str | None = None,
 ) -> FastAPI:
     bus = events or service.events
+    required_demo_token: str | None = None
+    if interview_demo is not None:
+        required_demo_token = resolve_http_demo(http_enabled=True, token=demo_token)
     app = FastAPI(title="AIDataEngineer", version="0.1.0")
 
     @app.post("/v1/sessions")
@@ -199,7 +203,7 @@ def create_app(
     ) -> dict[str, Any]:
         if interview_demo is None:
             raise HTTPException(status_code=404, detail="synthetic interview demo is disabled")
-        if not _demo_token_ok(demo_token, x_aide_demo_token):
+        if not _demo_token_ok(required_demo_token, x_aide_demo_token):
             raise HTTPException(status_code=401, detail="demo token required")
         raw = await request.body()
         if raw.strip():

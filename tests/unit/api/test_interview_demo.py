@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from aide.api.app import DEMO_TOKEN_HEADER, create_app
+from aide.api.demo_http import HttpDemoMisconfiguredError
 from aide.app.benchmarking.errors import DemoBusyError
 from aide.app.events import EventBus
 from aide.domain.benchmark import (
@@ -13,6 +15,8 @@ from aide.domain.benchmark import (
     SchemaDriftSummary,
     ValueMetrics,
 )
+
+DEMO_TOKEN = "gate"
 
 
 class _Service:
@@ -85,15 +89,32 @@ class _Busy:
         raise DemoBusyError("synthetic interview demo is already running")
 
 
+def _client(demo: _Demo | _Busy) -> TestClient:
+    return TestClient(create_app(_Service(), interview_demo=demo, demo_token=DEMO_TOKEN))
+
+
 def test_demo_disabled_returns_404() -> None:
     client = TestClient(create_app(_Service()))
     response = client.post("/v1/interview/demo")
     assert response.status_code == 404
+    assert "gate" not in response.text
+    assert "POSTGRES_PASSWORD" not in response.text
+
+
+def test_create_app_fails_closed_without_demo_token() -> None:
+    with pytest.raises(HttpDemoMisconfiguredError, match="AIDE_SYNTHETIC_DEMO_TOKEN"):
+        create_app(_Service(), interview_demo=_Demo())
+    with pytest.raises(HttpDemoMisconfiguredError, match="AIDE_SYNTHETIC_DEMO_TOKEN"):
+        create_app(_Service(), interview_demo=_Demo(), demo_token="   ")
 
 
 def test_demo_rejects_arbitrary_client_input() -> None:
-    client = TestClient(create_app(_Service(), interview_demo=_Demo()))
-    response = client.post("/v1/interview/demo", json={"sql": "SELECT 1", "requirement": "x"})
+    client = _client(_Demo())
+    response = client.post(
+        "/v1/interview/demo",
+        json={"sql": "SELECT 1", "requirement": "x"},
+        headers={DEMO_TOKEN_HEADER: DEMO_TOKEN},
+    )
     assert response.status_code == 400
     assert "does not accept client input" in response.json()["detail"]
     assert "SELECT" not in response.text
@@ -101,8 +122,12 @@ def test_demo_rejects_arbitrary_client_input() -> None:
 
 def test_demo_returns_bounded_summary() -> None:
     demo = _Demo()
-    client = TestClient(create_app(_Service(), interview_demo=demo))
-    response = client.post("/v1/interview/demo", json={})
+    client = _client(demo)
+    response = client.post(
+        "/v1/interview/demo",
+        json={},
+        headers={DEMO_TOKEN_HEADER: DEMO_TOKEN},
+    )
     assert response.status_code == 200
     body = response.json()
     assert demo.calls == 1
@@ -113,18 +138,24 @@ def test_demo_returns_bounded_summary() -> None:
     assert "AIDE_CSRF_SECRET" not in response.text
     assert "SNOWFLAKE" not in response.text
     assert "POSTGRES_PASSWORD" not in response.text
+    assert DEMO_TOKEN not in response.text
 
 
-def test_demo_token_is_required_when_configured() -> None:
-    client = TestClient(create_app(_Service(), interview_demo=_Demo(), demo_token="gate"))
+def test_demo_token_is_required_when_http_demo_is_enabled() -> None:
+    client = _client(_Demo())
     denied = client.post("/v1/interview/demo")
     assert denied.status_code == 401
-    allowed = client.post("/v1/interview/demo", headers={DEMO_TOKEN_HEADER: "gate"})
+    assert "gate" not in denied.text
+    wrong = client.post("/v1/interview/demo", headers={DEMO_TOKEN_HEADER: "nope"})
+    assert wrong.status_code == 401
+    assert "nope" not in wrong.text
+    allowed = client.post("/v1/interview/demo", headers={DEMO_TOKEN_HEADER: DEMO_TOKEN})
     assert allowed.status_code == 200
     assert "gate" not in allowed.text
 
 
 def test_demo_busy_returns_409() -> None:
-    client = TestClient(create_app(_Service(), interview_demo=_Busy()))
-    response = client.post("/v1/interview/demo")
+    client = _client(_Busy())
+    response = client.post("/v1/interview/demo", headers={DEMO_TOKEN_HEADER: DEMO_TOKEN})
     assert response.status_code == 409
+    assert "gate" not in response.text

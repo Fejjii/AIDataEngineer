@@ -1,6 +1,6 @@
 # Synthetic Interview MVP cloud demo
 
-**Task:** DEPLOY001_SYNTHETIC_CLOUD_DEMO  
+**Task:** DEPLOY001_SYNTHETIC_CLOUD_DEMO / DEPLOY001_SECURITY_REMEDIATION  
 **Audience:** recruiters, hiring managers, and operators  
 **Scope:** one application container + PostgreSQL 16. Synthetic Vantara data only.
 
@@ -13,8 +13,9 @@ Landing page: [`README.md`](../../README.md). Interview talk track:
 
 ```text
 Docker Compose (or equivalent host)
-  postgres:16          control-plane state
+  postgres:16          control-plane state (Compose network only)
   aide app image       FastAPI + CLI + fake Snowflake + fake dbt
+                       host bind 127.0.0.1 by default
 ```
 
 Matches the accepted modular monolith: one Python package, one image, one
@@ -23,6 +24,19 @@ PostgreSQL. No Kubernetes, Redis, Kafka, Temporal, or frontend.
 Offline Interview execution uses the existing deterministic fake Snowflake and
 fake dbt paths. Alembic migrations are the existing revisions. RAW remains
 read-only for the product. Production and staging stay disabled.
+
+## Secure defaults
+
+| Surface | Default | Remote / public use |
+|---|---|---|
+| CLI demo (`aide interview demo`) | Enabled | No HTTP token |
+| `POST /v1/interview/demo` | Disabled (`AIDE_SYNTHETIC_DEMO_HTTP=0`) | Enable HTTP **and** set `AIDE_SYNTHETIC_DEMO_TOKEN` |
+| PostgreSQL | Private Compose network | Do not publish a host port |
+| Application port | `AIDE_HTTP_BIND=127.0.0.1` | Set `AIDE_HTTP_BIND=0.0.0.0` only when publishing on purpose |
+| Secrets | External `.env` / environment | Never commit real values |
+
+A public application bind does not bypass the HTTP demo token. If HTTP demo is
+enabled without a nonempty token, application startup fails closed.
 
 ## Startup
 
@@ -34,6 +48,11 @@ cp .env.example .env   # set POSTGRES_PASSWORD and AIDE_CSRF_SECRET locally; nev
 ./scripts/synthetic_demo.sh health
 ```
 
+`./scripts/synthetic_demo.sh up` fails closed if `POSTGRES_PASSWORD` is absent from
+both the environment and `.env`. Compose interpolates that value into the
+internal DSN. PostgreSQL is not published to the host; the app reaches it as
+`postgres:5432` on the Compose network.
+
 Equivalent without Docker (Cursor Cloud / local PostgreSQL 16):
 
 ```bash
@@ -41,9 +60,16 @@ uv sync --frozen --all-groups
 export AIDE_DATABASE_URL="${AIDE_DATABASE_URL:-postgresql+psycopg://ubuntu@127.0.0.1:5432/aide_dev}"
 uv run alembic upgrade head
 export AIDE_CSRF_SECRET   # 32+ characters; do not print the value
-export AIDE_SYNTHETIC_DEMO_HTTP=1
 uv run uvicorn asgi:app --host 127.0.0.1 --port 8000
 ```
+
+Local CLI demo:
+
+```bash
+uv run aide interview demo
+```
+
+No `AIDE_SYNTHETIC_DEMO_TOKEN` is required for the CLI.
 
 ## Database initialization
 
@@ -54,6 +80,13 @@ also upgrades to head before each demo.
 Clean bootstrap: empty PostgreSQL 16 → upgrade head → demo.  
 Already initialized: upgrade is idempotent; a second demo allocates new workflow
 ids and does not rewrite prior evidence rows.
+
+Inspect PostgreSQL from the host with `docker compose exec`, not a published
+port:
+
+```bash
+docker compose exec postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+```
 
 ## Deployment command
 
@@ -82,31 +115,48 @@ curl -fsS http://127.0.0.1:8000/readyz
 
 ## Demo command
 
-On a uv checkout:
+On a uv checkout (no HTTP token):
 
 ```bash
 uv run aide interview demo
 uv run aide interview demo --json
 ```
 
-Inside the app container:
+Inside the app container (no HTTP token):
 
 ```bash
 docker compose exec app uv run --frozen --no-dev --offline --no-sync aide interview demo
 docker compose exec app uv run --frozen --no-dev --offline --no-sync aide interview demo --json
 ```
 
-Optional HTTP surface (enabled when `AIDE_SYNTHETIC_DEMO_HTTP=1`). Runs **only**
-the accepted synthetic scenario. No SQL body, no connector credentials, no
-production/staging target.
+## Remote HTTP demo (token mandatory)
+
+Keep `AIDE_SYNTHETIC_DEMO_HTTP=0` unless you intend to expose
+`POST /v1/interview/demo`. That route runs **only** the accepted synthetic
+scenario. No SQL body, no connector credentials, no production/staging target.
+
+For a remotely usable HTTP demo:
+
+1. Set a nonempty `AIDE_SYNTHETIC_DEMO_TOKEN` in `.env` or the environment.
+2. Set `AIDE_SYNTHETIC_DEMO_HTTP=1`.
+3. Keep PostgreSQL unpublished.
+4. Bind the application port to loopback unless you intentionally publish it:
+   `AIDE_HTTP_BIND=127.0.0.1` (default) or `AIDE_HTTP_BIND=0.0.0.0`.
+5. Recreate the app container so startup can validate the token.
 
 ```bash
-curl -fsS -X POST -H 'Content-Type: application/json' -d '{}' \
+curl -fsS -X POST \
+  -H 'Content-Type: application/json' \
+  -H "X-AIDE-Demo-Token: ${AIDE_SYNTHETIC_DEMO_TOKEN}" \
+  -d '{}' \
   http://127.0.0.1:8000/v1/interview/demo
 ```
 
-If `AIDE_SYNTHETIC_DEMO_TOKEN` is set, also send `X-AIDE-Demo-Token`. Do not
-paste the value into chat. Internet-exposed hosts should set the token.
+or `./scripts/synthetic_demo.sh demo-http`.
+
+Do not paste the token into chat. Missing token: startup fails (Compose / uvicorn)
+or the helper script exits before calling the route. Wrong token: HTTP 401.
+Disabled HTTP demo: HTTP 404.
 
 The JSON body is a bounded summary: workflow status, Digital Twin snapshot
 digest, schema-drift mapping, repair apply count, Independent Verifier
@@ -130,7 +180,7 @@ docker compose logs -f app postgres
 ```
 
 Application logs must not contain secret values. Do not raise log level to dump
-environment maps.
+environment maps. Do not print `POSTGRES_PASSWORD` or `AIDE_SYNTHETIC_DEMO_TOKEN`.
 
 ## Restart procedure
 
@@ -187,14 +237,16 @@ Required **names** only: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER_RO`,
 - Nested Docker is often absent in Cursor Cloud; validate Compose in CI or on a
   Docker host, and use native PostgreSQL 16 as the Cloud equivalent.
 - `POST /v1/interview/demo` runs the scenario twice (determinism). It is
-  expensive; do not expose it unauthenticated on the public internet.
+  expensive; it is disabled by default and requires a token when enabled.
 - `/v1/workflows` remains the earlier DE002C slice, not the Interview closed
-  loop. Use the Interview CLI or `/v1/interview/demo`.
+  loop. Use the Interview CLI or the token-gated HTTP demo.
 - No standing public URL is created until an operator authenticates a host.
 
 ## Remaining authentication gate
 
 This package is ready when Compose (or the local PostgreSQL equivalent) is
-healthy. A standing remote URL requires the operator to authenticate **one**
-container host (Docker Desktop, a VM, Fly, Railway, or Render) and run the
-same Compose file. Do not paste those credentials into chat.
+healthy and the secure defaults above are in place. A standing remote URL
+requires the operator to authenticate **one** container host (Docker Desktop,
+a VM, Fly, Railway, or Render), set `POSTGRES_PASSWORD` and
+`AIDE_SYNTHETIC_DEMO_TOKEN` locally, enable HTTP only if needed, and bind
+publicly only on purpose. Do not paste those credentials into chat.
