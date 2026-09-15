@@ -92,7 +92,7 @@ verify_interview_runtime() {
     || fail "synthetic Vantara fixtures missing in image"
   "${COMPOSE[@]}" exec -T app aide interview demo --help >/dev/null \
     || fail "aide interview demo is not available in the image"
-  if "${COMPOSE[@]}" exec -T app uv run --frozen --no-dev aide interview demo --help >/dev/null; then
+  if "${COMPOSE[@]}" exec -T app uv run --frozen --no-dev --offline --no-sync aide interview demo --help >/dev/null; then
     log "uv run aide interview demo --help succeeded inside the app container"
   else
     fail "uv run aide interview demo --help failed inside the app container"

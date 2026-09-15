@@ -43,7 +43,7 @@ cmd_health() {
 
 cmd_demo() {
   if have_docker && docker compose ps --status running --services 2>/dev/null | grep -qx app; then
-    docker compose exec -T app uv run --frozen --no-dev aide interview demo
+    docker compose exec -T app uv run --frozen --no-dev --offline --no-sync aide interview demo
   else
     uv run aide interview demo
   fi
@@ -51,7 +51,7 @@ cmd_demo() {
 
 cmd_demo_json() {
   if have_docker && docker compose ps --status running --services 2>/dev/null | grep -qx app; then
-    docker compose exec -T app uv run --frozen --no-dev aide interview demo --json
+    docker compose exec -T app uv run --frozen --no-dev --offline --no-sync aide interview demo --json
   else
     uv run aide interview demo --json
   fi
@@ -59,7 +59,7 @@ cmd_demo_json() {
 
 cmd_benchmark() {
   if have_docker && docker compose ps --status running --services 2>/dev/null | grep -qx app; then
-    docker compose exec -T app uv run --frozen --no-dev aide interview benchmark
+    docker compose exec -T app uv run --frozen --no-dev --offline --no-sync aide interview benchmark
   else
     uv run aide interview benchmark
   fi

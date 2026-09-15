@@ -33,7 +33,15 @@ COPY synthetic ./synthetic
 COPY dbt ./dbt
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+    && chown -R aide:aide /app
+
+ENV PATH="/app/.venv/bin:${PATH}" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    AIDE_SYNTHETIC_DEMO_HTTP=0 \
+    UV_NO_SYNC=1 \
+    UV_CACHE_DIR=/tmp/uv-cache
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \

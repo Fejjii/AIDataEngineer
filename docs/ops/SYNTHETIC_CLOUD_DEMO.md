@@ -92,8 +92,8 @@ uv run aide interview demo --json
 Inside the app container:
 
 ```bash
-docker compose exec app uv run --frozen --no-dev aide interview demo
-docker compose exec app uv run --frozen --no-dev aide interview demo --json
+docker compose exec app uv run --frozen --no-dev --offline --no-sync aide interview demo
+docker compose exec app uv run --frozen --no-dev --offline --no-sync aide interview demo --json
 ```
 
 Optional HTTP surface (enabled when `AIDE_SYNTHETIC_DEMO_HTTP=1`). Runs **only**
@@ -118,7 +118,7 @@ verdict, evidence completeness, and benchmark metrics.
 uv run aide interview benchmark
 ```
 
-or `docker compose exec app uv run --frozen --no-dev aide interview benchmark`.
+or `docker compose exec app uv run --frozen --no-dev --offline --no-sync aide interview benchmark`.
 
 Expected: Independent Verifier `PASS`, determinism `PASS`, evidence completeness
 100%, repair count exactly 1, human interventions 0.

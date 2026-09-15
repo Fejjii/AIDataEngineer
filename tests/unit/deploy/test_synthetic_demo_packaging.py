@@ -9,6 +9,8 @@ def test_dockerfile_includes_synthetic_fixtures_and_dbt() -> None:
     text = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     assert "COPY synthetic ./synthetic" in text
     assert "COPY dbt ./dbt" in text
+    assert "chown -R aide:aide /app" in text
+    assert "UV_NO_SYNC=1" in text
     assert "SNOWFLAKE_" not in text
     assert "kubectl" not in text
 
