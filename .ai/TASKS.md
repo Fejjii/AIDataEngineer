@@ -230,7 +230,7 @@ tasks do not run concurrently because their shared high-conflict contracts are s
 
 - Compact ID: `FINAL_POLISH_001`
 - Priority: P1
-- Status: IN_PROGRESS
+- Status: DONE (PR 25; do not merge from the agent)
 - Owner: Cursor Cloud agent (Grok 4.6)
 - Environment: CURSOR_CLOUD
 - Branch: `chore/final_interview_polish`
