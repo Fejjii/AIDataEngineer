@@ -133,8 +133,9 @@ flowchart TB
 | Verification | Tests, quality, verdict | Independent Verifier has no connector or workflow-write access |
 | Persistence | Twin, intents, audit, evidence | PostgreSQL 16; append-only evidence manifest |
 
-Every connector call enters the Governed Tool Gateway: validate → policy → persist intent →
-execute → reconcile ambiguous side effects → persist evidence.
+Every workflow connector action enters the Governed Tool Gateway: validate → policy → persist intent →
+execute → reconcile ambiguous side effects → persist evidence. Credentialed safety probes may inspect
+Snowflake grant metadata directly, but they do not perform product workflow execution.
 
 ```mermaid
 sequenceDiagram
@@ -168,7 +169,7 @@ Implemented on `main` (MVP001–MVP004). This is what the repository actually ru
 | Enterprise Data Digital Twin in PostgreSQL | Yes — assets, relationships, observations, snapshots, evidence refs |
 | Pinned twin snapshot and bounded estate context | Yes — one snapshot per workflow; grant-filtered; no source rows in reasoning context |
 | Deterministic Supervisor | Yes — application workflow, not an autonomous agent loop |
-| Governed Tool Gateway | Yes — sole path to Snowflake and dbt |
+| Governed Tool Gateway | Yes — sole execution path for workflow actions to Snowflake and dbt |
 | Deterministic modelling engine | Yes — existing DE007 rule table |
 | Bounded dbt generation and DEV execution | Yes — 21 required customer-revenue models |
 | dbt tests, quality checks, and reconciliation | Yes |
@@ -226,7 +227,7 @@ deploy remain deferred. They are not counted as automated in the benchmark.
 | Enterprise Data Digital Twin | Estate understanding is a pinned snapshot, not a chatty catalogue dump |
 | Vendor-neutral control plane | Orchestrator reasons about capabilities, not “call Snowflake” |
 | Deterministic Supervisor | Explicit phases and persisted state; no hidden agent graph |
-| Governed Tool Gateway | Policy, intent, execution, reconcile, and evidence on every tool call |
+| Governed Tool Gateway | Policy, intent, execution, reconcile, and evidence on every governed workflow tool call |
 | Least privilege | Distinct RO and DEV identities; no broad RAW grant to DEV |
 | Bounded automatic repair | One allow-listed repair class; broader diffs block |
 | Independent Verifier | Cannot dispatch tools or write workflow state |
