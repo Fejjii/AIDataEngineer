@@ -26,6 +26,27 @@ def test_connectors_check_command_is_registered() -> None:
     assert "health" in result.stdout.lower() or "json" in result.stdout.lower()
 
 
+def test_interview_demo_command_is_registered() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["interview", "demo", "--help"])
+    assert result.exit_code == 0
+    assert "offline" in result.stdout.lower() or "interview" in result.stdout.lower()
+
+
+def test_interview_benchmark_command_is_registered() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["interview", "benchmark", "--help"])
+    assert result.exit_code == 0
+    assert "twice" in result.stdout.lower() or "deterministic" in result.stdout.lower()
+
+
+def test_interview_live_smoke_command_is_registered() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["interview", "live-smoke", "--help"])
+    assert result.exit_code == 0
+    assert "credential" in result.stdout.lower() or "live" in result.stdout.lower()
+
+
 def test_demo_load_snowflake_command_is_registered() -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["demo", "load-snowflake", "--help"])
