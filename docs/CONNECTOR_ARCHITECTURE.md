@@ -11,6 +11,11 @@ adapter's secrets. Everything above them sees typed results.
 
 ## 1. Connector kinds
 
+Interview MVP implements **Snowflake** and **dbt Core** only (real + fake). GitHub, a
+PostgreSQL source connector, Airflow, Databricks, Fabric, BigQuery, and BI tools are
+architecture extension points, not shipping Interview MVP connectors. Landing page:
+repository `README.md`.
+
 | Kind | Purpose | V1 instances | Future |
 |---|---|---|---|
 | `warehouse` | SQL execution, metadata, profiling, cost | Snowflake (real + fake) | BigQuery, Databricks SQL, Redshift, Fabric Warehouse |

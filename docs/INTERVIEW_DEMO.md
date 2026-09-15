@@ -2,7 +2,8 @@
 
 **Task:** MVP004  
 **Audience:** recruiters, hiring managers, and interviewers  
-**Command:** `uv run aide interview demo`
+**Command:** `uv run aide interview demo`  
+**Landing page:** [`README.md`](../README.md)
 
 ## What this product demonstrates
 

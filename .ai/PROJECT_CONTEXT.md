@@ -18,10 +18,10 @@ test, observe, correct, and escalate.
 ## Current phase
 
 The DE001 product architecture is **ACCEPTED** and DE002–DE008A foundations are merged.
-PIVOT001 now records the constrained Interview MVP contract and DE-ADR-028. MVP001–MVP003
-are merged. MVP004 hardens the benchmark and demo. Compact contract: `.ai/ARCHITECTURE.md`;
-active boundary: `docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md`. Interview demo:
-`docs/INTERVIEW_DEMO.md`.
+PIVOT001 records the constrained Interview MVP contract (DE-ADR-028). MVP001–MVP004 are
+merged. Compact contract: `.ai/ARCHITECTURE.md`; active boundary:
+`docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md`. Recruiter landing page: `README.md`. Interview
+demo: `docs/INTERVIEW_DEMO.md`.
 
 ## Initial intended stack (direction only, not a freeze)
 
@@ -41,9 +41,10 @@ validate results, self-correct failures, and prepare safe deployment actions wit
 
 ## Current MVP direction
 
-The current MVP direction is one Vantara customer-revenue closed loop. MVP001–MVP003 are
-merged. MVP004 adds the deterministic benchmark, evidence completeness gate, interview
-demo CLI, and credential-gated Snowflake live smoke.
+The current MVP is one Vantara customer-revenue closed loop. MVP001–MVP004 are merged:
+Digital Twin, Supervisor and Governed Tool Gateway, bounded repair and Independent
+Verifier, deterministic benchmark, evidence completeness gate, interview demo CLI, and
+credential-gated Snowflake live smoke.
 
 GitHub delivery, frontend, monitoring, additional vendors/use cases/repair classes, graph
 or agent frameworks, enterprise IAM, and production or staging actions are deferred.

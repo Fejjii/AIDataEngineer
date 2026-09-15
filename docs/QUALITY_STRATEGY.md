@@ -5,7 +5,8 @@
 Generated transformations are validated **objectively** by deterministic code. No LLM
 participates in deciding whether data is correct. The Quality Engine produces a
 `ValidationReport` whose every entry has a check id, target, expectation, observation,
-status and failure class.
+status and failure class. The Interview MVP path is `docs/INTERVIEW_DEMO.md`; this file is
+the broader V1 check catalogue.
 
 ---
 

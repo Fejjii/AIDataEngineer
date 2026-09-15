@@ -2,6 +2,10 @@
 
 **Task:** DE 001 · **Status:** ACCEPTED
 
+The **MVP** column describes the DE001 V1 plan. The implemented Interview MVP is narrower:
+one Vantara customer-revenue loop on Snowflake and dbt, with one schema-drift repair. See
+repository `README.md` and `docs/MVP_SCOPE.md`.
+
 A taxonomy of the modern Data Engineering lifecycle as the platform sees it. Each row is a
 *business-level* capability; the typed system capabilities that implement it are in
 `docs/CAPABILITY_MODEL.md`.

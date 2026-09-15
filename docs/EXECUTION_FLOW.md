@@ -2,6 +2,11 @@
 
 **Task:** DE 001 (hardened by DE 001R2A and DE 001R2B) · **Status:** ACCEPTED
 
+**Interview MVP note:** This is the broader DE001 V1 narrative. The implemented closed loop
+does **not** include GitHub delivery, staging deploy, duplicate-payment repair, a product
+SPA, or a required live LLM. See `README.md`, `docs/INTERVIEW_DEMO.md`, and
+`docs/MVP_SCOPE.md` for what currently runs.
+
 This document traces the canonical MVP workflow end to end and shows, at every step, the
 workflow state, the tasks executed (capability@connector), and the **structured state or
 artifact** each step produces. Nothing passes between steps except persisted, typed

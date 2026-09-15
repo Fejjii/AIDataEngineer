@@ -175,7 +175,7 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 
 ## MVP004 — End-to-end benchmark and demo hardening
 - Priority: P0
-- Status: IN_PROGRESS
+- Status: DONE (merged to `main`)
 - Dependencies: MVP003 merged
 - Branch: `feat/MVP004_benchmark_demo`
 - Environment: CURSOR_CLOUD

@@ -1,6 +1,6 @@
 # Implementation Plan
 
-**Task:** DE 001 baseline; active roadmap constrained by PIVOT001 · **Status:** PIVOT001 PROPOSED · ADRs: DE-ADR-020, DE-ADR-021, DE-ADR-026, DE-ADR-028
+**Task:** DE 001 baseline; active roadmap constrained by PIVOT001 · **Status:** Interview MVP implemented (MVP001–MVP004 merged) · ADRs: DE-ADR-020, DE-ADR-021, DE-ADR-026, DE-ADR-028
 
 Contents: §1 repository layout and ownership · §2 module boundaries · §3 active Interview
 MVP roadmap · §4 current parallel/ownership plan · §5 historical DE 002 exact definition.
@@ -125,9 +125,9 @@ to detect composition-root cycles.
 
 ## 3. Active roadmap — Interview MVP
 
-DE-ADR-028 replaces the old active DE009–DE019 sequence after human acceptance. The
-authoritative boundary, contracts, and acceptance-test mapping are in
-`docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md`.
+DE-ADR-028 replaced the old active DE009–DE019 sequence. MVP001–MVP004 are merged to
+`main`. The authoritative boundary, contracts, and acceptance-test mapping are in
+`docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md`. Recruiter landing page: repository `README.md`.
 
 ```text
 PIVOT001 accepted
@@ -140,7 +140,7 @@ PIVOT001 accepted
 Common authority: isolated task branch; one implementation writer; commit/push and one PR
 only when the task prompt authorizes Git writes; never merge or deploy.
 
-### 3.1 Active tasks
+### 3.1 Interview MVP tasks (completed)
 
 | Task | Dependency | Scope | Primary ownership | Executable exit | Effort |
 |---|---|---|---|---|---:|
