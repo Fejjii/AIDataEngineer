@@ -226,6 +226,22 @@ tasks do not run concurrently because their shared high-conflict contracts are s
   recruiter showcase. Do not change product architecture or runtime behavior.
 - Validation: README links, Mermaid parse, CLI commands, MVP004 measured metrics, gitleaks.
 
+## FINAL_POLISH_001 — Final interview/recruiter polish
+
+- Compact ID: `FINAL_POLISH_001`
+- Priority: P1
+- Status: DONE (PR 25; do not merge from the agent)
+- Owner: Cursor Cloud agent (Grok 4.6)
+- Environment: CURSOR_CLOUD
+- Branch: `chore/final_interview_polish`
+- Base commit: `61b6f1b6c121ba36eb61e1db4d9b373303f6c072`
+- Dependencies: MVP001–MVP004, FINAL-QA-001, SHOWCASE-001 merged
+- Risk: Low (docs, validation, hygiene; no product-scope expansion)
+- Goal: Audit, validate, and apply only bounded recruiter-facing documentation
+  consistency and low-risk defect remediation. Do not redesign or add connectors.
+- Git authority: branch-only; one PR to `main`; do not merge; do not delete historical
+  branches (recommend SAFE_TO_DELETE only).
+
 ---
 
 # Historical DE implementation backlog

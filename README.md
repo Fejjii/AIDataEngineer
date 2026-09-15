@@ -242,7 +242,9 @@ deploy remain deferred. They are not counted as automated in the benchmark.
 Source: MVP004 offline Interview scenario
 (`interview_mvp_customer_revenue_schema_drift`), recorded in
 [`docs/agent/runs/MVP004/MVP004-SESSION-20260915T103100Z-bc01a0a49e.md`](docs/agent/runs/MVP004/MVP004-SESSION-20260915T103100Z-bc01a0a49e.md)
-and asserted by `tests/integration/interview/test_benchmark.py`.
+and asserted by `tests/integration/interview/test_benchmark.py`. The table is the
+measured sample from that recorded run. Tests lock repair count, human interventions,
+evidence completeness, and determinism; they do not freeze every absolute count.
 
 **Measured** (not estimates):
 
@@ -274,8 +276,11 @@ Wall-clock duration is measured per host and is not a product SLA.
 
 ## Demo
 
-PostgreSQL 16 must be reachable at `AIDE_DATABASE_URL` or `AIDE_TEST_DATABASE_URL`
-(default `postgresql+psycopg://ubuntu@127.0.0.1:5432/aide_dev`).
+PostgreSQL 16 must be reachable at `AIDE_DATABASE_URL` or `AIDE_TEST_DATABASE_URL`.
+The CLI fallback (Cursor Cloud / OPS003 local role) is
+`postgresql+psycopg://ubuntu@127.0.0.1:5432/aide_dev`. Export a matching DSN if your
+role or password differs. Docker Compose uses `POSTGRES_USER` / `POSTGRES_PASSWORD`
+from `.env.example`.
 
 ```bash
 uv sync --frozen --all-groups
@@ -353,8 +358,9 @@ AIDataEngineer/
 ├── README.md                 ← you are here
 ├── docs/
 │   ├── INTERVIEW_DEMO.md     ← how to run and narrate the demo
-│   ├── ARCHITECTURE.md       ← control-plane architecture
+│   ├── ARCHITECTURE.md       ← accepted architecture (Interview vs V1 design)
 │   ├── MVP_SCOPE.md          ← implemented Interview MVP boundary
+│   ├── evaluation/           ← FINAL-QA-001 scorecard (not the landing page)
 │   ├── pivot/                ← PIVOT001 contract
 │   └── agent/runs/           ← execution evidence (not the landing page)
 ├── src/aide/
@@ -392,15 +398,16 @@ are not the product introduction.
 |---|---|
 | [Interview demo](docs/INTERVIEW_DEMO.md) | Commands, expected PASS criteria, live-smoke posture |
 | [Interview MVP scope](docs/MVP_SCOPE.md) | Implemented boundary and hard limits |
-| [Architecture](docs/ARCHITECTURE.md) | Components, trust boundaries, extensibility |
+| [Architecture](docs/ARCHITECTURE.md) | Accepted DE001 architecture; Interview vs V1 design |
 | [PIVOT001 contract](docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md) | Twin, gateway, repair, verifier, acceptance tests |
+| [Interview evaluation](docs/evaluation/README.md) | Implemented scorecard, adversarial tests, FINAL-QA-001 |
+| [Evaluation strategy](docs/EVALUATION_STRATEGY.md) | V1 evaluation design + labelled time baseline; not an `aide eval` CLI |
 | [Execution flow](docs/EXECUTION_FLOW.md) | V1 worked example (broader than the Interview MVP) |
 | [Capability model](docs/CAPABILITY_MODEL.md) | Typed capabilities the orchestrator may invoke |
 | [Connector architecture](docs/CONNECTOR_ARCHITECTURE.md) | Protocol, Snowflake/dbt, future kinds |
 | [Data engineering map](docs/DATA_ENGINEERING_CAPABILITY_MAP.md) | Lifecycle taxonomy versus automation |
 | [Permission model](docs/PERMISSION_MODEL.md) | Grants, policy, identities, repair bounds |
 | [Quality strategy](docs/QUALITY_STRATEGY.md) | Deterministic checks; no LLM correctness judge |
-| [Evaluation strategy](docs/EVALUATION_STRATEGY.md) | Benchmark philosophy and labelled time baseline |
 | [Tech stack](docs/TECH_STACK.md) | Language, store, dbt, tooling decisions |
 | [ADRs](docs/adr/README.md) | Architecture decision records |
 

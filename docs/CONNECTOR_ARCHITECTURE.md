@@ -16,7 +16,7 @@ PostgreSQL source connector, Airflow, Databricks, Fabric, BigQuery, and BI tools
 architecture extension points, not shipping Interview MVP connectors. Landing page:
 repository `README.md`.
 
-| Kind | Purpose | V1 instances | Future |
+| Kind | Purpose | V1 design instances (Interview ships Snowflake + dbt only) | Future |
 |---|---|---|---|
 | `warehouse` | SQL execution, metadata, profiling, cost | Snowflake (real + fake) | BigQuery, Databricks SQL, Redshift, Fabric Warehouse |
 | `database` | Relational sources | PostgreSQL synthetic source (real + fake) | MySQL, SQL Server, Oracle |
