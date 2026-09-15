@@ -28,6 +28,7 @@ docs/agent/runs/
 
 | Task ID | Session ID | Status | Branch | Report |
 |---------|------------|--------|--------|--------|
+| MVP003 | MVP003-SESSION-20260915T061800Z-bc01a0a3b7 | SUCCESS | `feat/MVP003_repair_verifier` | [report](MVP003/MVP003-SESSION-20260915T061800Z-bc01a0a3b7.md) |
 | MVP003 | MVP003-SESSION-20260914T214300Z-bc01a0a1df | SUCCESS | `feat/MVP003_repair_verifier` | [report](MVP003/MVP003-SESSION-20260914T214300Z-bc01a0a1df.md) |
 | MVP002 | MVP002-R1-SESSION-20260914T192800Z-bc01a0a0bf | SUCCESS | `feat/MVP002_supervisor_tool_gateway` | [report](MVP002/MVP002-R1-SESSION-20260914T192800Z-bc01a0a0bf.md) |
 | MVP002 | MVP002-SESSION-20260914T162830Z-bc01a0a0bf | SUCCESS | `feat/MVP002_supervisor_tool_gateway` | [report](MVP002/MVP002-SESSION-20260914T162830Z-bc01a0a0bf.md) |
