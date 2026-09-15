@@ -87,7 +87,8 @@ def test_ci_smoke_uses_internal_postgres_and_random_password() -> None:
     assert "sha256sum" not in script
     assert "aide-ci-smoke-pg-" not in script
     assert "token_urlsafe" in script
-    assert "port postgres 5432" in script
+    assert "HostConfig.PortBindings" in script
+    assert "postgres must not publish a host port" in script
     assert "compose exec" in script or "COMPOSE[@]}" in script
     assert "AIDE_HTTP_BIND:-127.0.0.1" in script
     assert "HTTP demo must be disabled by default" in script

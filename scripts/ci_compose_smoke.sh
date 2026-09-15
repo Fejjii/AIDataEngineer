@@ -87,7 +87,11 @@ wait_app_ready() {
 }
 
 verify_postgres_not_published() {
-  if "${COMPOSE[@]}" port postgres 5432 >/dev/null 2>&1; then
+  local cid bindings
+  cid="$("${COMPOSE[@]}" ps -q postgres)"
+  [[ -n "$cid" ]] || fail "postgres container id is missing"
+  bindings="$(docker inspect -f '{{json .HostConfig.PortBindings}}' "$cid")"
+  if [[ "$bindings" != "{}" && "$bindings" != "null" ]]; then
     fail "postgres must not publish a host port"
   fi
   log "PostgreSQL host port publication is absent"
