@@ -44,8 +44,8 @@ def interview_demo(
     payload = asyncio.run(_run_demo(url))
     if json_output:
         typer.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
-    typer.echo(payload["report"])
+    else:
+        typer.echo(payload["report"])
     if payload["benchmark_verdict"] != "PASS":
         raise typer.Exit(1)
 
