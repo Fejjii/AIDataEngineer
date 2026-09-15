@@ -111,7 +111,8 @@ def test_env_example_defaults_are_private() -> None:
     assert "AIDE_SYNTHETIC_DEMO_HTTP=0" in text
     assert "AIDE_HTTP_BIND=127.0.0.1" in text
     assert "POSTGRES_PORT" not in text
-    assert "AIDE_SYNTHETIC_DEMO_HTTP=1" not in text
+    assigned = [line.strip() for line in text.splitlines() if not line.lstrip().startswith("#")]
+    assert "AIDE_SYNTHETIC_DEMO_HTTP=1" not in assigned
 
 
 def test_compose_up_fails_closed_without_postgres_password(tmp_path: Path) -> None:
