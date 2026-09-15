@@ -18,10 +18,10 @@ test, observe, correct, and escalate.
 ## Current phase
 
 The DE001 product architecture is **ACCEPTED** and DE002–DE008A foundations are merged.
-PIVOT000 is accepted. PIVOT001 now proposes the constrained Interview MVP contract and
-DE-ADR-028; implementation remains human-gated until that PR is accepted and merged.
-Compact contract: `.ai/ARCHITECTURE.md`; active proposed boundary:
-`docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md`.
+PIVOT001 now records the constrained Interview MVP contract and DE-ADR-028. MVP001–MVP003
+are merged. MVP004 hardens the benchmark and demo. Compact contract: `.ai/ARCHITECTURE.md`;
+active boundary: `docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md`. Interview demo:
+`docs/INTERVIEW_DEMO.md`.
 
 ## Initial intended stack (direction only, not a freeze)
 
@@ -41,13 +41,9 @@ validate results, self-correct failures, and prepare safe deployment actions wit
 
 ## Current MVP direction
 
-One Vantara customer-revenue closed loop: pin a minimal PostgreSQL Digital Twin, assemble
-bounded authorized context, use the existing modelling engine, execute Snowflake/dbt DEV
-work only through the Governed Tool Gateway, repair the single allow-listed
-`INVOICE_STATUS → STATUS` drift, verify immutable evidence read-only, and emit the final
-report. Active sequence after PIVOT001 acceptance:
-`MVP001 Digital Twin → MVP002 Supervisor and Tool Gateway flow → MVP003 Repair and
-Verifier → MVP004 End-to-end benchmark and demo hardening`.
+The current MVP direction is one Vantara customer-revenue closed loop. MVP001–MVP003 are
+merged. MVP004 adds the deterministic benchmark, evidence completeness gate, interview
+demo CLI, and credential-gated Snowflake live smoke.
 
 GitHub delivery, frontend, monitoring, additional vendors/use cases/repair classes, graph
 or agent frameworks, enterprise IAM, and production or staging actions are deferred.
