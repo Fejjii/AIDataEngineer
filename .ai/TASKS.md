@@ -246,7 +246,7 @@ tasks do not run concurrently because their shared high-conflict contracts are s
 
 - Compact ID: `DEPLOY001_SYNTHETIC_CLOUD_DEMO`
 - Priority: P1
-- Status: IN_PROGRESS
+- Status: DONE (PR 26; do not merge from the agent)
 - Owner: Cursor Cloud agent (Grok 4.6)
 - Environment: CURSOR_CLOUD
 - Branch: `deploy/synthetic_cloud_demo`
