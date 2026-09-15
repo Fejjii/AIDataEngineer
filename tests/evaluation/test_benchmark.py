@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from aide.app.benchmarking.demo import render_demo_report
+from aide.app.benchmarking.demo import render_demo_report, render_scorecard
 from aide.app.benchmarking.runner import run_offline_benchmark
 from aide.domain.benchmark import MeasurementClass
 
@@ -29,10 +29,12 @@ async def test_e_bm_01_measurement_classes_are_honest(
     estimated = report.value_metrics.estimated_engineering_minutes_automated
     assert estimated > 0
     demo = render_demo_report(first, report)
-    assert "ESTIMATED" in demo
+    scorecard = render_scorecard(report)
+    assert "ESTIMATED" in scorecard
     assert "UNAVAILABLE" in demo
     assert "MEASURED" in demo
     assert "ROI" not in demo.upper()
+    assert "ROI" not in scorecard.upper()
     assert "return on investment" not in demo.lower()
     for item in report.runs[0].measurements:
         if item.classification is MeasurementClass.UNAVAILABLE:

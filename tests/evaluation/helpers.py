@@ -36,7 +36,8 @@ class NthFailDbt(FakeDbtConnector):
 
     def _maybe_fail(self, capability: str) -> None:
         self._eval_counts[capability] = self._eval_counts.get(capability, 0) + 1
-        if self._fail_on.get(capability) == self._eval_counts[capability]:
+        threshold = self._fail_on.get(capability)
+        if threshold is not None and self._eval_counts[capability] >= threshold:
             raise DbtMappedError(self._eval_failure, f"injected {self._eval_failure.value}")
         super()._maybe_fail(capability)
 

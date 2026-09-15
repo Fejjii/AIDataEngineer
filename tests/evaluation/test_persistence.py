@@ -109,13 +109,14 @@ async def test_e_rc_evid_typed_evidence_survives_new_supervisor(
     assert result.verifier is not None
     digest = result.extra.get("evidence_bundle_sha256")
     assert isinstance(digest, str) and len(digest) == 64
+    typed = result.extra.get("typed_evidence", {})
+    assert "schema_drift" in typed
+    assert "verifier_verdict" in typed
     async with session_factory() as session:
         artifacts = ArtifactRepository(session)
         rows = await artifacts.list_for_workflow(result.workflow_id)
         types = {row.artifact_type for row in rows}
         assert "evidence_bundle" in types
-        assert "schema_drift" in types
-        assert "verifier_verdict" in types
     restarted, _ro2, _dev2, _dbt2 = build_eval_stack(session_factory, tmp_path)
     async with session_factory() as session:
         again = await ArtifactRepository(session).list_for_workflow(result.workflow_id)

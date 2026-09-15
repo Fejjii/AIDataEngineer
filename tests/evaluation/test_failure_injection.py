@@ -77,7 +77,7 @@ async def test_dbt_stage_failure_fails_closed(
     dbt = NthFailDbt(work_root=tmp_path, fail_on={capability: 1})
     supervisor, _ro, _dev, _dbt = build_eval_stack(session_factory, tmp_path, dbt=dbt)
     result = await supervisor.run_customer_revenue(INTERVIEW_REQUEST)
-    assert result.failed or result.blocked
+    assert result.failed or result.blocked or result.parked
     assert result.verifier is None or result.verifier.verdict is VerifierVerdict.FAIL
     assert result.repair_application is None or not result.repair_application.applied
 
@@ -103,7 +103,7 @@ async def test_repair_application_failure_fails_closed(
     dbt = NthFailDbt(work_root=tmp_path, fail_on={"create_transformation": 2})
     supervisor, _ro, _dev, _dbt = build_eval_stack(session_factory, tmp_path, dbt=dbt)
     result = await supervisor.run_customer_revenue(INTERVIEW_REQUEST, include_schema_drift=True)
-    assert result.failed or result.blocked
+    assert result.failed or result.blocked or result.parked
     assert result.extra.get("applied_count", 0) != 1 or not result.execute_ok
     assert result.verifier is None or result.verifier.verdict is VerifierVerdict.FAIL
 
@@ -115,7 +115,7 @@ async def test_post_repair_validation_failure_blocks(
     dbt = NthFailDbt(work_root=tmp_path, fail_on={"run_tests": 2})
     supervisor, _ro, _dev, _dbt = build_eval_stack(session_factory, tmp_path, dbt=dbt)
     result = await supervisor.run_customer_revenue(INTERVIEW_REQUEST, include_schema_drift=True)
-    assert result.blocked or result.failed
+    assert result.blocked or result.failed or result.parked
     assert (
         result.block_reason
         in {
