@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as distribution_version
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from aide.capabilities.io import (
@@ -94,6 +95,9 @@ from aide.connectors.dbt.workspace import (
 from aide.domain.artifacts import ArtifactProvenance
 from aide.domain.effects import EffectSemantics
 from aide.domain.failures import FailureClass
+
+if TYPE_CHECKING:
+    from aide.connectors.snowflake.session import SnowflakeSession
 
 HEALTH_TTL = timedelta(minutes=5)
 
@@ -327,19 +331,45 @@ class RealDbtConnector:
     async def validate_interview_quality(
         self, payload: ValidateInterviewQualityInput, context: CallContext
     ) -> ValidationReport:
-        import duckdb
-
         from aide.modelling.constants import REQUIRED_DEMO_MODELS
         from aide.quality.interview import evaluate_interview_quality
 
         self._ensure_workspace(context.workflow_id)
-        duck = duckdb_workspace_path(self.settings.work_root, context.workflow_id)
         models = payload.required_models or REQUIRED_DEMO_MODELS
+        if self.settings.adapter is DbtAdapter.SNOWFLAKE:
+            return await self._validate_snowflake_quality(models, context)
+        import duckdb
+
+        duck = duckdb_workspace_path(self.settings.work_root, context.workflow_id)
         conn = duckdb.connect(str(duck), read_only=True)
         try:
             return evaluate_interview_quality(conn.execute, required_models=models)
         finally:
             conn.close()
+
+    async def _validate_snowflake_quality(
+        self, required_models: tuple[str, ...], context: CallContext
+    ) -> ValidationReport:
+        from aide.connectors.base.v1_instances import SNOWFLAKE_DEV
+        from aide.connectors.snowflake.real import RealSnowflakeConnector
+        from aide.quality.interview import evaluate_interview_quality
+
+        schema = snowflake_workflow_schema(context.workflow_id)
+        connector = RealSnowflakeConnector(SNOWFLAKE_DEV)
+
+        def run(session: SnowflakeSession) -> ValidationReport:
+            adapter = _SnowflakeQualityExecute(session)
+            return evaluate_interview_quality(
+                adapter,
+                required_models=required_models,
+                schema=schema,
+                quoted_identifiers=False,
+            )
+
+        try:
+            return await connector._session_call(context, run)  # noqa: SLF001
+        finally:
+            await connector.close()
 
     def ensure_workflow_sources(self, payload: object, context: CallContext) -> None:
         import duckdb
@@ -648,6 +678,27 @@ def _seconds_until(deadline: datetime) -> float:
 def _safe_message(result: IsolatedResult) -> str:
     raw = str(result.result_payload.get("message") or result.stderr or result.stdout)
     return raw[:400]
+
+
+class _SnowflakeQualityExecute:
+    """Adapt SnowflakeSession.execute to the quality module's cursor-like API."""
+
+    def __init__(self, session: SnowflakeSession) -> None:
+        self._session = session
+        self._rows: list[dict[str, object]] = []
+
+    def __call__(self, sql: str) -> _SnowflakeQualityExecute:
+        _columns, rows, _query_id = self._session.execute(sql)
+        self._rows = list(rows)
+        return self
+
+    def fetchone(self) -> tuple[object, ...] | None:
+        if not self._rows:
+            return None
+        row = self._rows[0]
+        if isinstance(row, dict):
+            return tuple(row.values())
+        return tuple(row)
 
 
 def build_real_duckdb(

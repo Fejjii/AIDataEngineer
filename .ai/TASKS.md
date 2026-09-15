@@ -130,7 +130,7 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 
 ## PIVOT001 — Interview MVP contract boundary
 - Priority: P0
-- Status: IN_PROGRESS (documentation complete on task branch; human acceptance pending)
+- Status: DONE (accepted and merged; DE-ADR-028 remains the active roadmap ADR)
 - Environment: CURSOR_CLOUD
 - Dependencies: PIVOT000 accepted and merged
 - Risk: High (architecture and active-roadmap boundary)
@@ -165,7 +165,7 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 
 ## MVP003 — Repair and Verifier
 - Priority: P0
-- Status: DONE (branch `feat/MVP003_repair_verifier`; PR open, not merged)
+- Status: DONE (merged to `main`)
 - Dependencies: MVP002 merged
 - Goal: Implement the one drift/reference repair, strict limits, revalidation, read-only
   verifier, and immutable evidence bundle.
@@ -175,8 +175,14 @@ Legend — Priority: P0 (critical) … P3 (low). Status: TODO / IN_PROGRESS / DO
 
 ## MVP004 — End-to-end benchmark and demo hardening
 - Priority: P0
-- Status: TODO
+- Status: IN_PROGRESS
 - Dependencies: MVP003 merged
+- Branch: `feat/MVP004_benchmark_demo`
+- Environment: CURSOR_CLOUD
+- Expected files: `src/aide/domain/benchmark.py`, `src/aide/app/benchmarking/**`,
+  `src/aide/cli/interview.py`, `src/aide/connectors/snowflake/live_probe.py`,
+  `docs/INTERVIEW_DEMO.md`, benchmark/live tests, one run report.
+- Forbidden files: new repair classes, production/staging, frontend, architecture redesign.
 - Goal: Run the deterministic offline scenario twice, one credentialed Snowflake/dbt DEV
   smoke, CLI/demo report, and final limitation review.
 - Ownership: sole integration writer; no architecture or contract redesign.

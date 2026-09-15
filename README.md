@@ -7,7 +7,7 @@ minimal CI gate (`ruff`, `mypy --strict`, `pytest`, `import-linter`).
 
 Canonical local path: `~/Developer/AIDataEngineer`
 
-Start here: `.ai/MASTER.md`
+Start here: `.ai/MASTER.md`. Interview MVP demo: `docs/INTERVIEW_DEMO.md`.
 
 ```bash
 uv sync --frozen --all-groups
@@ -15,6 +15,7 @@ uv run ruff check .
 uv run mypy src tests asgi.py
 uv run lint-imports
 uv run pytest
+uv run aide interview demo
 ```
 
 Local Docker stack (copy `.env.example` to `.env` first):
