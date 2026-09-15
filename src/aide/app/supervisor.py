@@ -125,8 +125,10 @@ from aide.orchestration.materialization import (
 )
 from aide.orchestration.worker import TaskClaim, claim_task, select_runnable_task
 from aide.persistence.audit import append_audit_event
+from aide.persistence.database import read_only_unit_of_work
 from aide.persistence.gateway import GatewayDispatchRepository
 from aide.persistence.models import (
+    ArtifactModel,
     MaterializedTaskModel,
     PhaseRunModel,
     TaskTemplateModel,
@@ -1592,23 +1594,56 @@ class InterviewSupervisor:
         assert result.estate_context_sha256 is not None
         typed = result.extra.get("typed_evidence", {})
         evidence: list[EvidenceDigest] = []
-        for name, payload in typed.items():
-            digest = payload["sha256"]
-            if name == "before_artifact_hash" and result.before_artifact_hash is not None:
-                digest = result.before_artifact_hash
-            elif name == "after_artifact_hash" and result.after_artifact_hash is not None:
-                digest = result.after_artifact_hash
-            evidence.append(
-                EvidenceDigest(
-                    evidence_ref_id=UUID(payload["evidence_ref_id"]),
-                    evidence_type=name,
-                    sha256=digest,
-                    execution_mode=self._execution_mode,
-                    identity=f"{name}:{payload['evidence_ref_id']}:{digest}",
-                )
-            )
-        async with self._sessions() as session:
+        intents: tuple[Any, ...] = ()
+        pinned_snapshot_id = result.twin_snapshot.twin_snapshot_id
+        pinned_digest = result.twin_snapshot.manifest_sha256
+        async with read_only_unit_of_work(self._sessions) as session:
             intents = await GatewayDispatchRepository(session).list_for_workflow(result.workflow_id)
+            pinned = await TwinRepository(session).pinned_snapshot(result.workflow_id)
+            pinned_snapshot_id = pinned.snapshot.twin_snapshot_id
+            pinned_digest = pinned.snapshot.manifest_sha256
+            twins = TwinRepository(session)
+            for name, payload in typed.items():
+                reference = await twins.get_evidence_reference(UUID(payload["evidence_ref_id"]))
+                if reference is None:
+                    continue
+                digest = reference.sha256
+                if name == "before_artifact_hash" and result.before_artifact_hash is not None:
+                    digest = result.before_artifact_hash
+                elif name == "after_artifact_hash" and result.after_artifact_hash is not None:
+                    digest = result.after_artifact_hash
+                stale = reference.sha256 != payload["sha256"]
+                if reference.artifact_id is not None:
+                    artifact = await session.get(ArtifactModel, reference.artifact_id)
+                    if artifact is not None and artifact.sha256 != reference.sha256:
+                        stale = True
+                evidence.append(
+                    EvidenceDigest(
+                        evidence_ref_id=reference.evidence_ref_id,
+                        evidence_type=name,
+                        sha256=digest,
+                        execution_mode=self._execution_mode,
+                        stale=stale,
+                        identity=f"{name}:{reference.evidence_ref_id}:{digest}",
+                    )
+                )
+        if not evidence:
+            for name, payload in typed.items():
+                digest = payload["sha256"]
+                if name == "before_artifact_hash" and result.before_artifact_hash is not None:
+                    digest = result.before_artifact_hash
+                elif name == "after_artifact_hash" and result.after_artifact_hash is not None:
+                    digest = result.after_artifact_hash
+                evidence.append(
+                    EvidenceDigest(
+                        evidence_ref_id=UUID(payload["evidence_ref_id"]),
+                        evidence_type=name,
+                        sha256=digest,
+                        execution_mode=self._execution_mode,
+                        identity=f"{name}:{payload['evidence_ref_id']}:{digest}",
+                    )
+                )
+        result.extra["verifier_readonly"] = True
         gateway_records = tuple(
             GatewayIntentRecord(
                 intent_id=item.intent_id,
@@ -1652,9 +1687,9 @@ class InterviewSupervisor:
         )
         return VerifierEvidencePack(
             workflow_id=result.workflow_id,
-            twin_snapshot_id=result.twin_snapshot.twin_snapshot_id,
+            twin_snapshot_id=pinned_snapshot_id,
             estate_context_sha256=result.estate_context_sha256,
-            pinned_snapshot_digest=result.twin_snapshot.manifest_sha256,
+            pinned_snapshot_digest=pinned_digest,
             claimed_snapshot_id=result.twin_snapshot.twin_snapshot_id,
             claimed_estate_context_sha256=result.estate_context_sha256,
             business_request="Build a customer revenue analytical data product",

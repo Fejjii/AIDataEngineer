@@ -31,6 +31,7 @@ VERIFIER_FORBIDDEN = FORBIDDEN_MODULES | frozenset(
         "aide.repair.writer",
         "aide.approvals",
         "aide.orchestration",
+        "aide.persistence",
         "aide.connectors.snowflake",
         "aide.connectors.dbt",
     }

@@ -355,6 +355,20 @@ class TwinRepository:
             raise LookupError(f"workflow {workflow_id} has no pinned Twin snapshot")
         return await self.load_snapshot(binding.twin_snapshot_id)
 
+    async def list_evidence_for_artifacts(
+        self, artifact_ids: tuple[UUID, ...]
+    ) -> tuple[EvidenceReference, ...]:
+        if not artifact_ids:
+            return ()
+        rows = (
+            await self._session.scalars(
+                select(EvidenceReferenceModel).where(
+                    EvidenceReferenceModel.artifact_id.in_(artifact_ids)
+                )
+            )
+        ).all()
+        return tuple(_evidence_from_row(item) for item in rows)
+
     async def load_snapshot(self, twin_snapshot_id: UUID) -> TwinSnapshotRecords:
         row = await self._session.get(TwinSnapshotModel, twin_snapshot_id)
         if row is None:
