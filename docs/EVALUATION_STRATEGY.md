@@ -2,6 +2,10 @@
 
 **Task:** DE 001 · **Status:** ACCEPTED · ADR: DE-ADR-019
 
+The implemented Interview MVP benchmark is `uv run aide interview benchmark` (scenario
+`interview_mvp_customer_revenue_schema_drift`). This document is the broader V1 evaluation
+design. Time-saved figures remain labelled estimates.
+
 Evaluation answers one question objectively: *does the platform safely produce, execute,
 test, repair and deliver a real data workflow with minimal manual intervention — and at
 what cost?* It runs the **same code path** as the UI (Application Services), against fake

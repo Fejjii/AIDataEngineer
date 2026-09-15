@@ -12,10 +12,10 @@ independent review/verification artifacts. Implementation (DE 002+) may proceed 
 DE-ADR-026: the *architecture* is baselined and breaking deviations need an ADR; *contracts*
 may evolve additively when existing tests stay valid.
 
-**PIVOT001 amendment:** DE-ADR-028 is `PROPOSED`. After human acceptance, the active
-Interview MVP contract and implementation sequence are defined by
-`docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md`. It constrains the next build to one Vantara
-customer-revenue closed loop and preserves the accepted kernel contracts below.
+**PIVOT001 amendment:** DE-ADR-028 is `ACCEPTED`. The Interview MVP (MVP001–MVP004) is
+merged to `main`. The active contract is `docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md`. It
+constrains the product to one Vantara customer-revenue closed loop and preserves the
+accepted kernel contracts below. Recruiter landing page: repository `README.md`.
 
 ## Authoritative documents
 

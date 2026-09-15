@@ -205,7 +205,7 @@ emitter, retry summary).
 
 ## DE-ADR-028 — Constrain the active roadmap to one Interview MVP closed loop
 - **Date:** 2026-09-14
-- **Status:** Proposed
+- **Status:** Accepted (PIVOT001 merged; MVP001–MVP004 implemented on `main`)
 - **Decision:** After acceptance, replace DE-ADR-021's active roadmap with the sequential
   `MVP001 Digital Twin → MVP002 Supervisor and Tool Gateway flow → MVP003 Repair and
   Verifier → MVP004 End-to-end benchmark and demo hardening` path. Prove one Vantara

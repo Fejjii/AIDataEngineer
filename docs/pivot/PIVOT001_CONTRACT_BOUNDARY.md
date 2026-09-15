@@ -1,8 +1,8 @@
 # PIVOT001 — Data Pilot AI Interview MVP Contract Boundary
 
 **Task:** PIVOT001
-**Status:** PROPOSED — implementation starts only after human review and merge
-**Baseline:** `main` at `31343c6aec3b278f4d5a0cd14687b0e73ae0b206`
+**Status:** IMPLEMENTED — MVP001–MVP004 merged to `main`
+**Baseline:** `main` at `31343c6aec3b278f4d5a0cd14687b0e73ae0b206` (pre-MVP contract freeze)
 **Architecture verdict:** **GO**
 
 ## 1. Decision
@@ -33,6 +33,10 @@ points or later product work, not interview acceptance criteria.
 
 ## 2. Audited implementation baseline
 
+This section records the **pre-MVP001** Git baseline used to freeze the contract. MVP001
+through MVP004 are now merged; the repository README and `docs/INTERVIEW_DEMO.md` describe
+the implemented closed loop.
+
 Git history and merged code are authoritative where the old backlog differs.
 
 | Foundation | Current fact | MVP disposition |
@@ -44,9 +48,10 @@ Git history and merged code are authoritative where the old backlog differs.
 | Recovery and policy | DE002A–C provide operation/attempt identity, deterministic policy, approvals, PostgreSQL state, fencing, and reconcile-before-retry. | Preserve semantics and extend additively. |
 | Vantara | DE004 provides deterministic `tiny`, `demo`, and `full` fixtures with v1/v2 schema drift. | Use `tiny` only. |
 
-No product implementation currently combines a Digital Twin, canonical gateway dispatch,
-dbt generation, bounded repair, verifier, and evidence report. That is the remaining
-vertical slice, not a reason to replace the kernel.
+At the PIVOT001 freeze, no product implementation combined a Digital Twin, canonical
+gateway dispatch, dbt generation, bounded repair, verifier, and evidence report. That was
+the remaining vertical slice (MVP001–MVP004), not a reason to replace the kernel. Those
+tasks are now merged.
 
 ## 3. Locked scope
 

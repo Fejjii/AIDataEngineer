@@ -6,6 +6,7 @@ Selection rule: the simplest technology that satisfies the requirement, evaluate
 independently of what previous projects used. Anything listed as *rejected* may be
 re-proposed by ADR with evidence. Version pins are set in DE 002 after checking current
 compatibility (notably dbt adapter ↔ Python version); this document fixes the *choices*.
+Interview MVP is CLI-first (`aide interview`); the SPA is a V1 design, not a shipping UI.
 
 ---
 

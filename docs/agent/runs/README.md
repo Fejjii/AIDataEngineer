@@ -2,6 +2,8 @@
 
 Tracked, sanitized execution records for Local and Cloud agents.
 
+Product introduction is the repository [`README.md`](../../../README.md), not this index.
+
 **Spec:** [`../CLOUD_HANDOFF.md`](../CLOUD_HANDOFF.md)
 
 ## Layout
@@ -29,6 +31,8 @@ docs/agent/runs/
 | Task ID | Session ID | Status | Branch | Report |
 |---------|------------|--------|--------|--------|
 | FINAL-QA-001 | FINAL-QA-001-SESSION-20260915T132600Z-bc-eca8e2fb | SUCCESS | `cursor/interview-evaluation-hardening-8bc5` | [report](FINAL-QA-001/FINAL-QA-001-SESSION-20260915T132600Z-bc-eca8e2fb.md) |
+| SHOWCASE-001 | SHOWCASE-001-SESSION-20260915T134205Z | SUCCESS | `docs/recruiter-github-showcase` | [report](SHOWCASE-001/SHOWCASE-001-SESSION-20260915T134205Z.md) |
+| MVP004 | MVP004-SESSION-20260915T123800Z-bc01a0a49e | SUCCESS | `feat/MVP004_benchmark_demo` | [report](MVP004/MVP004-SESSION-20260915T123800Z-bc01a0a49e.md) |
 | MVP004 | MVP004-SESSION-20260915T103100Z-bc01a0a49e | SUCCESS | `feat/MVP004_benchmark_demo` | [report](MVP004/MVP004-SESSION-20260915T103100Z-bc01a0a49e.md) |
 | MVP003 | MVP003-SESSION-20260915T093243Z-bc01a0a3b7 | SUCCESS | `feat/MVP003_repair_verifier` | [report](MVP003/MVP003-SESSION-20260915T093243Z-bc01a0a3b7.md) |
 | MVP003 | MVP003-SESSION-20260915T061800Z-bc01a0a3b7 | SUCCESS | `feat/MVP003_repair_verifier` | [report](MVP003/MVP003-SESSION-20260915T061800Z-bc01a0a3b7.md) |
