@@ -187,6 +187,48 @@ class BenchmarkResult(BenchmarkModel):
     live_smoke_detail: str = ""
 
 
+class DigitalTwinSummary(BenchmarkModel):
+    """Bounded Twin view for the synthetic demo HTTP surface. Not the full estate."""
+
+    snapshot_id: str | None = None
+    manifest_sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
+    estate_context_sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
+    pinned_asset_count: int = Field(default=0, ge=0)
+    selected_assets: tuple[str, ...] = ()
+
+
+class SchemaDriftSummary(BenchmarkModel):
+    detected: bool
+    failure_class: str | None = None
+    mapping: str
+    asset: str
+
+
+class RepairResultSummary(BenchmarkModel):
+    applied: bool
+    apply_count: int = Field(ge=0)
+    allowed: bool
+    artifact_path: str
+
+
+class InterviewDemoSummary(BenchmarkModel):
+    """Bounded recruiter-facing Interview MVP result. No secrets or env values."""
+
+    scenario_id: str
+    workflow_status: str
+    workflow_ids: tuple[str, ...]
+    digital_twin: DigitalTwinSummary
+    schema_drift: SchemaDriftSummary
+    repair: RepairResultSummary
+    verifier_verdict: str | None
+    evidence_completeness_pct: int = Field(ge=0, le=100)
+    evidence_complete: bool
+    determinism: bool
+    benchmark_verdict: str
+    benchmark_metrics: ValueMetrics
+    live_smoke: LiveSmokeStatus = LiveSmokeStatus.NOT_RUN
+
+
 NORMALIZATION_RULES: tuple[NormalizationRule, ...] = (
     NormalizationRule(
         field="workflow_id",
@@ -286,10 +328,14 @@ __all__ = [
     "ClassifiedMeasurement",
     "DeterminismMismatch",
     "DeterminismReport",
+    "DigitalTwinSummary",
     "EvidenceCompleteness",
+    "InterviewDemoSummary",
     "LiveSmokeStatus",
     "MeasurementClass",
     "NormalizationRule",
+    "RepairResultSummary",
+    "SchemaDriftSummary",
     "ScorecardRow",
     "StableFingerprint",
     "ValueMetrics",

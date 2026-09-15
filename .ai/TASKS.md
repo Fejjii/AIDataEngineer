@@ -242,6 +242,49 @@ tasks do not run concurrently because their shared high-conflict contracts are s
 - Git authority: branch-only; one PR to `main`; do not merge; do not delete historical
   branches (recommend SAFE_TO_DELETE only).
 
+## DEPLOY001 — Synthetic Interview MVP cloud demo
+
+- Compact ID: `DEPLOY001_SYNTHETIC_CLOUD_DEMO`
+- Priority: P1
+- Status: DONE (PR 26; security remediation complete on the same branch; do not merge from the agent)
+- Owner: Cursor Cloud agent (Grok 4.6)
+- Environment: CURSOR_CLOUD
+- Branch: `deploy/synthetic_cloud_demo`
+- Base commit: `e6e0162c1abd6a1d717212606bc12b174537bfec`
+- Dependencies: MVP001–MVP004, FINAL-QA-001, SHOWCASE-001, FINAL_POLISH_001 merged
+- Risk: Medium (deployment packaging; no production, no new architecture)
+- Goal: Make the accepted Interview MVP runnable as a safe synthetic cloud demo:
+  one app container, one PostgreSQL, existing fakes, existing migrations.
+- Explicit exclusions: Kubernetes, microservices, Redis, Kafka, Temporal, SPA,
+  new connectors, Terraform unless required, production/staging permissions,
+  Snowflake credentials, customer data.
+- Expected files: Docker/Compose, demo script, env template, optional env-gated
+  Interview demo HTTP, tests, `docs/ops/SYNTHETIC_CLOUD_DEMO.md`, run report.
+- Git authority: branch-only; commit/push; one PR to `main`; do not merge.
+- Deployment authority: synthetic demo only; no production credentials.
+
+## DEPLOY001_SECURITY_REMEDIATION — Secure-by-default synthetic cloud demo
+
+- Compact ID: `DEPLOY001_SECURITY_REMEDIATION`
+- Priority: P0
+- Status: DONE (PR 26; do not merge from the agent)
+- Owner: Cursor Cloud agent (Grok 4.6)
+- Environment: CURSOR_CLOUD
+- Branch: `deploy/synthetic_cloud_demo`
+- Base commit: `289203b3bbe4cf4854ebd6827afd288b2728ad48`
+- Implementation commit: `714a95083a3f4c1635fc47cdffa62a7b079e38cf`
+- Dependencies: DEPLOY001_SYNTHETIC_CLOUD_DEMO
+- Risk: Medium (cloud security defaults; no new architecture)
+- Goal: PostgreSQL unpublished; no deterministic DB password; HTTP demo disabled
+  and token-mandatory when enabled; localhost app bind by default; one Dockerfile
+  ENV block. Preserve CLI demo and validated Interview behavior.
+- Explicit exclusions: reverse proxies, Kubernetes, Terraform, frontend, Redis,
+  new services, merge to `main`.
+- Git authority: commit/push on existing branch; update PR 26; do not merge.
+- Deployment authority: none.
+- Completion evidence: GitHub CI run `35013798575` green; run report
+  `docs/agent/runs/DEPLOY001_SECURITY_REMEDIATION/DEPLOY001_SECURITY_REMEDIATION-SESSION-20260915T190000Z-0004.md`.
+
 ---
 
 # Historical DE implementation backlog

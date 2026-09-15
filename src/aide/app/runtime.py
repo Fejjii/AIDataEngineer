@@ -7,6 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from aide.app.events import EventBus
@@ -154,6 +155,17 @@ def build_offline_stack(
 
 def session_factory_from_url(database_url: str) -> async_sessionmaker[AsyncSession]:
     return create_session_factory(create_engine(database_url))
+
+
+class DatabaseReadiness:
+    """Process-local PostgreSQL ping for container readiness. Does not print the DSN."""
+
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self._factory = session_factory
+
+    async def ready(self) -> None:
+        async with self._factory() as session:
+            await session.execute(text("SELECT 1"))
 
 
 def _uuid(value: UUID | str) -> UUID:

@@ -8,17 +8,18 @@ cd "$ROOT"
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-aide-ci-smoke}"
 COMPOSE=(docker compose -p "$PROJECT_NAME")
 
-# Ephemeral CI-only defaults derived at runtime; override via environment when needed.
+# Ephemeral CI-only defaults generated at runtime; override via environment when needed.
 export POSTGRES_DB="${POSTGRES_DB:-aide_dev}"
 export POSTGRES_USER="${POSTGRES_USER:-aide_ci}"
-export POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+export AIDE_HTTP_BIND="${AIDE_HTTP_BIND:-127.0.0.1}"
 export AIDE_HTTP_PORT="${AIDE_HTTP_PORT:-8000}"
+export AIDE_SYNTHETIC_DEMO_HTTP="${AIDE_SYNTHETIC_DEMO_HTTP:-0}"
 if [[ -z "${POSTGRES_PASSWORD:-}" ]]; then
-  POSTGRES_PASSWORD="aide-ci-smoke-pg-$(printf '%s' "$PROJECT_NAME" | sha256sum | cut -c1-24)"
+  POSTGRES_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
   export POSTGRES_PASSWORD
 fi
 if [[ -z "${AIDE_CSRF_SECRET:-}" ]]; then
-  AIDE_CSRF_SECRET="aide-ci-smoke-csrf-$(printf '%s' "$PROJECT_NAME" | sha256sum | cut -c1-32)"
+  AIDE_CSRF_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
   export AIDE_CSRF_SECRET
 fi
 
@@ -72,6 +73,56 @@ wait_app_healthy() {
   fail "Application /healthz did not succeed within 120 seconds"
 }
 
+wait_app_ready() {
+  local attempt response
+  for attempt in $(seq 1 60); do
+    if response="$(curl -fsS "http://127.0.0.1:${AIDE_HTTP_PORT}/readyz" 2>/dev/null)"; then
+      log "Application ready response: ${response}"
+      [[ "$response" == *"ok"* ]] || fail "unexpected /readyz payload: ${response}"
+      return 0
+    fi
+    sleep 2
+  done
+  fail "Application /readyz did not succeed within 120 seconds"
+}
+
+verify_postgres_not_published() {
+  local cid bindings
+  cid="$("${COMPOSE[@]}" ps -q postgres)"
+  [[ -n "$cid" ]] || fail "postgres container id is missing"
+  bindings="$(docker inspect -f '{{json .HostConfig.PortBindings}}' "$cid")"
+  if [[ "$bindings" != "{}" && "$bindings" != "null" ]]; then
+    fail "postgres must not publish a host port"
+  fi
+  log "PostgreSQL host port publication is absent"
+}
+
+verify_http_demo_disabled_by_default() {
+  local code
+  code="$(curl -sS -o /tmp/aide-ci-demo-body -w '%{http_code}' \
+    -X POST -H 'Content-Type: application/json' -d '{}' \
+    "http://127.0.0.1:${AIDE_HTTP_PORT}/v1/interview/demo" || true)"
+  [[ "$code" == "404" ]] || fail "HTTP demo must be disabled by default, got HTTP ${code}"
+  if grep -Eq 'POSTGRES_PASSWORD|AIDE_CSRF_SECRET|AIDE_SYNTHETIC_DEMO_TOKEN|SNOWFLAKE_' /tmp/aide-ci-demo-body; then
+    fail "demo response must not contain secret names"
+  fi
+  log "HTTP demo is disabled by default"
+}
+
+verify_interview_runtime() {
+  "${COMPOSE[@]}" exec -T app test -d /app/dbt/vantara_project \
+    || fail "dbt/vantara_project missing in image"
+  "${COMPOSE[@]}" exec -T app test -d /app/synthetic/vantara/fixtures/tiny \
+    || fail "synthetic Vantara fixtures missing in image"
+  "${COMPOSE[@]}" exec -T app aide interview demo --help >/dev/null \
+    || fail "aide interview demo is not available in the image"
+  if "${COMPOSE[@]}" exec -T app uv run --frozen --no-dev --offline --no-sync aide interview demo --help >/dev/null; then
+    log "uv run aide interview demo --help succeeded inside the app container"
+  else
+    fail "uv run aide interview demo --help failed inside the app container"
+  fi
+}
+
 verify_app_database_connectivity() {
   "${COMPOSE[@]}" exec -T app python -c "
 import os
@@ -109,8 +160,12 @@ else
   fail "postgres service is not running"
 fi
 
+verify_postgres_not_published
 wait_app_healthy
+wait_app_ready
+verify_http_demo_disabled_by_default
 verify_app_database_connectivity
 verify_migrations_applied
+verify_interview_runtime
 
 log "Docker Compose smoke test succeeded"

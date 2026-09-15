@@ -289,6 +289,9 @@ uv run aide interview demo
 uv run aide interview benchmark
 ```
 
+Docker Compose (one app + PostgreSQL 16, no Snowflake credentials): see
+[`docs/ops/SYNTHETIC_CLOUD_DEMO.md`](docs/ops/SYNTHETIC_CLOUD_DEMO.md).
+
 | Command | What you see |
 |---|---|
 | `uv run aide interview demo` | Human report of the 15-step closed loop, Independent Verifier verdict, evidence digest, determinism, final PASS or FAIL. Runs the scenario **twice**. Exit `0` only on PASS. |
@@ -397,6 +400,7 @@ are not the product introduction.
 | Document | Why open it |
 |---|---|
 | [Interview demo](docs/INTERVIEW_DEMO.md) | Commands, expected PASS criteria, live-smoke posture |
+| [Synthetic cloud demo](docs/ops/SYNTHETIC_CLOUD_DEMO.md) | Compose + PostgreSQL packaging for remote synthetic runs |
 | [Interview MVP scope](docs/MVP_SCOPE.md) | Implemented boundary and hard limits |
 | [Architecture](docs/ARCHITECTURE.md) | Accepted DE001 architecture; Interview vs V1 design |
 | [PIVOT001 contract](docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md) | Twin, gateway, repair, verifier, acceptance tests |

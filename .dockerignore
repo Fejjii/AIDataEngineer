@@ -1,0 +1,17 @@
+.git
+.venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+.cursor
+HANDOFF.md
+CHANGELOG_SESSION.md
+.ai/private
+.ai/local
+docs
+tests
+*.egg-info

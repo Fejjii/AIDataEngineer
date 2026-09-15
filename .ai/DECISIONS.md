@@ -217,3 +217,29 @@ emitter, retry summary).
 - **Deferred:** Unstarted DE009–DE019 scope, additional failures/vendors, GitHub delivery,
   monitor, UI, real LLM requirement, graph/workflow/agent frameworks, and production actions.
 - **Full record:** `docs/adr/DE-ADR-028-interview-mvp-boundary.md`.
+
+## DEPLOY001 — Synthetic Interview demo is Compose, not a new product architecture
+
+- **Date:** 2026-09-15
+- **Status:** Accepted (task-scoped; additive under DE-ADR-026)
+- **Decision:** The recruiter synthetic demo is one Data Pilot AI application
+  container plus PostgreSQL 16. Remote demonstration reuses the Interview CLI and,
+  when `AIDE_SYNTHETIC_DEMO_HTTP=1`, an env-gated `POST /v1/interview/demo` that
+  runs only the accepted scenario through `run_offline_benchmark`. No Kubernetes,
+  no new connectors, no UI, no production or staging.
+- **Consequences:** Docker image includes `synthetic/` and `dbt/vantara_project`.
+  Snowflake live smoke stays credential-gated and off the Compose environment map.
+
+## DEPLOY001 — Synthetic cloud demo is private by default
+
+- **Date:** 2026-09-15
+- **Status:** Accepted (task-scoped; additive under DE-ADR-026)
+- **Decision:** Standing Compose does not publish PostgreSQL to the host. There is
+  no deterministic `POSTGRES_PASSWORD` fallback; Compose requires the value from the
+  environment or `.env`. `AIDE_SYNTHETIC_DEMO_HTTP` defaults to disabled. Enabling
+  HTTP demo requires a nonempty `AIDE_SYNTHETIC_DEMO_TOKEN` or startup fails closed.
+  The published application port binds `127.0.0.1` unless `AIDE_HTTP_BIND` is set
+  to publish. CLI demo does not use the HTTP token. Public bind does not bypass the
+  token.
+- **Consequences:** Operators set secrets locally. CI smoke uses `docker compose exec`
+  and ephemeral random passwords, not a host Postgres port.
