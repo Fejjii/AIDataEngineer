@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from aide.domain.artifacts import ExecutionMode
 from aide.domain.benchmark import EvidenceCompleteness
 from aide.domain.identity import canonical_json_bytes
 from aide.domain.verification import REQUIRED_EVIDENCE_SECTIONS, EvidenceBundle
@@ -109,6 +110,9 @@ async def validate_persisted_evidence(
             )
         if bundle.workflow_id != workflow_id:
             mismatches.append("workflow_id")
+        modes = {item.execution_mode for item in bundle.sections}
+        if ExecutionMode.REAL in modes and ExecutionMode.MOCK in modes:
+            mismatches.append("execution_mode")
         recomputed_bundle = evidence_bundle_digest(
             workflow_id=bundle.workflow_id,
             twin_snapshot_id=bundle.twin_snapshot_id,
@@ -127,6 +131,12 @@ async def validate_persisted_evidence(
                 if section.name not in missing:
                     missing.append(section.name)
                 continue
+            if (
+                reference is not None
+                and reference.execution_mode != section.execution_mode
+                and "execution_mode" not in mismatches
+            ):
+                mismatches.append("execution_mode")
             if (
                 reference is not None
                 and reference.sha256 != section.sha256

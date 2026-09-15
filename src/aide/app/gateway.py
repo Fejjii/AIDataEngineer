@@ -765,6 +765,17 @@ class GovernedToolGateway:
                 evidence_ref_id=evidence_id,
                 result_digest=_digest(result.model_dump(mode="json")),
             )
+            execute_intent = await GatewayDispatchRepository(session).get_by_attempt(
+                claim.attempt_id, "EXECUTE"
+            )
+            if execute_intent is not None and execute_intent.status == "DISPATCHED":
+                await GatewayDispatchRepository(session).complete(
+                    execute_intent.intent_id,
+                    status=complete_status[:32],
+                    now=now,
+                    evidence_ref_id=evidence_id,
+                    result_digest=_digest(result.model_dump(mode="json")),
+                )
             await append_audit_event(
                 session,
                 workflow_id=workflow_id,

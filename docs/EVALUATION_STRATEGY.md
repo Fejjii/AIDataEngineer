@@ -146,6 +146,12 @@ This is an estimate and is labelled as such in the UI.
 
 ---
 
+Interview MVP closed-loop evaluation for FINAL-QA-001 lives under
+`docs/evaluation/` and `tests/evaluation/`. PASS/FAIL/NOT_TESTED is deterministic.
+No LLM judge.
+
+---
+
 ## 6. What evaluation does not claim
 
 - No LLM-as-judge scores in V1 (avoids circularity). Qualitative rubric review may be

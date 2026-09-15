@@ -234,6 +234,16 @@ def test_real_chain_rejects_mock_evidence() -> None:
     assert "PROVENANCE_MIX" in result.reason_codes
 
 
+def test_mock_workflow_rejects_real_evidence() -> None:
+    pack = _pack()
+    flipped = tuple(
+        item.model_copy(update={"execution_mode": ExecutionMode.REAL}) for item in pack.evidence
+    )
+    result = evaluate_verifier(pack.model_copy(update={"evidence": flipped}))
+    assert result.verdict is VerifierVerdict.FAIL
+    assert "PROVENANCE_MIX" in result.reason_codes
+
+
 def test_unapproved_required_approval_fails() -> None:
     result = evaluate_verifier(
         _pack(

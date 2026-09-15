@@ -90,7 +90,12 @@ from aide.domain.repair import (
     ValidateRepairInput,
 )
 from aide.domain.sql import AssetRef, SqlText
-from aide.domain.states import LEGAL_TRANSITIONS, TaskState, WorkflowState
+from aide.domain.states import (
+    LEGAL_TRANSITIONS,
+    TERMINAL_WORKFLOW_STATES,
+    TaskState,
+    WorkflowState,
+)
 from aide.domain.tasks import TaskTemplate
 from aide.domain.twin import (
     EvidenceReference,
@@ -121,6 +126,7 @@ from aide.orchestration.compatibility import evaluate_pinned_contract
 from aide.orchestration.coordination import NextPhase, reduce_and_advance
 from aide.orchestration.materialization import (
     TemplateSpec,
+    acquire_workflow_lock,
     create_phase_occurrence,
     persist_materialized_task,
 )
@@ -344,6 +350,7 @@ class InterviewSupervisor:
             fixture_version=fixture_version,
             include_schema_drift=include_schema_drift,
             started_at=_naive(now),
+            extra={"human_intervention_count": 0},
         )
         result.requirement = interpret_customer_revenue_request(requirement_text)
         await self._store_artifact(
@@ -1663,7 +1670,14 @@ class InterviewSupervisor:
             result.block_reason = (
                 verdict.reason_codes[0] if verdict.reason_codes else "VERIFIER_FAIL"
             )
-        await self._persist_evidence_bundle(result, pack)
+        try:
+            await self._persist_evidence_bundle(result, pack)
+        except Exception as exc:
+            result.failed = True
+            result.fail_reason = "EVIDENCE_PERSISTENCE_FAILED"
+            result.blocked = True
+            result.block_reason = "EVIDENCE_PERSISTENCE_FAILED"
+            result.extra["evidence_persist_error_type"] = type(exc).__name__
 
     async def _verifier_pack(self, result: InterviewResult) -> VerifierEvidencePack:
         assert result.twin_snapshot is not None
@@ -1966,9 +1980,39 @@ class InterviewSupervisor:
             )
 
     async def _finalize_status(self, result: InterviewResult) -> InterviewResult:
-        async with self._sessions() as session:
+        now = _naive(datetime.now(UTC))
+        result.extra.setdefault("human_intervention_count", 0)
+        async with self._sessions() as session, session.begin():
+            await acquire_workflow_lock(session, result.workflow_id)
             workflow = await session.get(WorkflowModel, result.workflow_id)
             assert workflow is not None
+            current = WorkflowState(workflow.state)
+            target: WorkflowState | None = None
+            if current not in TERMINAL_WORKFLOW_STATES:
+                if result.blocked or result.parked:
+                    if current is not WorkflowState.BLOCKED:
+                        target = WorkflowState.BLOCKED
+                elif result.failed:
+                    target = WorkflowState.FAILED
+            if target is not None:
+                _ensure_legal(current, target)
+                if target is WorkflowState.BLOCKED and workflow.blocked_from_phase is None:
+                    workflow.blocked_from_phase = workflow.state
+                workflow.state = target.value
+                if target is WorkflowState.FAILED:
+                    workflow.finished_at = now
+                workflow.version += 1
+                await append_audit_event(
+                    session,
+                    workflow_id=result.workflow_id,
+                    event_type=(
+                        "WORKFLOW_FAILED" if target is WorkflowState.FAILED else "WORKFLOW_BLOCKED"
+                    ),
+                    payload={
+                        "reason": result.fail_reason or result.block_reason or result.park_reason,
+                        "from_state": current.value,
+                    },
+                )
             result.events = tuple(
                 item.event_type for item in self._events.history(result.workflow_id)
             )
