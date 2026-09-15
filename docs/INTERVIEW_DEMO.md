@@ -77,6 +77,9 @@ Export a matching DSN if your PostgreSQL role or password differs.
 
 Offline demo uses fake Snowflake and fake dbt. No vendor credentials are required.
 
+Compose packaging for a remote synthetic demo (one app container + PostgreSQL 16):
+[`docs/ops/SYNTHETIC_CLOUD_DEMO.md`](ops/SYNTHETIC_CLOUD_DEMO.md).
+
 ## Offline demo command
 
 ```bash

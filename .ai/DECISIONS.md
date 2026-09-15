@@ -217,3 +217,15 @@ emitter, retry summary).
 - **Deferred:** Unstarted DE009–DE019 scope, additional failures/vendors, GitHub delivery,
   monitor, UI, real LLM requirement, graph/workflow/agent frameworks, and production actions.
 - **Full record:** `docs/adr/DE-ADR-028-interview-mvp-boundary.md`.
+
+## DEPLOY001 — Synthetic Interview demo is Compose, not a new product architecture
+
+- **Date:** 2026-09-15
+- **Status:** Accepted (task-scoped; additive under DE-ADR-026)
+- **Decision:** The recruiter synthetic demo is one Data Pilot AI application
+  container plus PostgreSQL 16. Remote demonstration reuses the Interview CLI and,
+  when `AIDE_SYNTHETIC_DEMO_HTTP=1`, an env-gated `POST /v1/interview/demo` that
+  runs only the accepted scenario through `run_offline_benchmark`. No Kubernetes,
+  no new connectors, no UI, no production or staging.
+- **Consequences:** Docker image includes `synthetic/` and `dbt/vantara_project`.
+  Snowflake live smoke stays credential-gated and off the Compose environment map.

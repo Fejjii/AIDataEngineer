@@ -242,6 +242,27 @@ tasks do not run concurrently because their shared high-conflict contracts are s
 - Git authority: branch-only; one PR to `main`; do not merge; do not delete historical
   branches (recommend SAFE_TO_DELETE only).
 
+## DEPLOY001 — Synthetic Interview MVP cloud demo
+
+- Compact ID: `DEPLOY001_SYNTHETIC_CLOUD_DEMO`
+- Priority: P1
+- Status: IN_PROGRESS
+- Owner: Cursor Cloud agent (Grok 4.6)
+- Environment: CURSOR_CLOUD
+- Branch: `deploy/synthetic_cloud_demo`
+- Base commit: `e6e0162c1abd6a1d717212606bc12b174537bfec`
+- Dependencies: MVP001–MVP004, FINAL-QA-001, SHOWCASE-001, FINAL_POLISH_001 merged
+- Risk: Medium (deployment packaging; no production, no new architecture)
+- Goal: Make the accepted Interview MVP runnable as a safe synthetic cloud demo:
+  one app container, one PostgreSQL, existing fakes, existing migrations.
+- Explicit exclusions: Kubernetes, microservices, Redis, Kafka, Temporal, SPA,
+  new connectors, Terraform unless required, production/staging permissions,
+  Snowflake credentials, customer data.
+- Expected files: Docker/Compose, demo script, env template, optional env-gated
+  Interview demo HTTP, tests, `docs/ops/SYNTHETIC_CLOUD_DEMO.md`, run report.
+- Git authority: branch-only; commit/push; one PR to `main`; do not merge.
+- Deployment authority: synthetic demo only; no production credentials.
+
 ---
 
 # Historical DE implementation backlog
