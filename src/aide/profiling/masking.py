@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -31,6 +32,11 @@ def column_is_sensitive(name: str, *, pii_columns: frozenset[str] = frozenset())
 
 
 def jsonable(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        integral = value.to_integral_value()
+        if value == integral:
+            return int(integral)
+        return float(value)
     if isinstance(value, datetime):
         return value.isoformat()
     if isinstance(value, date):

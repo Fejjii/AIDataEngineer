@@ -409,6 +409,9 @@ async def run_governed_live_interview(
         result = await supervisor.run_customer_revenue(
             INTERVIEW_REQUEST,
             include_schema_drift=False,
+            # Credentialed RAW uses the v2 invoice column STATUS. v1 rewrites that
+            # source to INVOICE_STATUS, which this estate does not have.
+            fixture_version="v2",
         )
         passed, detail, meta = await _assess_governed_live(session_factory, result)
         return result, passed, detail, meta

@@ -1005,7 +1005,9 @@ class InterviewSupervisor:
         if capability_id == "generate_transformation":
             assert result.model_design is not None
             return GenerateTransformationInput(
-                workflow_id=result.workflow_id, model_design=result.model_design
+                workflow_id=result.workflow_id,
+                model_design=result.model_design,
+                fixture_version=result.fixture_version,
             ).model_dump(mode="json")
         if capability_id == "create_transformation":
             assert result.generated is not None
@@ -1036,7 +1038,7 @@ class InterviewSupervisor:
             ).model_dump(mode="json")
         if capability_id == "load_manifest_sources":
             return LoadManifestSourcesInput(
-                fixture_version="v1",
+                fixture_version=result.fixture_version,
                 manifest_sha256=tiny_manifest_digest(),
                 selected_addresses=vantara_selected_addresses(),
             ).model_dump(mode="json")

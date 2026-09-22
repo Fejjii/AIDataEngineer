@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from decimal import Decimal
 from typing import Any
 
 from cryptography.hazmat.primitives.serialization import (
@@ -127,6 +128,14 @@ class SnowflakeSession:
             raise  # pragma: no cover
         self._query_tag = query_tag
         self._timeout_seconds = timeout_seconds
+        self._applied_tag: str | None = None
+        self._applied_timeout: int | None = None
+        self._autocommit_set = False
+
+    def prepare(self, *, query_tag: str, timeout_seconds: int) -> None:
+        """Update the tag and statement timeout used by the next execute."""
+        self._query_tag = query_tag
+        self._timeout_seconds = timeout_seconds
 
     def close(self) -> None:
         try:
@@ -141,11 +150,18 @@ class SnowflakeSession:
     ) -> tuple[tuple[str, ...], list[dict[str, Any]], str | None]:
         try:
             cursor = self._connection.cursor(DictCursor)
-            cursor.execute("ALTER SESSION SET QUERY_TAG = %s", (self._query_tag,))
-            cursor.execute(
-                "ALTER SESSION SET STATEMENT_TIMEOUT_IN_SECONDS = %s", (self._timeout_seconds,)
-            )
-            cursor.execute("ALTER SESSION SET AUTOCOMMIT = TRUE")
+            if self._applied_tag != self._query_tag:
+                cursor.execute("ALTER SESSION SET QUERY_TAG = %s", (self._query_tag,))
+                self._applied_tag = self._query_tag
+            if self._applied_timeout != self._timeout_seconds:
+                cursor.execute(
+                    "ALTER SESSION SET STATEMENT_TIMEOUT_IN_SECONDS = %s",
+                    (self._timeout_seconds,),
+                )
+                self._applied_timeout = self._timeout_seconds
+            if not self._autocommit_set:
+                cursor.execute("ALTER SESSION SET AUTOCOMMIT = TRUE")
+                self._autocommit_set = True
             cursor.execute(sql, params)
             query_id = getattr(cursor, "sfqid", None)
             description = cursor.description or []
@@ -166,6 +182,11 @@ class SnowflakeSession:
 
 
 def _jsonable(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        integral = value.to_integral_value()
+        if value == integral:
+            return int(integral)
+        return float(value)
     if hasattr(value, "isoformat"):
         try:
             return value.isoformat()

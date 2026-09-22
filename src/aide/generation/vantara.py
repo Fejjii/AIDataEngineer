@@ -52,10 +52,11 @@ def generate_vantara_transformation(
     payload: GenerateTransformationInput,
 ) -> GenerateTransformationOutput:
     short = workflow_short_id(payload.workflow_id)
+    invoice_status_column = "INVOICE_STATUS" if payload.fixture_version == "v1" else "STATUS"
     files = (
         _sources_yml(short),
         _schema_yml(),
-        *_model_files(),
+        *_model_files(invoice_status_column=invoice_status_column),
     )
     validate_generated_files(files)
     names = tuple(
@@ -170,7 +171,9 @@ def _schema_yml() -> TransformationFile:
     return _file("models/schema.yml", "version: 2\n\nmodels:\n" + "\n".join(models), "SCHEMA_YML")
 
 
-def _model_files() -> tuple[TransformationFile, ...]:
+def _model_files(
+    *, invoice_status_column: str = "INVOICE_STATUS"
+) -> tuple[TransformationFile, ...]:
     return (
         _file(
             "models/staging/stg_crm__accounts.sql",
@@ -259,7 +262,7 @@ select
   {CURRENCY} as currency,
   ISSUE_DATE as issue_date,
   DUE_DATE as due_date,
-  INVOICE_STATUS as invoice_status,
+  {invoice_status_column} as invoice_status,
   TOTAL_AMOUNT as total_amount,
   _LOADED_AT as _loaded_at
 from {{{{ source('billing', 'invoices') }}}}
@@ -442,7 +445,7 @@ where is_current
 union all
 select
   md5('-1') as customer_sk,
-  -1 as billing_customer_id,
+  cast('-1' as varchar) as billing_customer_id,
   cast(null as varchar) as crm_account_id,
   'Unknown customer' as customer_name,
   cast(null as varchar) as billing_country,

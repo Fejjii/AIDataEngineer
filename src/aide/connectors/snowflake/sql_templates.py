@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from aide.connectors.snowflake.dialect import assert_safe_identifier, qualify_parts
 
 
@@ -32,6 +34,28 @@ def column_profile_sql(address: tuple[str, ...], column: str, *, numeric: bool) 
         f"{mean_expr} AS MEAN_VALUE "
         f"FROM {table}"
     )
+
+
+def column_profile_batch_sql(address: tuple[str, ...], columns: Sequence[tuple[str, bool]]) -> str:
+    """One scan with the same aggregates as per-column ``column_profile_sql``."""
+    if not columns:
+        raise ValueError("column_profile_batch_sql requires at least one column")
+    table = qualified_table(address)
+    selects = ["COUNT(*) AS ROW_COUNT"]
+    for index, (name, numeric) in enumerate(columns):
+        ident = quoted_column(name)
+        prefix = f"C{index}"
+        mean_expr = f"AVG({ident})" if numeric else "NULL"
+        selects.extend(
+            (
+                f"SUM(IFF({ident} IS NULL, 1, 0)) AS {prefix}_NULL_COUNT",
+                f"COUNT(DISTINCT {ident}) AS {prefix}_DISTINCT_COUNT",
+                f"MIN({ident}) AS {prefix}_MIN_VALUE",
+                f"MAX({ident}) AS {prefix}_MAX_VALUE",
+                f"{mean_expr} AS {prefix}_MEAN_VALUE",
+            )
+        )
+    return f"SELECT {', '.join(selects)} FROM {table}"
 
 
 def top_values_sql(address: tuple[str, ...], column: str, *, top_k: int) -> str:
