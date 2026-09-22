@@ -217,6 +217,27 @@ tasks do not run concurrently because their shared high-conflict contracts are s
   credentials already exist.
 - Git authority: branch-only; one PR to `main`; do not merge.
 
+## FINAL_ACCEPTANCE_AUDIT_001 — Independent final acceptance audit
+
+- Compact ID: `FINAL_ACCEPTANCE_AUDIT_001`
+- Priority: P0
+- Status: DONE (PR pending; do not merge from the agent)
+- Owner: local Cursor agent (Grok 4.6)
+- Environment: LOCAL
+- Branch: `audit/final_acceptance_001`
+- Base commit: `0425d3248ceb144043821941f2fef3d2dc370e58`
+- Dependencies: MVP001–MVP004, FINAL-QA-001, LIVE_ACCEPTANCE_001, PR 31 on `main`
+- Risk: Low (read/test/report only)
+- Goal: Final independent acceptance audit of Data Pilot AI. Read first, test
+  second, report last. Do not add product features, redesign architecture,
+  change grants, or expand repair scope.
+- Validation: full non-live suite, evaluation, Interview integration, tamper,
+  failure injection, persistence, CLI benchmark, Railway live demo, live
+  Snowflake/dbt/governed smoke.
+- Completion evidence: `docs/evaluation/FINAL_ACCEPTANCE_AUDIT_001.md`.
+  Verdict `ACCEPTED_WITH_LIMITATIONS`. Interview MVP freeze recommended.
+- Git authority: branch-only; one PR to `main`; do not merge.
+
 ## SHOWCASE-001 — Recruiter GitHub landing page
 - Priority: P1
 - Status: DONE (merged to `main`)
