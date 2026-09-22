@@ -10,6 +10,8 @@ customer-revenue schema-drift loop.
 - Scorecard contracts: `aide.domain.evaluation` and `aide.app.evaluation`
 - Adversarial scenarios: `tests/evaluation/`
 - Deterministic report: [`FINAL_QA_001.md`](FINAL_QA_001.md)
+- Deployed acceptance: [`LIVE_ACCEPTANCE_001.md`](LIVE_ACCEPTANCE_001.md)
+- Interview scenarios: [`DEMO_SCENARIOS_001.md`](DEMO_SCENARIOS_001.md)
 - Recruiter commands: `uv run aide interview demo` and `uv run aide interview benchmark`
 - Broader V1 design (not the Interview CLI): [`docs/EVALUATION_STRATEGY.md`](../EVALUATION_STRATEGY.md)
 
