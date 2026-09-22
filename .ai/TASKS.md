@@ -221,7 +221,7 @@ tasks do not run concurrently because their shared high-conflict contracts are s
 
 - Compact ID: `FINAL_ACCEPTANCE_AUDIT_001`
 - Priority: P0
-- Status: DONE (PR pending; do not merge from the agent)
+- Status: DONE (PR 32; do not merge from the agent)
 - Owner: local Cursor agent (Grok 4.6)
 - Environment: LOCAL
 - Branch: `audit/final_acceptance_001`

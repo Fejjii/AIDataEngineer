@@ -11,7 +11,7 @@
 | Base commit | 0425d3248ceb144043821941f2fef3d2dc370e58 |
 | Implementation commit | 0425d3248ceb144043821941f2fef3d2dc370e58 |
 | Report status | SUCCESS |
-| PR number | pending |
+| PR number | 32 |
 
 ## Goal
 
