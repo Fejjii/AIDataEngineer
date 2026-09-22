@@ -88,6 +88,23 @@ port:
 docker compose exec postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
 ```
 
+## PostgreSQL compatibility
+
+Offline Compose and GitHub Actions are validated on PostgreSQL 16 (`postgres:16`).
+The Railway Data Pilot AI Demo database is live-validated on PostgreSQL 18.6.
+The supported control-plane requirement is PostgreSQL 16 or newer.
+
+The application does not assert `server_version`. Persistence uses JSONB, UUID,
+transactional advisory locks, and `SKIP LOCKED`. Do not replace or downgrade a
+live database to force major version 16.
+
+## Railway application port
+
+The image listens on TCP 8000, and the public domain targets that port. Railway
+healthchecks the `PORT` variable. The Data Pilot AI Demo application service sets
+`PORT=8000`. Removing it makes a new deployment fail `/readyz` with
+`service unavailable` while an older deployment can keep serving.
+
 ## Deployment command
 
 ```bash

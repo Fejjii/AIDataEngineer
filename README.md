@@ -276,7 +276,8 @@ Wall-clock duration is measured per host and is not a product SLA.
 
 ## Demo
 
-PostgreSQL 16 must be reachable at `AIDE_DATABASE_URL` or `AIDE_TEST_DATABASE_URL`.
+PostgreSQL 16 or newer must be reachable at `AIDE_DATABASE_URL` or `AIDE_TEST_DATABASE_URL`.
+Offline validation uses PostgreSQL 16. The Railway demo is live-validated on PostgreSQL 18.6.
 The CLI fallback (Cursor Cloud / OPS003 local role) is
 `postgresql+psycopg://ubuntu@127.0.0.1:5432/aide_dev`. Export a matching DSN if your
 role or password differs. Docker Compose uses `POSTGRES_USER` / `POSTGRES_PASSWORD`
@@ -341,7 +342,7 @@ evidence. That limitation is intentional and documented.
 |---|---|
 | Language | Python 3.12 |
 | Packaging | uv, committed `uv.lock` |
-| Control-plane store | PostgreSQL 16, SQLAlchemy 2, Alembic |
+| Control-plane store | PostgreSQL 16 or newer, SQLAlchemy 2, Alembic |
 | API | FastAPI (thin health, session, and workflow submit; no product UI) |
 | CLI | Typer (`aide interview …`) |
 | Warehouse | Snowflake (real + deterministic fake) |

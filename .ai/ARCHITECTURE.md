@@ -40,7 +40,8 @@ Full architecture lives in tracked `docs/` (readable by Cloud agents):
 ## Compact implementation contract (for implementation models)
 
 **Shape.** Modular monolith, Python 3.12 package `aide`, FastAPI API, in-process asyncio
-worker (separable), PostgreSQL 16 for all state (SQLAlchemy 2 + Alembic), Vite/React/TS
+worker (separable), PostgreSQL 16 or newer for all state (offline validated on
+PostgreSQL 16; Railway live validated on PostgreSQL 18.6; SQLAlchemy 2 + Alembic), Vite/React/TS
 SPA built last, Typer CLI. No microservices, Kubernetes, Kafka, Redis, vector DB,
 LangGraph/LangChain, or multi-agent framework in V1.
 
