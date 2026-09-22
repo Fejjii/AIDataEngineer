@@ -30,7 +30,23 @@ def test_identical_inputs_produce_identical_artifacts() -> None:
     joined = "\n".join(item.content for item in first.files)
     assert "VANTARA_RAW" not in joined
     assert "'***'" in joined
-    assert "INVOICE_STATUS" in joined
+    assert "INVOICE_STATUS as invoice_status" in joined
+    assert "cast('-1' as varchar) as billing_customer_id" in joined
+
+
+def test_v2_invoice_staging_uses_status_column() -> None:
+    generated = generate_vantara_transformation(
+        GenerateTransformationInput(
+            workflow_id=WORKFLOW,
+            model_design=vantara_model_design(),
+            fixture_version="v2",
+        )
+    )
+    invoice = next(
+        item.content for item in generated.files if item.path.endswith("stg_billing__invoices.sql")
+    )
+    assert "STATUS as invoice_status" in invoice
+    assert "INVOICE_STATUS" not in invoice
 
 
 def test_validation_rejects_leftover_jinja() -> None:

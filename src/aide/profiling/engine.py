@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
+from time import perf_counter
 from typing import Any
 from uuid import UUID, uuid4, uuid5
 
@@ -12,7 +13,6 @@ from aide.capabilities.io import (
     CandidateKey,
     DescribeAssetInput,
     ExecuteQueryInput,
-    InferRelationshipsInput,
     ProfileColumn,
     ProfileDatasetInput,
     RelationshipCandidate,
@@ -61,6 +61,14 @@ from aide.profiling.warehouse import WarehouseReadPort, upper_row
 
 PROFILE_NAMESPACE = UUID("6ba7b810-9dad-11d1-80b4-00000000de06")
 CANDIDATE_UNIQUENESS = 0.99
+PROFILE_OPERATION_NAMES = (
+    "describe_asset",
+    "profile_dataset",
+    "key_evidence",
+    "relationship_inference",
+    "relationship_inclusion",
+    "sampling",
+)
 
 
 def _stable_uuid(*parts: str) -> UUID:
@@ -154,6 +162,7 @@ class ProfilingEngine:
         context: CallContext | None = None,
         excluded_addresses: tuple[tuple[str, ...], ...] = (),
         sample_priority: tuple[tuple[str, ...], ...] = (),
+        timings: dict[str, float] | None = None,
     ) -> None:
         self._warehouse = warehouse
         self._fixture_version = fixture_version
@@ -165,13 +174,19 @@ class ProfilingEngine:
         self._call_seq = 0
         self._excluded_addresses = excluded_addresses
         self._sample_priority = sample_priority
+        self.operation_timings = timings if timings is not None else {}
+
+    def _add_timing(self, operation: str, elapsed: float) -> None:
+        self.operation_timings[operation] = self.operation_timings.get(operation, 0.0) + elapsed
 
     async def run(self, selected: tuple[AssetRef, ...]) -> ProfilingRunResult:
+        for name in PROFILE_OPERATION_NAMES:
+            self.operation_timings.setdefault(name, 0.0)
         assets = tuple(sorted(selected, key=lambda item: item.address))
         profiles: list[DatasetProfileArtifact] = []
         for asset in assets:
             profiles.append(await self._profile_asset(asset))
-        relationships = await self._infer_relationships(assets, tuple(profiles))
+        relationships = await self._infer_relationships(tuple(profiles))
         sample_pool = sample_assets_for(
             assets, limit=self._budget.sample_asset_limit, priority=self._sample_priority
         )
@@ -263,11 +278,14 @@ class ProfilingEngine:
 
     async def _profile_asset(self, asset: AssetRef) -> DatasetProfileArtifact:
         self._tracker.charge_query()
+        started = perf_counter()
         described = await self._warehouse.describe_asset(
-            DescribeAssetInput(asset=asset, include_constraints=True, include_row_count=True),
+            DescribeAssetInput(asset=asset, include_constraints=False, include_row_count=False),
             self._call_context(),
         )
+        self._add_timing("describe_asset", perf_counter() - started)
         self._tracker.charge_query()
+        started = perf_counter()
         profiled = await self._warehouse.profile_dataset(
             ProfileDatasetInput(
                 asset=asset,
@@ -276,7 +294,9 @@ class ProfilingEngine:
             ),
             self._call_context(),
         )
+        self._add_timing("profile_dataset", perf_counter() - started)
         columns = mask_profile_columns(profiled.columns, pii_columns=self._pii_columns)
+        started = perf_counter()
         extras = await self._key_evidence(asset, columns)
         key_evidence, duplicate_evidence, extra_keys, extra_groups, ranges = extras
         candidate_keys = _advertised_candidate_keys(
@@ -305,6 +325,7 @@ class ProfilingEngine:
             numeric_ranges=ranges,
             column_types=tuple((spec.name, spec.data_type) for spec in described.columns),
         )
+        self._add_timing("key_evidence", perf_counter() - started)
         return artifact
 
     async def _key_evidence(
@@ -455,23 +476,16 @@ class ProfilingEngine:
 
     async def _infer_relationships(
         self,
-        assets: tuple[AssetRef, ...],
         profiles: tuple[DatasetProfileArtifact, ...],
     ) -> tuple[RelationshipEvidence, ...]:
-        self._tracker.charge_query()
-        await self._warehouse.infer_relationships(
-            InferRelationshipsInput(
-                assets=assets,
-                profiles=tuple(item.profile_id for item in profiles),
-                max_pairs=self._budget.max_pairs,
-                budget=self._budget.capability_budget(),
-            ),
-            self._call_context(),
-        )
+        started = perf_counter()
+        specs = select_join_candidates_for_measurement(profiles, max_pairs=self._budget.max_pairs)
+        self._add_timing("relationship_inference", perf_counter() - started)
+        # The connector infer_relationships handler repeats describe and inclusion
+        # queries and its candidates are not the profiling evidence contract.
         evidence: list[RelationshipEvidence] = []
-        for spec in select_join_candidates_for_measurement(
-            profiles, max_pairs=self._budget.max_pairs
-        ):
+        started = perf_counter()
+        for spec in specs:
             self._tracker.charge_pair()
             stats = await self._scalar(
                 inclusion_sql(
@@ -523,6 +537,7 @@ class ProfilingEngine:
                     measured=True,
                 )
             )
+        self._add_timing("relationship_inclusion", perf_counter() - started)
         return tuple(
             sorted(
                 evidence,
@@ -537,6 +552,7 @@ class ProfilingEngine:
 
     async def _sample_assets(self, assets: tuple[AssetRef, ...]) -> tuple[SampleArtifact, ...]:
         samples: list[SampleArtifact] = []
+        started = perf_counter()
         for asset in assets:
             self._tracker.charge_query()
             sampled = await self._warehouse.sample_dataset(
@@ -573,6 +589,7 @@ class ProfilingEngine:
                     bytes_used=len(encoded),
                 )
             )
+        self._add_timing("sampling", perf_counter() - started)
         return tuple(samples)
 
 
@@ -760,6 +777,8 @@ async def profile_selected_assets(
     *,
     fixture_version: str,
     budget: ProfilingBudget | None = None,
+    context: CallContext | None = None,
+    timings: dict[str, float] | None = None,
     excluded_addresses: tuple[tuple[str, ...], ...] = (),
     sample_priority: tuple[tuple[str, ...], ...] = (),
 ) -> ProfilingRunResult:
@@ -767,6 +786,8 @@ async def profile_selected_assets(
         warehouse,
         fixture_version=fixture_version,
         budget=budget,
+        context=context,
+        timings=timings,
         excluded_addresses=excluded_addresses,
         sample_priority=sample_priority,
     )

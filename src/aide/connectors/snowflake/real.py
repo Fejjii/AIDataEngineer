@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, TypeVar, cast
@@ -97,9 +99,10 @@ from aide.connectors.snowflake.namespace import (
     require_dev_namespace,
 )
 from aide.connectors.snowflake.query_tags import parse_query_tag
+from aide.connectors.snowflake.read_session import PinnedReadSession
 from aide.connectors.snowflake.session import SnowflakeSession
 from aide.connectors.snowflake.sql_templates import (
-    column_profile_sql,
+    column_profile_batch_sql,
     explain_sql,
     inclusion_sql,
     qualified_table,
@@ -109,9 +112,12 @@ from aide.connectors.snowflake.sql_templates import (
 )
 from aide.domain.failures import FailureClass
 from aide.domain.sql import AssetKind, AssetRef
+from aide.profiling.budgets import ProfilingBudget, resolve_live_profiling_budget
 from aide.secrets.resolvers import UnresolvedSecretError
 
 T = TypeVar("T")
+logger = logging.getLogger(__name__)
+_DescribeCache = dict[tuple[str, ...], tuple[DescribeAssetOutput, bool, bool]]
 
 _SUCCESS_STATUSES = frozenset({"SUCCESS", "SUCCEEDED"})
 _RUNNING_STATUSES = frozenset({"RUNNING", "QUEUED", "QUEUEING", "RESUMING", "BLOCKED"})
@@ -131,12 +137,16 @@ class RealSnowflakeConnector:
         settings: SnowflakeSettings | None = None,
         resolver: EnvConnectorSecretResolver | None = None,
         run_session: Callable[..., Awaitable[Any]] | None = None,
+        profiling_budget: ProfilingBudget | None = None,
     ) -> None:
         self.spec = spec
         self._settings = settings or settings_for_identity(spec.identity_class)
         self._resolver = resolver or EnvConnectorSecretResolver()
         self._run_session = run_session
         self._closed = False
+        self._profiling_budget = profiling_budget
+        self._read_lease: PinnedReadSession | None = None
+        self._describe_cache: _DescribeCache | None = None
 
     async def health(self) -> ConnectorHealthSnapshot:
         missing = missing_credential_health(self.spec, self._settings)
@@ -237,6 +247,13 @@ class RealSnowflakeConnector:
         asset = require_asset_allowed(self.spec, payload.asset)
         if len(asset.address) != 3:
             raise SnowflakeMappedError(FailureClass.MISSING_OBJECT, "asset address incomplete")
+        cached = self._cached_describe(
+            asset.address,
+            include_constraints=payload.include_constraints,
+            include_row_count=payload.include_row_count,
+        )
+        if cached is not None:
+            return cached
 
         def run(session: SnowflakeSession) -> DescribeAssetOutput:
             db, schema, table = asset.address
@@ -275,7 +292,13 @@ class RealSnowflakeConnector:
                 snapshot_id=uuid4(),
             )
 
-        return await self._session_call(context, run)
+        described = await self._session_call(context, run)
+        self._store_describe(
+            described,
+            include_constraints=payload.include_constraints,
+            include_row_count=payload.include_row_count,
+        )
+        return described
 
     async def detect_schema_drift(
         self, payload: DetectSchemaDriftInput, context: CallContext
@@ -299,35 +322,48 @@ class RealSnowflakeConnector:
         self._prepare_read(context)
         asset = require_asset_allowed(self.spec, payload.asset)
         described = await self.describe_asset(
-            DescribeAssetInput(asset=asset, include_constraints=False, include_row_count=True),
+            DescribeAssetInput(asset=asset, include_constraints=False, include_row_count=False),
             context,
         )
         selected = payload.columns or tuple(col.name for col in described.columns)
         type_by_name = {col.name: col.data_type for col in described.columns}
+        specs = tuple(
+            (
+                name,
+                type_by_name.get(name, "VARCHAR"),
+                _is_numeric_type(type_by_name.get(name, "VARCHAR")),
+            )
+            for name in selected
+        )
 
         def run(session: SnowflakeSession) -> ProfileDatasetOutput:
-            _c, count_rows, _ = session.execute(row_count_sql(asset.address))
-            row_count = _as_int(count_rows[0].get("ROW_COUNT")) if count_rows else 0
-            row_count = row_count or 0
+            stats: dict[str, Any] = {}
+            top_by_key: dict[str, list[dict[str, Any]]] = defaultdict(list)
+            row_count = 0
+            if specs:
+                _columns, stats_rows, _query_id = session.execute(
+                    column_profile_batch_sql(
+                        asset.address, tuple((name, numeric) for name, _dtype, numeric in specs)
+                    )
+                )
+                stats = _upper_row(stats_rows[0]) if stats_rows else {}
+                row_count = _as_int(stats.get("ROW_COUNT")) or 0
+                for index, (name, _data_type, _numeric) in enumerate(specs):
+                    _top_columns, top_rows, _top_query = session.execute(
+                        top_values_sql(asset.address, name, top_k=payload.top_k)
+                    )
+                    top_by_key[f"C{index}"] = [_upper_row(item) for item in top_rows]
+            else:
+                _columns, count_rows, _query_id = session.execute(row_count_sql(asset.address))
+                counted = _as_int(count_rows[0].get("ROW_COUNT")) if count_rows else 0
+                row_count = counted or 0
+            den = max(row_count, 1)
             profile_columns: list[ProfileColumn] = []
             candidate_keys: list[CandidateKey] = []
-            for name in selected:
-                data_type = type_by_name.get(name, "VARCHAR")
-                numeric = (
-                    "NUMBER" in data_type.upper()
-                    or "FLOAT" in data_type.upper()
-                    or "INT" in data_type.upper()
-                )
-                _c2, stats_rows, _ = session.execute(
-                    column_profile_sql(asset.address, name, numeric=numeric)
-                )
-                stats = stats_rows[0] if stats_rows else {}
-                null_count = _as_int(stats.get("NULL_COUNT")) or 0
-                distinct_count = _as_int(stats.get("DISTINCT_COUNT")) or 0
-                den = max(row_count, 1)
-                _c3, top_rows, _ = session.execute(
-                    top_values_sql(asset.address, name, top_k=payload.top_k)
-                )
+            for index, (name, data_type, _numeric) in enumerate(specs):
+                prefix = f"C{index}"
+                null_count = _as_int(stats.get(f"{prefix}_NULL_COUNT")) or 0
+                distinct_count = _as_int(stats.get(f"{prefix}_DISTINCT_COUNT")) or 0
                 sensitive = column_is_sensitive(name)
                 top_values = tuple(
                     TopValue(
@@ -336,7 +372,7 @@ class RealSnowflakeConnector:
                         else _as_str(item.get("VALUE")),
                         count=int(item.get("VALUE_COUNT") or 0),
                     )
-                    for item in top_rows
+                    for item in top_by_key.get(prefix, ())
                 )
                 uniqueness = distinct_count / den
                 profile_columns.append(
@@ -344,9 +380,9 @@ class RealSnowflakeConnector:
                         name=name,
                         null_ratio=null_count / den,
                         distinct_ratio=uniqueness,
-                        min=stats.get("MIN_VALUE"),
-                        max=stats.get("MAX_VALUE"),
-                        mean=_as_float(stats.get("MEAN_VALUE")),
+                        min=stats.get(f"{prefix}_MIN_VALUE"),
+                        max=stats.get(f"{prefix}_MAX_VALUE"),
+                        mean=_as_float(stats.get(f"{prefix}_MEAN_VALUE")),
                         top_values=top_values,
                         inferred_semantic=infer_semantic(name, data_type),  # type: ignore[arg-type]
                     )
@@ -618,11 +654,36 @@ class RealSnowflakeConnector:
         self, payload: ProfileEstateInput, context: CallContext
     ) -> ProfileEstateOutput:
         self._prepare_read(context)
+        from aide.capabilities.v1_kernel import kernel_registry
         from aide.profiling.engine import profile_selected_assets
 
-        run = await profile_selected_assets(
-            self, payload.assets, fixture_version=payload.fixture_version
+        gateway_timeout = kernel_registry().get("profile_estate", 1).timeout_seconds
+        budget = resolve_live_profiling_budget(
+            self._profiling_budget,
+            gateway_timeout_seconds=gateway_timeout,
         )
+        timings: dict[str, float] = {}
+        lease = PinnedReadSession(self._open_read_session)
+        self._read_lease = lease
+        self._describe_cache = {}
+        try:
+            run = await profile_selected_assets(
+                self,
+                payload.assets,
+                fixture_version=payload.fixture_version,
+                budget=budget,
+                context=context,
+                timings=timings,
+            )
+        finally:
+            self._read_lease = None
+            self._describe_cache = None
+            await lease.close()
+            if timings:
+                rendered = " ".join(
+                    f"{name}={seconds:.3f}" for name, seconds in sorted(timings.items())
+                )
+                logger.info("profile_estate timings %s", rendered)
         return ProfileEstateOutput(
             fixture_version=run.fixture_version,
             duration_seconds=run.duration_seconds,
@@ -806,6 +867,65 @@ class RealSnowflakeConnector:
         tag = canonical_query_tag(context)
         return await self._with_session(query_tag=tag, timeout_seconds=timeout, fn=fn)
 
+    def _cached_describe(
+        self,
+        address: tuple[str, ...],
+        *,
+        include_constraints: bool,
+        include_row_count: bool,
+    ) -> DescribeAssetOutput | None:
+        cache = self._describe_cache
+        if cache is None:
+            return None
+        found = cache.get(address)
+        if found is None:
+            return None
+        output, has_constraints, has_row_count = found
+        if include_constraints and not has_constraints:
+            return None
+        if include_row_count and not has_row_count:
+            return None
+        return output
+
+    def _store_describe(
+        self,
+        output: DescribeAssetOutput,
+        *,
+        include_constraints: bool,
+        include_row_count: bool,
+    ) -> None:
+        cache = self._describe_cache
+        if cache is None:
+            return
+        cache[output.asset.address] = (output, include_constraints, include_row_count)
+
+    def _open_read_session(self, query_tag: str, timeout_seconds: int) -> SnowflakeSession:
+        settings = self._settings
+        resolver = self._resolver
+        try:
+            account = resolver.resolve(settings.account)
+            user = resolver.resolve(settings.user)
+            private_key = resolver.resolve(settings.private_key)
+            warehouse = resolver.resolve(settings.warehouse)
+            passphrase: SecretStr | None = None
+            if settings.passphrase is not None:
+                passphrase = resolver.resolve(settings.passphrase)
+        except UnresolvedSecretError as exc:
+            raise SnowflakeMappedError(
+                FailureClass.CONNECTOR_FAILURE,
+                f"SECRET_UNRESOLVED:{exc.args[0] if exc.args else 'UNKNOWN'}",
+            ) from exc
+        return SnowflakeSession(
+            settings,
+            account=account,
+            user=user,
+            private_key=private_key,
+            warehouse=warehouse,
+            passphrase=passphrase,
+            query_tag=query_tag,
+            timeout_seconds=timeout_seconds,
+        )
+
     async def _with_session(
         self,
         *,
@@ -820,33 +940,12 @@ class RealSnowflakeConnector:
                     query_tag=query_tag, timeout_seconds=timeout_seconds, fn=fn
                 ),
             )
-        settings = self._settings
-        resolver = self._resolver
+        lease = self._read_lease
+        if lease is not None:
+            return await lease.call(fn, query_tag=query_tag, timeout_seconds=timeout_seconds)
 
         def run() -> T:
-            try:
-                account = resolver.resolve(settings.account)
-                user = resolver.resolve(settings.user)
-                private_key = resolver.resolve(settings.private_key)
-                warehouse = resolver.resolve(settings.warehouse)
-                passphrase: SecretStr | None = None
-                if settings.passphrase is not None:
-                    passphrase = resolver.resolve(settings.passphrase)
-            except UnresolvedSecretError as exc:
-                raise SnowflakeMappedError(
-                    FailureClass.CONNECTOR_FAILURE,
-                    f"SECRET_UNRESOLVED:{exc.args[0] if exc.args else 'UNKNOWN'}",
-                ) from exc
-            session = SnowflakeSession(
-                settings,
-                account=account,
-                user=user,
-                private_key=private_key,
-                warehouse=warehouse,
-                passphrase=passphrase,
-                query_tag=query_tag,
-                timeout_seconds=timeout_seconds,
-            )
+            session = self._open_read_session(query_tag, timeout_seconds)
             try:
                 return fn(session)
             finally:
@@ -1034,6 +1133,15 @@ def _reconcile_object_state(
         created=target, replaced_existing=False, row_count=None
     ).model_dump(mode="json")
     return EffectFound(output=dumped, external_ref=None)
+
+
+def _is_numeric_type(data_type: str) -> bool:
+    upper = data_type.upper()
+    return "NUMBER" in upper or "FLOAT" in upper or "INT" in upper
+
+
+def _upper_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {str(key).upper(): value for key, value in row.items()}
 
 
 def _as_int(value: Any) -> int | None:

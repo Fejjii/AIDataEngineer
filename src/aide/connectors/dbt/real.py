@@ -73,7 +73,11 @@ from aide.connectors.dbt.journal import (
     find_latest_journal_for_operation,
     utc_now_iso,
 )
-from aide.connectors.dbt.namespace import snowflake_dbt_query_tag, snowflake_workflow_schema
+from aide.connectors.dbt.namespace import (
+    DEV_DATABASE,
+    snowflake_dbt_query_tag,
+    snowflake_workflow_schema,
+)
 from aide.connectors.dbt.reconcile import reconcile_create_transformation, reconcile_invocation
 from aide.connectors.dbt.runner import (
     IsolatedResult,
@@ -358,6 +362,9 @@ class RealDbtConnector:
         connector = RealSnowflakeConnector(SNOWFLAKE_DEV)
 
         def run(session: SnowflakeSession) -> ValidationReport:
+            # dbt materializes into AIDE_DEV.<workflow>_DBT. The quality session
+            # has no default database, so unqualified schema.model names fail.
+            session.execute(f"USE DATABASE {DEV_DATABASE}")
             adapter = _SnowflakeQualityExecute(session)
             return evaluate_interview_quality(
                 adapter,
