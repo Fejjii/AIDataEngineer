@@ -1,6 +1,7 @@
 # Snowflake live validation — SNOWFLAKE_LIVE_001
 
-**Verdict:** `REMEDIATION_REQUIRED`
+**Initial verdict:** `REMEDIATION_REQUIRED`
+**Current status:** `REMEDIATED`
 
 **Date:** 2026-09-22  
 **Repository:** Fejjii/AIDataEngineer  
@@ -16,7 +17,7 @@ The six required environment variable names were present in the local gitignored
 
 Control-plane PostgreSQL for the governed path was an ephemeral PostgreSQL 16.14 container on `127.0.0.1:5433`, database `aide_dev`. Port 5432 was already in use by another local project and was not used.
 
-## Overall verdict
+## Initial verdict
 
 `REMEDIATION_REQUIRED`
 
@@ -139,3 +140,22 @@ One product defect. No product code was changed.
 Human review of this evaluation PR. Do not merge it as a product fix.
 
 A follow-up remediation task should make live `profile_estate` finish inside the gateway timeout (the template already allows 180 seconds) and should report `RESOURCE_LIMIT` as the smoke failure instead of only the connectors that never ran. Do not add `VANTARA_RAW` privileges. Do not change repair scope. Do not enable production or staging.
+
+
+## Remediation outcome
+
+The profiling defect documented above was remediated in PR 31 and merged to main as `0425d3248ceb144043821941f2fef3d2dc370e58`.
+
+Final remediation evidence:
+
+1. Real `profile_estate` completed in 61.65 seconds, below the 150 second live profiling budget and the unchanged 180 second Governed Tool Gateway timeout.
+2. Live Snowflake connector validation passed: 5 tests.
+3. Live dbt validation passed: 1 test.
+4. Governed live Interview pytest passed.
+5. `uv run aide interview live-smoke --json` returned PASSED.
+6. `snowflake_ro`, `snowflake_dev`, and `dbt_dev` were all dispatched through the governed path.
+7. dbt tests, quality checks, reconciliation, cleanup, and least privilege checks passed.
+8. No RAW write privilege, production access, staging access, or repair-scope expansion was introduced.
+9. Offline profiling remains on the 60 second budget.
+
+The historical failure evidence above is intentionally retained because it records the defect that triggered the remediation. The current governed Snowflake and dbt live path is accepted based on PR 31 evidence.
