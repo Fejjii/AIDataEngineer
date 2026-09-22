@@ -70,8 +70,9 @@ uv sync --frozen --all-groups
 uv run alembic upgrade head
 ```
 
-PostgreSQL 16 must be reachable at `AIDE_DATABASE_URL` or
-`AIDE_TEST_DATABASE_URL`. The CLI fallback is
+PostgreSQL 16 or newer must be reachable at `AIDE_DATABASE_URL` or
+`AIDE_TEST_DATABASE_URL`. Offline validation uses PostgreSQL 16. Railway live
+validation uses PostgreSQL 18.6. The CLI fallback is
 `postgresql+psycopg://ubuntu@127.0.0.1:5432/aide_dev` (Cloud / OPS003 local role).
 Export a matching DSN if your PostgreSQL role or password differs.
 
