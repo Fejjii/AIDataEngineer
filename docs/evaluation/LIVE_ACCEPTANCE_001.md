@@ -190,6 +190,22 @@ The full-suite leakage failure is recorded under offline results. It is not a pr
 - Uvicorn `INFO` lines are stored with Railway level `error`. No secret was in those lines. This does not change the verdict.
 - A failed deployment remains the latest deployment record.
 
+## Revalidation
+
+Rechecked 2026-09-22 after the acceptance report, without rerunning the full campaign. The operational limitation remains.
+
+| Item | Current state |
+|---|---|
+| Latest deployment | `63ca238c-996f-4702-9f4e-fed91f64325c` `FAILED`, created 2026-09-22T07:20:53Z, commit `b3a4291` |
+| Serving deployment | `a2a4d72e-62d3-420f-bb71-850d1ef8007d` `SUCCESS`, instance `83f15e92-b5d7-48a3-8445-35a9436d3376` `RUNNING` |
+| Older deployments | `e7c5ffec-a2d3-4e34-add5-dc1994571cfd` `REMOVED`; `90431d7a-d174-40ba-935f-a29f4cf674e4` `REMOVED` |
+| `railway restart --service "data pilot ai" --environment production --yes` | exit 1, exact error `Deployment is not restartable` |
+| `GET /healthz` | 200 `{"status":"ok"}` |
+| `GET /readyz` | 200 `{"status":"ok"}` |
+| Authenticated demo | HTTP 200, `PASS`, verifier `PASS`, determinism true, evidence 100, repair count 1, human interventions 0. Workflow ids `084c0aa6-96ae-4d3b-8b7a-06c399b7c7c7` and `b8832548-3dcb-427a-b616-4a8dc7e3d641` |
+
+GitHub CI for PR 27, run [35703936591](https://github.com/Fejjii/AIDataEngineer/actions/runs/35703936591), finished green on head `2b125cd` before this revalidation commit: Lint and types pass (39s), Secret scan pass (7s), Tests and migrations pass (16m46s), Docker build pass (1m20s).
+
 ## Recommended next step
 
 Human review of the evaluation PR. Do not merge from the agent. Do not treat this host as production-ready. After review, an operator can clear the failed Railway deployment so a plain `railway restart` targets the serving revision. The next product proof, if wanted, is a credential-gated Snowflake live smoke on a host that already has the named secrets. That work is outside this acceptance task.

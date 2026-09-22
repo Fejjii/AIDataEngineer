@@ -67,9 +67,13 @@ Eight skipped tests are live Snowflake or live dbt checks. Details are in `docs/
 
 Railway serving deployment `a2a4d72e-62d3-420f-bb71-850d1ef8007d` on commit `b3a4291`. Postgres remained deployment `a249a7c3-b47e-41fc-b8d1-496de373335f`, PostgreSQL 18.6. No secrets were printed. Product source was not modified. Synthetic expected-fixture timing drift from the generator tests was reverted and not committed.
 
+GitHub CI run `35703936591` on PR 27 at head `2b125cd` passed: Lint and types, Secret scan, Tests and migrations (16m46s), Docker build.
+
 ## Errors
 
 Full pytest exit 1 because `tests/security/test_leakage.py` scanned a gitignored helper. That file was corrected locally and is not in the commit. `railway restart` without a deployment id returned `Deployment is not restartable` because the latest deployment is `FAILED`. The serving deployment was restarted by id.
+
+Revalidation on 2026-09-22: latest deployment is still `63ca238c-996f-4702-9f4e-fed91f64325c` (`FAILED`). Serving deployment is still `a2a4d72e-62d3-420f-bb71-850d1ef8007d` (`SUCCESS`, instance `83f15e92-b5d7-48a3-8445-35a9436d3376` `RUNNING`). `railway restart --service "data pilot ai" --environment production --yes` exited 1 with `Deployment is not restartable`. The limitation remains. `GET /healthz` and `GET /readyz` returned 200. One authenticated demo returned PASS (workflow ids `084c0aa6-96ae-4d3b-8b7a-06c399b7c7c7` and `b8832548-3dcb-427a-b616-4a8dc7e3d641`).
 
 ## Blockers
 
