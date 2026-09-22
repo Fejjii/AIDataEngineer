@@ -10,7 +10,7 @@
 | Branch | `eval/snowflake_live_001` |
 | Base commit | `72cf37c103cc70bad9061048bcc678eaca34cf04` |
 | Implementation commit | `ef0c406d2d51af0c9f6e0ffc81db92b67069c37f` |
-| Report status | REVIEW_REQUIRED |
+| Report status | REMEDIATED |
 | PR number | 29 |
 
 ## Goal
@@ -102,3 +102,10 @@ Remediate live `profile_estate` budget handling for the governed Interview smoke
 - **Forbidden files:** `src/**`, product tests, grant SQL, repair scope
 - **Dependencies:** accepted Interview MVP on `main` `72cf37c`
 - **Integration order:** None
+
+
+## Remediation closure
+
+The defect identified by this run was fixed by PR 31 and merged to main as `0425d3248ceb144043821941f2fef3d2dc370e58`.
+
+Post-remediation evidence: real profiling 61.65 seconds, live Snowflake 5 passed, live dbt 1 passed, governed live Interview pytest passed, and `aide interview live-smoke` PASSED. Least privilege, cleanup, quality, and reconciliation remained green. No new grants or product staging or production permissions were introduced.
