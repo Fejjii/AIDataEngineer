@@ -73,7 +73,9 @@ No secrets were printed. Product source, migrations, and database contents were 
 
 ## Errors
 
-None in the completed validation. The two earlier deployments remain `FAILED` in history and are older than the current `SUCCESS`, so they no longer make a plain restart fail.
+None in the Railway validation. The two earlier deployments remain `FAILED` in history and are older than the current `SUCCESS`, so they no longer make a plain restart fail.
+
+PR 28 run `35716438823` failed before jobs started. GitHub reported: recent account payments have failed or the spending limit needs to be increased. That is not a documentation or test failure. Focused local packaging tests passed.
 
 ## Blockers
 
