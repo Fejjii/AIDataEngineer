@@ -68,6 +68,7 @@ def _stable_uuid(*parts: str) -> UUID:
 
 
 def _make_context() -> CallContext:
+    """Offline fallback deadline. Live profile_estate passes the gateway context."""
     now = datetime.now(UTC)
     return CallContext(
         workflow_id=uuid4(),
@@ -760,6 +761,7 @@ async def profile_selected_assets(
     *,
     fixture_version: str,
     budget: ProfilingBudget | None = None,
+    context: CallContext | None = None,
     excluded_addresses: tuple[tuple[str, ...], ...] = (),
     sample_priority: tuple[tuple[str, ...], ...] = (),
 ) -> ProfilingRunResult:
@@ -767,6 +769,7 @@ async def profile_selected_assets(
         warehouse,
         fixture_version=fixture_version,
         budget=budget,
+        context=context,
         excluded_addresses=excluded_addresses,
         sample_priority=sample_priority,
     )

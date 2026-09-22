@@ -50,6 +50,7 @@ from aide.domain.enums import TargetEnv
 from aide.persistence.gateway import GatewayDispatchRepository
 from aide.persistence.repositories import ArtifactRepository
 from aide.policy.engine import PolicyEngine
+from aide.profiling.budgets import LIVE_SNOWFLAKE_PROFILING_BUDGET
 from aide.profiling.offline import bind_vantara_fixtures
 from aide.tools.binding import AttributeConnectorBinding, LocalHandlerBinding
 
@@ -247,6 +248,22 @@ def build_interview_stack(
     )
 
 
+def live_snowflake_read_connector(
+    connector: RealSnowflakeConnector | None = None,
+) -> RealSnowflakeConnector:
+    """Real RO connector for governed live execution.
+
+    The live profiling budget is an explicit constructor argument. A connector
+    supplied by the caller is kept as configured.
+    """
+    if connector is not None:
+        return connector
+    return RealSnowflakeConnector(
+        SNOWFLAKE_RO,
+        profiling_budget=LIVE_SNOWFLAKE_PROFILING_BUDGET,
+    )
+
+
 def build_live_interview_stack(
     session_factory: async_sessionmaker[AsyncSession],
     *,
@@ -263,7 +280,7 @@ def build_live_interview_stack(
     connectors.register(SNOWFLAKE_DEV, required)
     connectors.register(DBT_DEV, required)
     work_root.mkdir(parents=True, exist_ok=True)
-    ro = snowflake_ro or RealSnowflakeConnector(SNOWFLAKE_RO)
+    ro = live_snowflake_read_connector(snowflake_ro)
     dev = snowflake_dev or RealSnowflakeConnector(SNOWFLAKE_DEV)
     dbt_connector = dbt or build_real_snowflake(work_root, timeout_seconds=300)
     gateway = GovernedToolGateway(
@@ -309,6 +326,51 @@ def _live_connectors_are_dev_only() -> bool:
     return not any(name.upper() in _PROD_TOKENS for name in names)
 
 
+def governed_live_detail(
+    *,
+    missing_connectors: set[str],
+    policy_ok: bool,
+    production_or_staging: bool,
+    evidence_ok: bool,
+    workflow_failed: bool,
+    fail_reason: str | None,
+    block_reason: str | None,
+    park_reason: str | None,
+    execute_ok: bool,
+    tests_ok: bool,
+    quality_ok: bool,
+) -> str:
+    """Explain a governed live smoke result.
+
+    A workflow failure such as ``RESOURCE_LIMIT`` is reported before the
+    secondary list of connectors that never ran.
+    """
+    if workflow_failed:
+        reason = fail_reason or block_reason or park_reason or "live run failed"
+        if missing_connectors:
+            missing = f"gateway did not dispatch required connectors: {sorted(missing_connectors)}"
+            return f"{reason}; {missing}"
+        return reason
+    if missing_connectors:
+        return f"gateway did not dispatch required connectors: {sorted(missing_connectors)}"
+    if not policy_ok:
+        return "gateway dispatch is missing ALLOW policy decisions"
+    if production_or_staging:
+        return "policy decision referenced production or staging"
+    if not evidence_ok:
+        return "governed live path did not persist evidence artifacts"
+    if not execute_ok:
+        return "live governed execute_transformation did not succeed"
+    if not tests_ok:
+        return "live governed dbt tests did not succeed"
+    if not quality_ok:
+        return "live governed quality assertions did not succeed"
+    return (
+        "governed Supervisor/Tool Gateway path exercised real Snowflake RO/DEV "
+        "and real dbt without mutating VANTARA_RAW"
+    )
+
+
 def _policy_allows(intent: object) -> bool:
     decision = getattr(intent, "policy_decision", None)
     if not isinstance(decision, dict):
@@ -350,29 +412,19 @@ async def _assess_governed_live(
         and execute_ok
         and _live_connectors_are_dev_only()
     )
-    if missing:
-        detail = f"gateway did not dispatch required connectors: {sorted(missing)}"
-    elif not policy_ok:
-        detail = "gateway dispatch is missing ALLOW policy decisions"
-    elif prod:
-        detail = "policy decision referenced production or staging"
-    elif not evidence_ok:
-        detail = "governed live path did not persist evidence artifacts"
-    elif failed:
-        detail = (
-            result.fail_reason or result.block_reason or result.park_reason or "live run failed"
-        )
-    elif not execute_ok:
-        detail = "live governed execute_transformation did not succeed"
-    elif not tests_ok:
-        detail = "live governed dbt tests did not succeed"
-    elif not quality_ok:
-        detail = "live governed quality assertions did not succeed"
-    else:
-        detail = (
-            "governed Supervisor/Tool Gateway path exercised real Snowflake RO/DEV "
-            "and real dbt without mutating VANTARA_RAW"
-        )
+    detail = governed_live_detail(
+        missing_connectors=set(missing),
+        policy_ok=policy_ok,
+        production_or_staging=prod,
+        evidence_ok=evidence_ok,
+        workflow_failed=failed,
+        fail_reason=result.fail_reason,
+        block_reason=result.block_reason,
+        park_reason=result.park_reason,
+        execute_ok=execute_ok,
+        tests_ok=tests_ok,
+        quality_ok=quality_ok,
+    )
     return (
         passed,
         detail,
@@ -394,7 +446,7 @@ async def run_governed_live_interview(
 ) -> tuple[InterviewResult | None, bool, str, dict[str, Any]]:
     """Run the strongest RAW-safe live Interview path through the gateway."""
     work_root.mkdir(parents=True, exist_ok=True)
-    snowflake_ro = RealSnowflakeConnector(SNOWFLAKE_RO)
+    snowflake_ro = live_snowflake_read_connector()
     snowflake_dev = RealSnowflakeConnector(SNOWFLAKE_DEV)
     dbt = build_real_snowflake(work_root, timeout_seconds=300)
     supervisor = build_live_interview_stack(

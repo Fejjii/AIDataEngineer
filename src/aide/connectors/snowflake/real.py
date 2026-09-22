@@ -109,6 +109,7 @@ from aide.connectors.snowflake.sql_templates import (
 )
 from aide.domain.failures import FailureClass
 from aide.domain.sql import AssetKind, AssetRef
+from aide.profiling.budgets import ProfilingBudget, resolve_live_profiling_budget
 from aide.secrets.resolvers import UnresolvedSecretError
 
 T = TypeVar("T")
@@ -131,12 +132,22 @@ class RealSnowflakeConnector:
         settings: SnowflakeSettings | None = None,
         resolver: EnvConnectorSecretResolver | None = None,
         run_session: Callable[..., Awaitable[Any]] | None = None,
+        profiling_budget: ProfilingBudget | None = None,
     ) -> None:
         self.spec = spec
         self._settings = settings or settings_for_identity(spec.identity_class)
         self._resolver = resolver or EnvConnectorSecretResolver()
         self._run_session = run_session
         self._closed = False
+        # Real profile_estate uses the live budget unless the caller configures
+        # another budget. Offline profiling does not construct this connector.
+        from aide.capabilities.v1_kernel import kernel_registry
+
+        gateway_timeout = kernel_registry().get("profile_estate", 1).timeout_seconds
+        self.profiling_budget = resolve_live_profiling_budget(
+            profiling_budget,
+            gateway_timeout_seconds=gateway_timeout,
+        )
 
     async def health(self) -> ConnectorHealthSnapshot:
         missing = missing_credential_health(self.spec, self._settings)
@@ -621,7 +632,11 @@ class RealSnowflakeConnector:
         from aide.profiling.engine import profile_selected_assets
 
         run = await profile_selected_assets(
-            self, payload.assets, fixture_version=payload.fixture_version
+            self,
+            payload.assets,
+            fixture_version=payload.fixture_version,
+            budget=self.profiling_budget,
+            context=context,
         )
         return ProfileEstateOutput(
             fixture_version=run.fixture_version,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from time import perf_counter
 
 from aide.capabilities.io import Budget
@@ -68,6 +68,34 @@ TINY_OFFLINE_BUDGET = ProfilingBudget(
     sample_asset_limit=3,
     top_k=10,
 )
+
+# Real Snowflake profile_estate wall clock. SNOWFLAKE_LIVE_001 crossed the
+# 60s offline budget at 70.719s. 150s stays strictly below the 180s gateway
+# timeout and still fails closed when the run continues past it. Query,
+# sample, and pair caps stay equal to the offline budget.
+LIVE_SNOWFLAKE_PROFILING_BUDGET = replace(TINY_OFFLINE_BUDGET, max_seconds=150)
+
+
+def resolve_live_profiling_budget(
+    budget: ProfilingBudget | None,
+    *,
+    gateway_timeout_seconds: int,
+) -> ProfilingBudget:
+    """Select the live Snowflake budget and keep it under the gateway timeout.
+
+    ``None`` means the explicit live budget. Callers pass a budget when the
+    execution is configured directly. This does not inspect the process
+    environment.
+    """
+    selected = LIVE_SNOWFLAKE_PROFILING_BUDGET if budget is None else budget
+    if gateway_timeout_seconds < 1:
+        raise ProfilingBudgetExceeded("profile_estate gateway timeout must be >= 1s")
+    if selected.max_seconds >= gateway_timeout_seconds:
+        raise ProfilingBudgetExceeded(
+            f"profiling max_seconds={selected.max_seconds} must stay below the "
+            f"profile_estate gateway timeout of {gateway_timeout_seconds}s"
+        )
+    return selected
 
 
 @dataclass
