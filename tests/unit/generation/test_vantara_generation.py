@@ -43,9 +43,7 @@ def test_v2_invoice_staging_uses_status_column() -> None:
         )
     )
     invoice = next(
-        item.content
-        for item in generated.files
-        if item.path.endswith("stg_billing__invoices.sql")
+        item.content for item in generated.files if item.path.endswith("stg_billing__invoices.sql")
     )
     assert "STATUS as invoice_status" in invoice
     assert "INVOICE_STATUS" not in invoice
