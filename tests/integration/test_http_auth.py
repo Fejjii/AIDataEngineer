@@ -61,7 +61,7 @@ def _app(
     service: Any,
 ) -> tuple[FastAPI, LocalSessionService]:
     sessions = LocalSessionService(session_factory, csrf_secret=_HMAC_KEY)
-    return create_app(service, sessions=sessions), sessions
+    return create_app(service, sessions=sessions, legacy_anonymous_routes=True), sessions
 
 
 @pytest.mark.asyncio

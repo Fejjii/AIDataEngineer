@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Scenario — operator console{% endblock %}
+{% block header_actions %}
+  <form class="inline" method="post" action="/console/logout">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="secondary" type="submit">Sign out</button>
+  </form>
+{% endblock %}
+{% block body %}
+  <section class="banner">
+    <p><strong>Business correctness: {{ business_correctness }}.</strong></p>
+    <ul>
+      {% for item in limitations %}
+        <li>{{ item }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  <section class="grid">
+    <article class="card">
+      <div class="label">Scenario</div>
+      <div>{{ scenario_id }}</div>
+    </article>
+    <article class="card">
+      <div class="label">Execution</div>
+      <div>{{ execution_label }}</div>
+    </article>
+    <article class="card">
+      <div class="label">Business objective</div>
+      <div>{{ business_objective }}</div>
+    </article>
+  </section>
+  <p>There is no request box. The backend runs this objective only, twice, and ignores any other text.</p>
+  <form method="post" action="/console/runs">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">Run scenario</button>
+  </form>
+  <h2>Selected source tables</h2>
+  <p>Schema and a capped masked sample from the synthetic fixture. These are inputs, not expected output.</p>
+  {% for table in sources %}
+    <details {% if loop.first %}open{% endif %}>
+      <summary>{{ table.address }}{% if table.grain %} — grain {{ table.grain }}{% endif %}</summary>
+      <p class="label">{{ table.sample_note }}</p>
+      <div class="scroll">
+        <table>
+          <caption>Schema</caption>
+          <thead><tr><th>Column</th><th>Type</th><th>Nullable</th></tr></thead>
+          <tbody>
+            {% for column in table.columns %}
+              <tr><td>{{ column.name }}</td><td>{{ column.data_type }}</td><td>{{ "yes" if column.nullable else "no" }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if table.sample_rows %}
+        <div class="scroll">
+          <table>
+            <caption>Masked sample</caption>
+            <thead>
+              <tr>{% for name in table.sample_columns %}<th>{{ name }}</th>{% endfor %}</tr>
+            </thead>
+            <tbody>
+              {% for row in table.sample_rows %}
+                <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p>Sample unavailable.</p>
+      {% endif %}
+    </details>
+  {% endfor %}
+  <h2>Run history</h2>
+  {% if runs %}
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Run</th><th>Status</th><th>Started</th><th>Workflows</th></tr></thead>
+        <tbody>
+          {% for run in runs %}
+            <tr>
+              <td><a href="/console/runs/{{ run.run_id }}">{{ run.run_id }}</a></td>
+              <td class="status">{{ run.status }}</td>
+              <td>{{ run.started_at }}</td>
+              <td>{{ run.workflow_count }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>No persisted runs yet.</p>
+  {% endif %}
+{% endblock %}

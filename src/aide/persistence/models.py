@@ -811,3 +811,27 @@ class RepairEventModel(Base):
     )
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+
+
+class OperatorConsoleRunModel(Base):
+    """Durable operator-console run. Status survives process restart; row previews do not."""
+
+    __tablename__ = "operator_console_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('running', 'completed', 'failed')",
+            name="status_known",
+        ),
+    )
+
+    run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    principal_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    workflow_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    snapshot_artifact_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow, index=True
+    )

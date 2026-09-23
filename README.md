@@ -415,6 +415,7 @@ are not the product introduction.
 |---|---|
 | [Interview demo](docs/INTERVIEW_DEMO.md) | Commands, expected PASS criteria, live-smoke posture |
 | [Synthetic cloud demo](docs/ops/SYNTHETIC_CLOUD_DEMO.md) | Compose + PostgreSQL packaging for remote synthetic runs |
+| [Operator console](docs/ops/OPERATOR_CONSOLE.md) | Authenticated browser run of the fixed synthetic scenario |
 | [Interview MVP scope](docs/MVP_SCOPE.md) | Implemented boundary and hard limits |
 | [Architecture](docs/ARCHITECTURE.md) | Accepted DE001 architecture; Interview vs V1 design |
 | [PIVOT001 contract](docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md) | Twin, gateway, repair, verifier, acceptance tests |
@@ -439,11 +440,12 @@ The Interview MVP is intentionally narrow.
 - One automatic repair class: allow-listed `INVOICE_STATUS` → `STATUS` column reference.
 - Snowflake and dbt only; other vendors are future extensions.
 - Production and staging are disabled.
-- No large UI; interface is CLI plus evidence report.
+- Browser surface is the authenticated operator console for the one fixed scenario. There is no generic request UI.
+- CLI and the evidence report remain the non-browser interfaces.
 - No generic autonomous loop, dynamic tool selection, or unbounded estate traversal.
 - GitHub delivery, monitoring, and a required live LLM provider are out of scope.
 - Live Snowflake smoke is credential-gated and does not run RAW drift or the Independent Verifier.
-- The public demo still serves legacy DE002C session and workflow routes on fake connectors and the demo database.
+- Legacy DE002C session, workflow, and event routes are off unless `AIDE_LEGACY_ANONYMOUS_ROUTES=1`.
 - Evidence is application-audit immutability, not cryptographic tamper evidence.
 
 ---

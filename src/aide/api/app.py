@@ -5,13 +5,16 @@ from __future__ import annotations
 import hmac
 import json
 from collections.abc import AsyncIterator
-from typing import Any, Protocol
+from contextlib import asynccontextmanager
+from typing import Any, Protocol, TypeGuard
 from uuid import UUID
 
 from fastapi import Cookie, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from aide.api.console_ports import ConsolePort, ConsoleSession
+from aide.api.console_routes import register_operator_console
 from aide.api.demo_http import parse_demo_token, resolve_http_demo
 from aide.app.benchmarking.errors import DemoBusyError
 from aide.app.events import EventBus
@@ -79,28 +82,17 @@ class SubmitRequest(BaseModel):
     effective_grants: tuple[str, ...] | None = None
 
 
-def _demo_token_ok(expected: str | None, provided: str | None) -> bool:
-    expected_token = parse_demo_token(expected)
-    provided_token = parse_demo_token(provided)
-    if expected_token is None or provided_token is None:
-        return False
-    return hmac.compare_digest(expected_token, provided_token)
-
-
-def create_app(
-    service: SliceRunner,
-    events: EventBus | None = None,
+def _register_legacy_anonymous_routes(
+    app: FastAPI,
     *,
-    sessions: SessionGate | None = None,
-    interview_demo: InterviewDemoRunner | None = None,
-    readiness: ReadinessCheck | None = None,
-    demo_token: str | None = None,
-) -> FastAPI:
-    bus = events or service.events
-    required_demo_token: str | None = None
-    if interview_demo is not None:
-        required_demo_token = resolve_http_demo(http_enabled=True, token=demo_token)
-    app = FastAPI(title="AIDataEngineer", version="0.1.0")
+    service: SliceRunner,
+    sessions: SessionGate | None,
+    bus: EventBus,
+) -> None:
+    """Local-only anonymous session, workflow, and event routes.
+
+    Registered only when ``legacy_anonymous_routes`` is explicitly enabled.
+    """
 
     @app.post("/v1/sessions")
     async def login(response: Response) -> dict[str, str]:
@@ -181,6 +173,57 @@ def create_app(
                 yield f"event: {event.event_type}\ndata: {data}\n\n"
 
         return StreamingResponse(chunks(), media_type="text/event-stream")
+
+
+def _demo_token_ok(expected: str | None, provided: str | None) -> bool:
+    expected_token = parse_demo_token(expected)
+    provided_token = parse_demo_token(provided)
+    if expected_token is None or provided_token is None:
+        return False
+    return hmac.compare_digest(expected_token, provided_token)
+
+
+def _supports_console_session(sessions: SessionGate | None) -> TypeGuard[ConsoleSession]:
+    """True when the session object can back the operator console."""
+    secret = getattr(sessions, "csrf_secret", None)
+    return isinstance(secret, bytes) and hasattr(sessions, "open_session")
+
+
+def create_app(
+    service: SliceRunner,
+    events: EventBus | None = None,
+    *,
+    sessions: SessionGate | None = None,
+    interview_demo: InterviewDemoRunner | None = None,
+    readiness: ReadinessCheck | None = None,
+    demo_token: str | None = None,
+    legacy_anonymous_routes: bool = False,
+    console: ConsolePort | None = None,
+    secure_session_cookie: bool = False,
+) -> FastAPI:
+    bus = events or service.events
+    required_demo_token: str | None = None
+    if interview_demo is not None:
+        required_demo_token = resolve_http_demo(http_enabled=True, token=demo_token)
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        if console is not None:
+            await console.reconcile_interrupted_runs()
+        yield
+
+    app = FastAPI(title="AIDataEngineer", version="0.1.0", lifespan=lifespan)
+
+    if legacy_anonymous_routes:
+        _register_legacy_anonymous_routes(app, service=service, sessions=sessions, bus=bus)
+
+    if console is not None and _supports_console_session(sessions):
+        register_operator_console(
+            app,
+            sessions=sessions,
+            console=console,
+            secure_cookie=secure_session_cookie,
+        )
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:

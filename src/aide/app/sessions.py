@@ -90,14 +90,13 @@ class LocalSessionService:
             expires_at=expiry,
         )
 
-    async def authenticate(
+    async def open_session(
         self,
         opaque_token: str | None,
         *,
-        csrf_token: str | None,
-        method: str,
         now: datetime | None = None,
-    ) -> TrustedAuthenticationContext:
+    ) -> tuple[OpaqueSession, TrustedAuthenticationContext]:
+        """Load a session from the opaque cookie. Safe methods do not require CSRF."""
         if not opaque_token:
             raise SessionMissingError("session cookie is required")
         current = _naive(now or datetime.now(UTC))
@@ -116,12 +115,40 @@ class LocalSessionService:
         )
         if session.is_expired(current):
             raise SessionExpiredError("session expired")
+        return session, authenticate_from_session(session, now=current)
+
+    async def csrf_token_for(self, opaque_token: str | None) -> str:
+        """Recompute the CSRF token for a server-rendered form."""
+        session, _context = await self.open_session(opaque_token)
+        return issue_csrf_token(session, secret=self._csrf_secret).token
+
+    async def revoke(self, opaque_token: str | None, *, now: datetime | None = None) -> None:
+        if not opaque_token:
+            return
+        current = _naive(now or datetime.now(UTC))
+        async with self._sessions() as db, db.begin():
+            await SessionRepository(db).revoke_by_token_digest(
+                digest_session_token(opaque_token),
+                at=current,
+            )
+
+    async def authenticate(
+        self,
+        opaque_token: str | None,
+        *,
+        csrf_token: str | None,
+        method: str,
+        now: datetime | None = None,
+    ) -> TrustedAuthenticationContext:
+        session, context = await self.open_session(opaque_token, now=now)
         if csrf_token is None or csrf_token == "":
             raise CsrfValidationError("CSRF token is required")
-        if digest_session_token(csrf_token) != row.csrf_token_digest:
+        async with self._sessions() as db:
+            row = await SessionRepository(db).get_by_token_digest(session.token_digest)
+        if row is None or digest_session_token(csrf_token) != row.csrf_token_digest:
             raise CsrfValidationError("CSRF token does not match the session")
         validate_csrf(session=session, token=csrf_token, method=method, secret=self._csrf_secret)
-        return authenticate_from_session(session, now=current)
+        return context
 
 
 def _naive(value: datetime) -> datetime:

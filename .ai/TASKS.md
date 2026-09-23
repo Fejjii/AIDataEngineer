@@ -285,6 +285,30 @@ tasks do not run concurrently because their shared high-conflict contracts are s
 - Completion evidence: GitHub CI run `35013798575` green; run report
   `docs/agent/runs/DEPLOY001_SECURITY_REMEDIATION/DEPLOY001_SECURITY_REMEDIATION-SESSION-20260915T190000Z-0004.md`.
 
+## INTERACTIVE_VALIDATION_001 — Authenticated operator console
+
+- Compact ID: `INTERACTIVE_VALIDATION_001`
+- Priority: P1
+- Status: IN REVIEW (branch only; human acceptance NOT_RUN; do not merge from the agent)
+- Owner: Cursor Cloud agent
+- Environment: CURSOR_CLOUD
+- Branch: `feat/interactive_validation_001`
+- Base commit: `84373997696fc99e81aee16207c0d17f11e2cf86`
+- Implementation commit: `0a99c890f813ce64cb2775db657f7255f8162574`
+- Dependencies: Interview MVP on `main`, DEPLOY001 synthetic demo, Frontier C-01 route finding
+- Risk: Medium (authenticated UI inside the existing process; no new architecture)
+- Goal: Give the operator an authenticated browser console to run the fixed
+  synthetic scenario, inspect real inputs and persisted outputs, and conduct
+  human acceptance. Distinguish execution, evidence consistency, and business
+  correctness. Disable anonymous legacy routes in the deployed demo configuration.
+- Explicit exclusions: new connectors, uploads, generic request interpretation,
+  extra repair classes, RAW mutation, enterprise identity, Railway mutation,
+  SQL changes that would move the benchmark fingerprint.
+- Expected files: console routes and templates, one run table, snapshot artifact,
+  focused tests, `docs/ops/OPERATOR_CONSOLE.md`, run report.
+- Git authority: branch-only; commit/push; one PR to `main`; do not merge.
+- Deployment authority: package and document only. Do not change the live service.
+
 ---
 
 # Historical DE implementation backlog

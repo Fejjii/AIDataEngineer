@@ -37,7 +37,11 @@ read-only for the product. Production and staging stay disabled.
 
 A public application bind does not bypass the HTTP demo token. If HTTP demo is
 enabled without a nonempty token, application startup fails closed. That token
-gates `POST /v1/interview/demo` only. It does not gate the legacy routes below.
+gates `POST /v1/interview/demo` only.
+
+The operator console is a separate authenticated surface. See
+[`OPERATOR_CONSOLE.md`](OPERATOR_CONSOLE.md). Legacy anonymous routes below are
+unregistered unless `AIDE_LEGACY_ANONYMOUS_ROUTES=1`.
 
 ## Startup
 
@@ -251,9 +255,10 @@ Required **names** only: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER_RO`,
 
 ## Legacy DE002C routes
 
-These routes belong to the earlier DE002C slice. They are registered whenever the
-application process starts. They are not the Interview product API. Do not present
-them as `uv run aide interview demo` or `POST /v1/interview/demo`.
+These routes belong to the earlier DE002C slice. They are **not** registered on
+the deployed demo. Set `AIDE_LEGACY_ANONYMOUS_ROUTES=1` only for a local process
+that still needs the old contract. They are not the Interview product API. Do
+not present them as `uv run aide interview demo` or `POST /v1/interview/demo`.
 
 | Method | Path |
 |---|---|
@@ -266,8 +271,8 @@ them as `uv run aide interview demo` or `POST /v1/interview/demo`.
 - They are not protected by the Interview demo token (`AIDE_SYNTHETIC_DEMO_TOKEN`). `POST /v1/sessions` issues a local session without that token. Workflow submit then uses that session, not the Interview token. The events route does not require the Interview token.
 - Use the Interview CLI, or the token-gated HTTP demo, when showing the product.
 
-Gate these routes before broader public promotion. This note does not change deployment
-configuration, bind addresses, or token settings.
+The image default is `AIDE_LEGACY_ANONYMOUS_ROUTES=0`. Unset or `0` returns 404
+for the three routes. Documentation alone is not the control.
 
 ## Known limitations
 
@@ -276,7 +281,10 @@ configuration, bind addresses, or token settings.
   Docker host, and use native PostgreSQL 16 as the Cloud equivalent.
 - `POST /v1/interview/demo` runs the scenario twice (determinism). It is
   expensive; it is disabled by default and requires a token when enabled.
-- The legacy routes above remain available on the demo process. They are not the Interview closed loop.
+- Legacy anonymous session, workflow, and event routes stay off unless
+  `AIDE_LEGACY_ANONYMOUS_ROUTES=1`. They are not the Interview closed loop.
+- The operator console (`/console`) is the browser surface for the fixed
+  synthetic scenario. Business correctness stays `NOT_VALIDATED`.
 - No standing public URL is created until an operator authenticates a host.
 
 ## Remaining authentication gate

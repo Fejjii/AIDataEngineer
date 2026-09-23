@@ -97,6 +97,11 @@ class SessionRepository:
         )
         return row
 
+    async def revoke_by_token_digest(self, opaque_token_digest: str, *, at: datetime) -> None:
+        row = await self.get_by_token_digest(opaque_token_digest)
+        if row is not None and row.revoked_at is None:
+            row.revoked_at = at
+
 
 class GrantRepository:
     def __init__(self, session: AsyncSession) -> None:

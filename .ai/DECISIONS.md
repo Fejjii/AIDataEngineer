@@ -243,3 +243,19 @@ emitter, retry summary).
   token.
 - **Consequences:** Operators set secrets locally. CI smoke uses `docker compose exec`
   and ephemeral random passwords, not a host Postgres port.
+
+## INTERACTIVE_VALIDATION_001 — Operator console is server-rendered inside FastAPI
+
+- **Date:** 2026-09-23
+- **Status:** Proposed for review with the implementation PR (additive under DE-ADR-026)
+- **Decision:** The human acceptance surface for the fixed synthetic scenario is
+  Jinja HTML served by the existing FastAPI process. Operator sign-in uses the
+  existing opaque PostgreSQL session and CSRF digest. Anonymous
+  `POST /v1/sessions`, `POST /v1/workflows`, and workflow event streaming are
+  unregistered unless `AIDE_LEGACY_ANONYMOUS_ROUTES=1`. One `operator_console_runs`
+  table records run status. A bounded sanitized `operator_console_snapshot`
+  artifact stores the preview and model text that the in-memory fake connector
+  cannot serve after the process returns. This does not implement DE 016 and
+  does not replace the deferred Vite/React SPA.
+- **Rejected:** a second frontend service; browser token storage; treating
+  verifier PASS as validated revenue; changing generated SQL in this task.
