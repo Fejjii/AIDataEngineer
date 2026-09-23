@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Run {{ page.run_id }} — operator console{% endblock %}
+{% block head %}
+  {% if page.status == "running" %}
+    <meta http-equiv="refresh" content="5">
+  {% endif %}
+{% endblock %}
+{% block header_actions %}
+  <a href="/console">Console</a>
+{% endblock %}
+{% block body %}
+  <section class="banner">
+    <p><strong>Business correctness: {{ page.business_correctness }}.</strong> A verifier PASS is evidence consistency for the drift repair, not validated revenue.</p>
+    <ul>{% for item in page.limitations %}<li>{{ item }}</li>{% endfor %}</ul>
+  </section>
+  <section class="grid">
+    <article class="card"><div class="label">Run status</div><div class="status">{{ page.status }}</div></article>
+    <article class="card"><div class="label">Execution label</div><div>{{ page.execution_label }}</div></article>
+    <article class="card"><div class="label">Benchmark verdict</div><div data-benchmark="{{ page.benchmark_verdict }}">{{ page.benchmark_verdict }}</div></article>
+    <article class="card"><div class="label">Determinism equivalent</div><div>{{ page.determinism }}</div></article>
+    <article class="card"><div class="label">Evidence completeness</div><div>{{ page.evidence_completeness }} (complete={{ page.evidence_complete }})</div></article>
+  </section>
+  <p>Started {{ page.started_at }}{% if page.finished_at %} · finished {{ page.finished_at }}{% endif %}</p>
+  <p>The existing benchmark executes two workflows. Opening or refreshing this page does not start another run.</p>
+  {% if page.status == "running" %}
+    <p class="status">{{ page.running_note }}</p>
+  {% endif %}
+  {% if page.error_message %}
+    <p class="error" data-error="shown">{{ page.error_message }}</p>
+  {% endif %}
+  <h2>Persisted audit events</h2>
+  {% if page.audit_events %}
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Workflow</th><th>Sequence</th><th>Event</th><th>Recorded</th></tr></thead>
+        <tbody>
+          {% for event in page.audit_events %}
+            <tr>
+              <td>{{ event.workflow_id }}</td>
+              <td>{{ event.sequence }}</td>
+              <td>{{ event.event_type }}</td>
+              <td>{{ event.created_at }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>No persisted audit events for this run yet.</p>
+  {% endif %}
+  {% if not page.workflows %}
+    <p>Workflow evidence unavailable until the run records workflow ids.</p>
+  {% endif %}
+  {% for workflow in page.workflows %}
+    <h2>Workflow {{ workflow.workflow_id }}</h2>
+    <section class="grid">
+      <article class="card"><div class="label">Control-plane state</div><div>{{ workflow.control_plane_state }}</div></article>
+      <article class="card"><div class="label">Benchmark outcome</div><div>{{ workflow.benchmark_outcome }}</div></article>
+      <article class="card"><div class="label">Fail reason</div><div>{{ workflow.fail_reason }}</div></article>
+      <article class="card"><div class="label">Block reason</div><div>{{ workflow.block_reason }}</div></article>
+    </section>
+    <h3>Drift and repair</h3>
+    <p data-drift="{{ workflow.drift_state }}">Drift: {{ workflow.drift_state }}. Mapping: {{ workflow.drift_mapping }}</p>
+    <p>Hypothesis: {{ workflow.drift_hypothesis }}</p>
+    <p>Repair allowed: {{ workflow.repair_allowed }}. Repair applied: {{ workflow.repair_applied }}. Path: {{ workflow.repair_path }}</p>
+    {% if workflow.failure_messages %}
+      <ul>{% for message in workflow.failure_messages %}<li>{{ message }}</li>{% endfor %}</ul>
+    {% else %}
+      <p>Original failure messages: unavailable</p>
+    {% endif %}
+    <h3>SQL</h3>
+    <details>
+      <summary>Original staging SQL</summary>
+      <pre>{{ workflow.original_sql }}</pre>
+    </details>
+    <details>
+      <summary>Repaired SQL</summary>
+      <pre>{{ workflow.repaired_sql }}</pre>
+    </details>
+    {% if workflow.models %}
+      {% for model in workflow.models %}
+        <details>
+          <summary>{{ model.path }}</summary>
+          <pre>{{ model.sql }}</pre>
+        </details>
+      {% endfor %}
+    {% else %}
+      <p>Generated SQL unavailable.</p>
+    {% endif %}
+    <h3>Output preview</h3>
+    <p data-preview="{{ workflow.preview.state }}">{{ workflow.preview.note }}</p>
+    {% if workflow.preview.state == "present" %}
+      <p>{{ workflow.preview.relation }}</p>
+      <div class="scroll">
+        <table>
+          <thead><tr>{% for name in workflow.preview.columns %}<th>{{ name }}</th>{% endfor %}</tr></thead>
+          <tbody>
+            {% for row in workflow.preview.rows %}
+              <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+    <h3>Tests and quality</h3>
+    <p>Individual tests: {{ workflow.tests_state }}. Aggregate persisted test flag: {{ workflow.aggregate_test_flag }}</p>
+    {% if workflow.tests %}
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Test</th><th>Status</th><th>Detail</th></tr></thead>
+          <tbody>
+            {% for check in workflow.tests %}
+              <tr><td>{{ check.name }}</td><td>{{ check.outcome }}</td><td>{{ check.detail }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+    <p data-quality="{{ workflow.quality_state }}">Quality checks: {{ workflow.quality_state }}</p>
+    {% if workflow.quality_checks %}
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Check</th><th>Passed flag</th><th>Detail</th></tr></thead>
+          <tbody>
+            {% for check in workflow.quality_checks %}
+              <tr><td>{{ check.name }}</td><td>{{ check.outcome }}</td><td>{{ check.detail }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+    <h3>Verifier evidence</h3>
+    <p data-verifier="{{ workflow.verifier_verdict }}">Evidence consistency: {{ workflow.verifier_verdict }} ({{ workflow.verifier_state }})</p>
+    {% if workflow.verifier_checks %}
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Check</th><th>Passed flag</th><th>Detail</th></tr></thead>
+          <tbody>
+            {% for check in workflow.verifier_checks %}
+              <tr><td>{{ check.name }}</td><td>{{ check.outcome }}</td><td>{{ check.detail }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  {% endfor %}
+  {% if page.status == "completed" and page.workflows %}
+    <h2>Exports</h2>
+    <ul>
+      {% for name in ["output-preview", "original-sql", "repaired-sql", "generated-sql", "quality", "verifier", "tests"] %}
+        <li><a href="/console/runs/{{ page.run_id }}/exports/{{ name }}">{{ name }}</a></li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endblock %}

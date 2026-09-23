@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from aide.api.app import create_app
 from aide.api.demo_http import env_flag_enabled, parse_demo_token, resolve_http_demo
 from aide.app.benchmarking.service import SyntheticInterviewDemoService
+from aide.app.console.service import OperatorConsoleService
 from aide.app.runtime import DatabaseReadiness, build_offline_stack, session_factory_from_url
 from aide.app.sessions import LocalSessionService
 
@@ -38,13 +39,23 @@ def create_production_app() -> FastAPI:
     factory = session_factory_from_url(_database_url())
     service = build_offline_stack(factory)
     sessions = LocalSessionService(factory, csrf_secret=_csrf_secret())
-    interview_demo = SyntheticInterviewDemoService(factory) if demo_token is not None else None
+    demo = SyntheticInterviewDemoService(factory)
+    interview_demo = demo if demo_token is not None else None
+    console = OperatorConsoleService(
+        factory,
+        sessions=sessions,
+        demo=demo,
+        operator_password=os.environ.get("AIDE_OPERATOR_PASSWORD"),
+    )
     return create_app(
         service,
         sessions=sessions,
         interview_demo=interview_demo,
         readiness=DatabaseReadiness(factory),
         demo_token=demo_token,
+        legacy_anonymous_routes=env_flag_enabled(os.environ.get("AIDE_LEGACY_ANONYMOUS_ROUTES")),
+        console=console,
+        secure_session_cookie=env_flag_enabled(os.environ.get("AIDE_SESSION_COOKIE_SECURE")),
     )
 
 

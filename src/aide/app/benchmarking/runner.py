@@ -448,8 +448,16 @@ async def run_interview_once(
     *,
     requirement: str = INTERVIEW_REQUEST,
 ) -> InterviewResult:
-    supervisor = build_interview_stack(session_factory, work_root=work_root)
-    return await supervisor.run_customer_revenue(requirement, include_schema_drift=True)
+    from aide.connectors.dbt.fake import FakeDbtConnector
+    from aide.connectors.dbt.specs import FAKE_DBT_DEV
+
+    dbt = FakeDbtConnector(FAKE_DBT_DEV, work_root=work_root)
+    supervisor = build_interview_stack(session_factory, work_root=work_root, dbt=dbt)
+    result = await supervisor.run_customer_revenue(requirement, include_schema_drift=True)
+    preview = dbt.capture_bounded_preview()
+    if preview is not None:
+        result.extra["output_preview"] = preview
+    return result
 
 
 async def run_offline_benchmark(

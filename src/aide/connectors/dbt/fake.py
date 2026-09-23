@@ -102,6 +102,22 @@ DEFAULT_SOURCE_RELATIONS = {
 SOURCE_RELATIONS = DEFAULT_SOURCE_RELATIONS
 
 HEALTH_TTL = timedelta(minutes=5)
+_PREVIEW_CELL_CAP = 80
+
+
+def _preview_cell(value: object) -> object:
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if value != value or value in {float("inf"), float("-inf")}:
+            return None
+        return value
+    text = str(value)
+    if len(text) > _PREVIEW_CELL_CAP:
+        return text[:_PREVIEW_CELL_CAP]
+    return text
 
 
 class FakeDbtConnector:
@@ -169,6 +185,36 @@ class FakeDbtConnector:
 
     async def close(self) -> None:
         self._conn.close()
+
+    def capture_bounded_preview(self) -> dict[str, Any] | None:
+        """Sample the executed revenue mart. The relation name is fixed, not caller SQL."""
+        relation = '"AIDE_DEV"."mart_customer_revenue_daily"'
+        try:
+            count_row = self._conn.execute(f"SELECT COUNT(*) FROM {relation}").fetchone()
+            frame = self._conn.execute(f"SELECT * FROM {relation} LIMIT 21")
+            description = frame.description or []
+            fetched = frame.fetchall()
+        except Exception:
+            return None
+        names = [str(item[0]) for item in description][:12]
+        if not names:
+            return None
+        total = int(count_row[0]) if count_row is not None and count_row[0] is not None else None
+        sampled = fetched[:20]
+        rows: list[dict[str, Any]] = []
+        for raw in sampled:
+            item: dict[str, Any] = {}
+            for index, name in enumerate(names):
+                item[name] = _preview_cell(raw[index] if index < len(raw) else None)
+            rows.append(item)
+        return {
+            "relation": "AIDE_DEV.mart_customer_revenue_daily",
+            "columns": names,
+            "rows": rows,
+            "sampled_row_count": len(rows),
+            "total_row_count": total,
+            "truncated": (total is not None and total > 20) or len(fetched) > 20,
+        }
 
     async def create_transformation(
         self, payload: CreateTransformationInput, context: CallContext

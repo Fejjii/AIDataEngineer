@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Sign in — operator console{% endblock %}
+{% block body %}
+  <section class="card">
+    <h2>Sign in</h2>
+    <p>This console shows the fixed customer-revenue scenario and its persisted evidence.</p>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    {% if configured %}
+      <form method="post" action="/console/login">
+        <input type="hidden" name="login_token" value="{{ login_token }}">
+        <p><label>Operator password<br><input type="password" name="password" autocomplete="current-password" required></label></p>
+        <button type="submit">Sign in</button>
+      </form>
+    {% else %}
+      <p>Operator authentication is not configured. Set the operator password in the environment and restart.</p>
+    {% endif %}
+  </section>
+{% endblock %}

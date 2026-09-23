@@ -12,6 +12,22 @@ from aide.domain.verification import VerifierVerdict
 
 INTERVIEW_SCENARIO_ID = "interview_mvp_customer_revenue_schema_drift"
 INTERVIEW_REQUEST = "Build a customer revenue analytical data product from CRM and billing data."
+OPERATOR_EXECUTION_LABEL = "synthetic"
+OPERATOR_BUSINESS_CORRECTNESS = "NOT_VALIDATED"
+OPERATOR_LIMITATIONS: tuple[str, ...] = (
+    "Successful execution means the synthetic scenario finished. It is not business correctness.",
+    (
+        "The Independent Verifier scores evidence consistency for this schema-drift repair. "
+        "It does not validate financial revenue."
+    ),
+    (
+        "invoiced_amount and paid_amount add EUR, USD, and GBP with no FX conversion. "
+        "They are not validated financial revenue."
+    ),
+    "Refunds are staged and are not subtracted from paid_amount.",
+    "Customer history columns are shape only. Plan history is not a record of plan changes.",
+    "Deleted CRM accounts are not removed by IS_DELETED in the current survivorship rule.",
+)
 
 # Labelled baseline minutes from docs/EVALUATION_STRATEGY.md §4 for steps this
 # closed loop actually performs. Not a financial ROI claim.
