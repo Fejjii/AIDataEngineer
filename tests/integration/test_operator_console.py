@@ -5,6 +5,7 @@ import re
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -69,7 +70,7 @@ def _app(
     demo: object,
     *,
     secure: bool = False,
-) -> tuple[object, OperatorConsoleService]:
+) -> tuple[FastAPI, OperatorConsoleService]:
     sessions = LocalSessionService(factory, csrf_secret=_SECRET)
     console = OperatorConsoleService(
         factory,

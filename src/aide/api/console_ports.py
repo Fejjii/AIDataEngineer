@@ -34,9 +34,16 @@ class ConsoleSession(Protocol):
 
 
 class ConsoleExport(Protocol):
-    body: bytes
-    media_type: str
-    filename: str
+    """Read-only export body. Matches frozen export records without a runtime wrapper."""
+
+    @property
+    def body(self) -> bytes: ...
+
+    @property
+    def media_type(self) -> str: ...
+
+    @property
+    def filename(self) -> str: ...
 
 
 class ConsolePort(Protocol):
