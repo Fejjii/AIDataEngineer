@@ -388,6 +388,21 @@ Secret handling:
 A task is bound to exactly one target environment at creation; connectors are bound at
 configuration; the policy engine enforces equality (R5).
 
+### 6.1 Documented non-gateway Snowflake operations
+
+Workflow execution still enters the Governed Tool Gateway. Two Snowflake operations used
+by validation and operations do not. They are bounded validation or cleanup operations.
+They are not product workflow execution, and they do not change this permission model.
+
+| Operation | What it does | Bound |
+|---|---|---|
+| Credentialed grant metadata probe | Reads role grant metadata, including `SHOW GRANTS`, before the governed live path | Read-only inspection. No GRANT or REVOKE. No RAW mutation |
+| Live cleanup `DROP SCHEMA` | Drops workflow-scoped DEV schemas in `AIDE_DEV` after the governed live path | That workflow's DEV schemas only. RAW is not dropped |
+
+Both live in the live-smoke connector helper used by credentialed validation. Product
+workflow actions — discover, describe, profile, load, dbt execute, test, and reconcile —
+remain gateway dispatches.
+
 ---
 
 ## 7. Trust boundaries and untrusted input

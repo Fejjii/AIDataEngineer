@@ -1,14 +1,15 @@
 # Data Pilot AI
 
-**Autonomous Data Engineering Control Plane**
+**Governed Data Engineering Control Plane**
 
-Companies keep Snowflake, dbt, and their existing tools. Data Pilot AI understands the
-estate, coordinates engineering work, detects failures, performs bounded repairs, and
-proves the result with immutable evidence.
+Companies keep Snowflake, dbt, and their existing tools. For one locked customer-revenue
+scenario, Data Pilot AI pins that estate, coordinates the engineering workflow, detects
+one schema-drift failure, performs one bounded repair, and scores the evidence pack.
 
-The Interview MVP on `main` is a complete governed closed loop: one customer-revenue
-request, one pinned Digital Twin, one schema-drift incident, one automatic repair, and a
-deterministic Independent Verifier. No LLM decides PASS or FAIL.
+The Interview MVP on `main` is that governed closed loop: one request, one pinned Digital
+Twin, one schema-drift incident, one automatic repair, and a read-only Independent
+Verifier. The verifier scores the Supervisor's evidence for this drift-repair scenario.
+It cannot dispatch tools or write workflow state. No LLM decides PASS or FAIL.
 
 | Run the demo | Read the architecture | See what is in and out of scope |
 |---|---|---|
@@ -34,8 +35,8 @@ Typical failure modes:
 | No deterministic verification | “It looks right” replaces tests, reconciliation, and evidence |
 
 Data Pilot AI is not a SQL chatbot and not a warehouse replacement. It is a **governed
-executor** of typed capabilities: an LLM may propose; deterministic code decides,
-validates, and records.
+executor** of typed capabilities. In this MVP the model design is recorded and validated;
+deterministic code decides, executes, and records.
 
 ---
 
@@ -67,7 +68,7 @@ What that loop actually does:
 4. Generate and run the dbt data product in workflow-scoped `AIDE_DEV` objects.
 5. Inject `INVOICE_STATUS` → `STATUS` on `BILLING.INVOICES`.
 6. Detect `SCHEMA_MISMATCH`, apply one allow-listed column-reference repair, and revalidate.
-7. Let a read-only Independent Verifier score immutable evidence. Verdict is `PASS` or `FAIL`.
+7. Let a read-only Independent Verifier score the drift-repair evidence pack. Verdict is `PASS` or `FAIL`.
 
 ---
 
@@ -130,12 +131,13 @@ flowchart TB
 | Control plane | Plan, authorize, dispatch, bound repair | Deterministic Supervisor; no multi-agent framework |
 | Data plane | RAW inspection and DEV writes | RO reads RAW; RW writes only workflow-scoped `AIDE_DEV` |
 | External tools | Warehouse and transformation | Snowflake and dbt Core only |
-| Verification | Tests, quality, verdict | Independent Verifier has no connector or workflow-write access |
+| Verification | Tests, quality, verdict | Independent Verifier scores the evidence pack; it has no connector or workflow-write access |
 | Persistence | Twin, intents, audit, evidence | PostgreSQL 16; append-only evidence manifest |
 
 Every workflow connector action enters the Governed Tool Gateway: validate → policy → persist intent →
-execute → reconcile ambiguous side effects → persist evidence. Credentialed safety probes may inspect
-Snowflake grant metadata directly, but they do not perform product workflow execution.
+execute → reconcile ambiguous side effects → persist evidence. Credentialed validation may inspect
+Snowflake grant metadata directly, and live cleanup may drop that workflow's DEV schemas directly.
+Neither call is product workflow execution.
 
 ```mermaid
 sequenceDiagram
@@ -166,16 +168,16 @@ Implemented on `main` (MVP001–MVP004). This is what the repository actually ru
 
 | Capability | Implemented |
 |---|---|
-| Enterprise Data Digital Twin in PostgreSQL | Yes — assets, relationships, observations, snapshots, evidence refs |
+| Enterprise Data Digital Twin in PostgreSQL | Yes — Snowflake schema metadata and accepted drift evidence, pinned in a snapshot |
 | Pinned twin snapshot and bounded estate context | Yes — one snapshot per workflow; grant-filtered; no source rows in reasoning context |
 | Deterministic Supervisor | Yes — application workflow, not an autonomous agent loop |
 | Governed Tool Gateway | Yes — sole execution path for workflow actions to Snowflake and dbt |
-| Deterministic modelling engine | Yes — existing DE007 rule table |
-| Bounded dbt generation and DEV execution | Yes — 21 required customer-revenue models |
-| dbt tests, quality checks, and reconciliation | Yes |
+| Deterministic modelling engine | Yes — validates a recorded design against objective signals |
+| Bounded dbt generation and DEV execution | Yes — the recorded 21-model customer-revenue project, executed in workflow-scoped DEV |
+| dbt tests, quality checks, and reconciliation | Yes — generated dbt tests, model presence, mart checks, and fact-to-mart sums |
 | Schema-drift detection | Yes — `INVOICE_STATUS` → `STATUS` |
 | Bounded automatic repair | Yes — one allow-listed SQL column-reference correction |
-| Read-only Independent Verifier | Yes — deterministic `PASS` / `FAIL` |
+| Read-only Independent Verifier | Yes — deterministic `PASS` / `FAIL` on the drift-repair evidence pack |
 | Immutable evidence bundle | Yes — required sections, content digests, 100% completeness gate |
 | Offline deterministic benchmark | Yes — two equivalent runs; no LLM judge |
 | Credential-gated Snowflake live smoke | Yes — governed path; missing secrets exit `2`, not a weakened test |
@@ -203,16 +205,16 @@ The Interview MVP automates one closed engineering loop, not the entire enterpri
 |---|---|
 | Discovery | Enumerate and describe allow-listed Snowflake assets |
 | Profiling | Deterministic profiles and relationship candidates |
-| Asset selection | Bounded relevant-asset selection from the catalogue |
-| Data modelling | Rule-table architecture class; typed model design |
-| dbt generation | Staging, intermediate, SCD2 dims, facts, mart, tests, YAML |
+| Asset selection | Fixed relevant-asset selection for this Interview scenario |
+| Data modelling | Recorded design, validated against objective signals |
+| dbt generation | Staging, intermediate, current-row dimensions, facts, mart, tests, YAML |
 | Pipeline execution | dbt compile / run in workflow-scoped DEV |
 | Testing | Generated and executed dbt tests |
-| Quality | Presence, grain, and mart quality checks |
-| Reconciliation | Invoice-line and payment totals versus the mart |
+| Quality | Required model presence, mart checks, and reconciliations |
+| Reconciliation | Fact-to-mart invoice-line and payment sums |
 | Incident diagnosis | `SCHEMA_MISMATCH` from injected source drift |
 | Bounded repair | One validated column-reference patch; tests cannot be weakened |
-| Verification | Read-only Independent Verifier over immutable evidence |
+| Verification | Read-only Independent Verifier over the drift-repair evidence pack |
 | Evidence | Canonical bundle with section digests |
 
 GitHub PR preparation, duplicate-payment repair, docs/lineage publication, and staging
@@ -230,7 +232,7 @@ deploy remain deferred. They are not counted as automated in the benchmark.
 | Governed Tool Gateway | Policy, intent, execution, reconcile, and evidence on every governed workflow tool call |
 | Least privilege | Distinct RO and DEV identities; no broad RAW grant to DEV |
 | Bounded automatic repair | One allow-listed repair class; broader diffs block |
-| Independent Verifier | Cannot dispatch tools or write workflow state |
+| Independent Verifier | Scores the scenario evidence pack; cannot dispatch tools, re-execute the warehouse, or write workflow state |
 | Immutable evidence | Application-audit bundle with required sections and digests |
 | Deterministic benchmark | Two offline runs compared after explicit identifier normalization |
 | No LLM judge | PASS / FAIL is code over evidence |
@@ -262,10 +264,14 @@ evidence completeness, and determinism; they do not freeze every absolute count.
 | Evidence completeness | 100% |
 | Deterministic benchmark | PASS |
 
-**Estimated, labelled, not a productivity study:** nine automated engineering steps from the
-versioned baseline in [`docs/EVALUATION_STRATEGY.md`](docs/EVALUATION_STRATEGY.md) §4
-(690 minutes). Duplicate-payment repair, documentation/lineage, and GitHub PR are **not**
-counted as automated.
+The 36 governed operations and the 36 policy evaluations are the same dispatch population:
+one policy evaluation is recorded for each governed dispatch. The 23 tests are the
+generated dbt test count. The 25 quality checks include required model presence plus mart
+checks and reconciliations.
+
+The historical manual-engineering estimate stays only in
+[`docs/EVALUATION_STRATEGY.md`](docs/EVALUATION_STRATEGY.md) §4. It is not a measured
+result of this table.
 
 **Unavailable on the offline path, never invented:** LLM token cost, Snowflake credits,
 financial ROI.
@@ -328,8 +334,15 @@ Full interview script: [`docs/INTERVIEW_DEMO.md`](docs/INTERVIEW_DEMO.md).
 | Persisted intent | Dispatch intent, attempt, and fence are recorded before execute |
 | Reconcile before retry | Ambiguous side effects are never blindly repeated |
 | One automatic repair | Second class, broader AST diff, or failed revalidation blocks |
-| Read-only Independent Verifier | No gateway, connector, or workflow-write dependency |
+| Read-only Independent Verifier | Scores the drift-repair evidence pack; no gateway, connector, or workflow-write dependency |
 | Evidence integrity | Missing or digest-mismatched required sections fail the verdict |
+| Legacy demo routes | `POST /v1/sessions`, `POST /v1/workflows`, and `GET /v1/workflows/{workflow_id}/events` are the earlier DE002C slice |
+
+The public synthetic demo also exposes those legacy routes. They use fake connectors and
+can write to the demo PostgreSQL control plane. They are not protected by the Interview
+demo token, and they are not the Interview product API. Gate them before broader public
+promotion. Detail is in
+[`docs/ops/SYNTHETIC_CLOUD_DEMO.md`](docs/ops/SYNTHETIC_CLOUD_DEMO.md).
 
 Evidence is transactional application-audit immutability, not cryptographic tamper
 evidence. That limitation is intentional and documented.
@@ -429,7 +442,8 @@ The Interview MVP is intentionally narrow.
 - No large UI; interface is CLI plus evidence report.
 - No generic autonomous loop, dynamic tool selection, or unbounded estate traversal.
 - GitHub delivery, monitoring, and a required live LLM provider are out of scope.
-- Live Snowflake smoke is credential-gated and does not inject RAW drift.
+- Live Snowflake smoke is credential-gated and does not run RAW drift or the Independent Verifier.
+- The public demo still serves legacy DE002C session and workflow routes on fake connectors and the demo database.
 - Evidence is application-audit immutability, not cryptographic tamper evidence.
 
 ---

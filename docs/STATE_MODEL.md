@@ -72,7 +72,7 @@ stateDiagram-v2
 | `PLANNING` is a planning boundary, not a mandatory hop | A **new planning boundary** enters `PLANNING`, accepts a `Plan`, and allocates a **new phase occurrence**. Direct transitions (for example `GENERATION → POLICY_CHECK`) and **resume of an existing phase run** (`BLOCKED` with `PARKED` tasks, `APPROVAL_REQUIRED` return to the originating phase) do not re-enter `PLANNING` and do not allocate a new `phase_runs` row |
 | `APPROVAL_REQUIRED` is reentrant with typed subjects | One state, several gates (DESIGN, COST, GIT, DEPLOY, DESTRUCTIVE). Approval returns to the originating phase run; rejection follows subject-specific routes including `BLOCKED` and `FAILED` (`docs/PERMISSION_MODEL.md` §4) |
 | `CLARIFICATION_REQUIRED` records `asked_from_phase` | A question asked during DESIGN returns to `PLANNING` for that phase with the answer in context, not to `RECEIVED` (which would restart discovery) |
-| `POLICY_CHECK` kept as a phase **and** enforced per task | Whole-plan check catches cost and aggregate risk before spending; per-task check inside the Tool Registry is the non-bypassable guarantee |
+| `POLICY_CHECK` kept as a phase **and** enforced per dispatch | The broader whole-plan policy phase is V1 design. The Interview MVP implementation uses a placeholder `evaluate_execution_policy` task. Effective enforcement happens at every Governed Tool Gateway dispatch |
 | `REPAIR` can return to `GENERATION` or `EXECUTION` | Pre-execution (compile/explain) repairs are cheaper than post-execution ones |
 | `MONITORING` is transitional in V1 | Monitors are registered and checked once; a long-lived monitoring loop is V2 |
 | `BLOCKED` is a parking state, not terminal | Human resumes → if the blocked phase has `PARKED` tasks they return to `READY` and the workflow re-enters `blocked_from_phase`; otherwise `PLANNING` re-plans the current phase with the new context |
@@ -149,6 +149,17 @@ permitted next states, failure handling, human intervention, persistence.
 - **Persistence:** file artifacts (versioned), project state, manifest.
 
 ### POLICY_CHECK
+
+The phase transitions in §1 are unchanged. The broader whole-plan policy phase is V1 design:
+evaluate every upcoming execution task for permissions, targets, destructive SQL, cost
+caps, and LLM budget, then route the phase from those decisions.
+
+The Interview MVP implementation uses a placeholder `evaluate_execution_policy` task.
+That task does not inspect the plan. Effective enforcement happens at every Governed
+Tool Gateway dispatch, which persists a deterministic risk decision before execution.
+
+V1 design for this phase:
+
 - **Entry:** all generation units valid.
 - **Allowed:** Policy Engine evaluation of all EXECUTION tasks; cost estimation.
 - **Required output:** `policy_decisions` for every task.
@@ -454,7 +465,7 @@ Phases with no reasoning need do **not** call the planner; a template produces t
 |---|---|
 | DISCOVERY enumeration | one `discover_assets`; `phase_exit_criteria` = immutable sorted catalogue; phase run completes without description or selection |
 | DISCOVERY description | created only after the enumeration planning boundary; one explicit `describe_asset` per catalogue asset, then `select_relevant_assets`; `phase_exit_criteria` = catalogue + selection |
-| POLICY_CHECK | one Det evaluation task per upcoming EXECUTION task |
+| POLICY_CHECK | V1 design: one Det evaluation task per upcoming EXECUTION task. Interview MVP: one placeholder `evaluate_execution_policy` task; gateway dispatch remains the effective control |
 | EXECUTION (dbt) | `run_pipeline` or `execute_transformation` + `run_tests` selection derived from generation units |
 | VALIDATION | Quality Engine validators derived from `ModelDesign.tests` and standard checks |
 | REPAIR | `inspect_failure → diagnose_failure → apply` chain per failing unit (max 2 units concurrently) |
