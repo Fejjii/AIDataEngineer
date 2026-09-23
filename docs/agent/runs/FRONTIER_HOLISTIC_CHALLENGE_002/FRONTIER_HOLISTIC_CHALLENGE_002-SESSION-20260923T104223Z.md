@@ -11,7 +11,7 @@
 | Base commit | `64618bce9ea240d49c768c9bac54535e11711f67` |
 | Implementation commit | `64618bce9ea240d49c768c9bac54535e11711f67` (audited product SHA; this run added documentation only) |
 | Report status | SUCCESS |
-| PR number | recorded after PR creation (see Git history / PR list) |
+| PR number | 34 |
 
 ## Goal
 
