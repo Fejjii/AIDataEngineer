@@ -9,12 +9,12 @@
 
 Data Pilot AI demonstrates one complete governed closed loop:
 
-1. Inspect the Vantara `tiny` estate in Snowflake and dbt.
-2. Persist the minimum Enterprise Data Digital Twin in PostgreSQL.
+1. Inspect the Vantara `tiny` estate in Snowflake.
+2. Persist Snowflake schema metadata and accepted drift evidence in the PostgreSQL Digital Twin.
 3. Accept one customer and revenue request.
 4. Pin one `TwinSnapshot` and assemble bounded, authorized context.
-5. Produce a deterministic engineering plan using the existing modelling engine.
-6. Generate and execute the required dbt subset in workflow-scoped Snowflake DEV objects.
+5. Validate the recorded customer-revenue design with the deterministic modelling engine.
+6. Execute that recorded dbt project in workflow-scoped Snowflake DEV objects.
 7. Validate dbt tests and deterministic revenue/payment reconciliation.
 8. Inject the Vantara `INVOICE_STATUS` → `STATUS` schema drift.
 9. Detect, diagnose, and apply one allow-listed column-reference correction.
@@ -30,13 +30,13 @@ smoke. No production or staging action is part of the interview.
 | Systems | PostgreSQL 16 control state, Snowflake, dbt Core |
 | Company | Vantara `tiny`, v1 and v2 |
 | Request | One customer-revenue data product from CRM, billing, payments, and plans |
-| Digital Twin | `TwinAsset`, `TwinRelationship`, `TwinObservation`, `TwinSnapshot`, `EvidenceReference`; PostgreSQL only |
+| Digital Twin | Snowflake schema metadata and accepted drift evidence; PostgreSQL only |
 | Context | One pinned snapshot; server-authorized scope; deterministic bounds; no source rows in model context |
 | Control | Deterministic Supervisor application responsibility over the existing state machine |
 | Reasoning | Typed, tool-less capabilities grouped as Estate Intelligence, Data Engineering, and Reliability |
-| Modelling | Existing DE007 deterministic modelling engine |
+| Modelling | Deterministic modelling engine validates a recorded design against objective signals |
 | Execution | Existing Snowflake/dbt foundations through the sole Governed Tool Gateway; workflow-scoped `AIDE_DEV` objects |
-| Quality | dbt compile/build/tests plus deterministic billed/paid and row-count reconciliation |
+| Quality | dbt compile/build/tests plus fact-to-mart reconciliation; the revenue mart is currency-agnostic and gross of refunds |
 | Fault | One injected rename: `BILLING.INVOICES.INVOICE_STATUS` → `STATUS` |
 | Repair | One allow-listed reference-only dbt SQL correction; at most one automatic application |
 | Verification | Read-only deterministic verifier over immutable evidence; optional LLM explanation cannot set verdict |
@@ -63,15 +63,15 @@ acceptance burden.
 
 ## 4. Acceptance criteria
 
-1. The twin captures the selected physical assets, fields, dbt models/tests, declared
-   lineage, schema/profile/test observations, source authority, freshness, environment,
-   and immutable evidence references.
+1. The twin captures Snowflake schema metadata for the selected physical assets and
+   fields, plus accepted drift evidence. It does not require dbt model, profile, or test
+   observations for Interview acceptance.
 2. Every workflow pins one `TwinSnapshot`; later captures cannot change its context, plan,
    or evidence digest.
 3. Context contains only authorized snapshot members, respects all hard bounds, and blocks
    instead of silently truncating required facts.
-4. The existing modelling engine selects the expected customer-revenue architecture from
-   objective signals and cited twin evidence.
+4. The deterministic modelling engine validates a recorded design against objective
+   signals and cited twin evidence. It does not freely select or generate that design.
 5. Every Snowflake/dbt execute, cancel, and reconcile call enters the Governed Tool
    Gateway and has a persisted intent, risk decision, result, evidence, and audit record.
 6. `AIDE_DEV_RW` cannot read or write `VANTARA_RAW`; the manifest-mediated dual load
@@ -88,12 +88,20 @@ acceptance burden.
 12. The final bundle contains request, twin snapshot/context, plan, risk decisions, tool
     actions, code before/after, tests, reconciliation, failure, repair, final validation,
     verifier result, and cost/timing metadata.
-13. Two offline runs produce identical plan, context, repair, validation, verifier, and
-    evidence digests.
+13. Repeatability compares normalized structural fingerprints. Two offline runs produce
+    identical normalized fingerprints for plan, context, repair, validation, verifier,
+    and evidence.
 14. One credentialed Snowflake/dbt DEV smoke completes without a production/staging action
     or new RAW grant.
 
 The executable test mapping is `docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md` §14.
+
+## 4.1 Data modelling limitation
+
+The demo revenue mart is currency-agnostic and gross of refunds. Fact-to-mart sums can
+pass without a currency grain or refund netting. Dimension tables expose current-row
+validity columns. That shape is not full Type 2 history. These limits are accepted for
+the Interview fingerprint. Changing the SQL would reopen the benchmark evidence.
 
 ## 5. Hard bounds
 

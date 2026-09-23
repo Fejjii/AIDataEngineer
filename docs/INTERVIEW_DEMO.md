@@ -7,15 +7,16 @@
 
 ## What this product demonstrates
 
-Data Pilot AI is an **Autonomous Data Engineering Control Plane**. It does not replace
-Snowflake, dbt, or an orchestrator. It sits above them and converts one business request
-into a governed, tested, repaired, and independently verified development data product.
+Data Pilot AI is a **governed data engineering control plane** for one locked scenario.
+It does not replace Snowflake, dbt, or an orchestrator. It sits above them and converts
+one business request into a governed, tested, repaired development data product. A
+read-only Independent Verifier scores that scenario's evidence pack.
 
 The interview story is fixed:
 
 1. Receive a customer-revenue request.
-2. Understand the relevant CRM and billing estate through a pinned Digital Twin.
-3. Generate the bounded dbt data product.
+2. Pin the relevant CRM and billing estate as a Digital Twin snapshot.
+3. Build the recorded customer-revenue dbt project.
 4. Execute and validate it in workflow-scoped DEV objects.
 5. Inject the accepted `INVOICE_STATUS` → `STATUS` schema drift.
 6. Detect `SCHEMA_MISMATCH`.
@@ -49,13 +50,18 @@ multi-agent framework.
 business request
   → Supervisor (deterministic phase machine)
       → Digital Twin snapshot + bounded EstateContext
-      → modelling engine (existing DE007 rules)
+      → modelling engine (validates the recorded design)
       → Governed Tool Gateway (policy → intent → execute → reconcile → evidence)
       → dbt in AIDE_DEV only
       → one allow-listed schema-drift repair
-      → Independent Verifier (read-only)
+      → Independent Verifier (read-only, drift-repair scenario)
       → EvidenceBundle (manifest of digests)
 ```
+
+`POLICY_CHECK` remains in the phase machine. In the Interview MVP that phase is a
+placeholder task. Real policy enforcement occurs on every Governed Tool Gateway
+dispatch, which persists the risk decision before execution. The broader whole-plan
+policy phase is V1 design, described in [`STATE_MODEL.md`](STATE_MODEL.md).
 
 Identities:
 
@@ -132,12 +138,12 @@ Live checks:
 - the credentialed path then runs InterviewSupervisor → Governed Tool Gateway → real
   Snowflake RO/DEV → real dbt, with policy, dispatch intents, evidence persistence, and
   DEV-only execution
-- Independent Verifier and RAW drift injection remain the offline closed-loop proof;
-  live does not mutate RAW to recreate that drift
 - no production or staging action; no GRANT/REVOKE SQL
 
-The drift → repair → verifier closed loop is proven offline. Live `VANTARA_RAW` is the
-already-loaded tiny v2 estate and must not be mutated.
+Credentialed live Snowflake smoke does not run RAW drift and does not run the
+Independent Verifier. The drift → repair → verifier closed loop is the offline
+scenario. Live `VANTARA_RAW` is the already-loaded tiny v2 estate and must not be
+mutated.
 
 ## Expected sequence
 
@@ -147,7 +153,8 @@ PASS or FAIL.
 
 ## Expected PASS criteria
 
-Deterministic only. No LLM judge.
+Deterministic only. No LLM judge. These criteria describe the offline drift-repair
+scenario. Live smoke is the separate credentialed path above.
 
 - Workflow completes inspect → build → drift → one repair → revalidation → verifier PASS
 - Phase sequence is the accepted Interview MVP sequence
@@ -164,25 +171,35 @@ Measured where possible: assets analyzed, models generated, gateway operations, 
 evaluations, incidents, automatic repairs, human interventions (0), tests, quality
 checks, evidence completeness %, wall-clock and repair duration.
 
-Estimated and labelled: nine automated engineering steps / 690 minutes from the versioned
-evaluation baseline. Deferred manual steps (duplicate-payment repair, docs/lineage, GitHub
-PR) are not counted as automated.
+Composition of the counts that are easy to misread:
+
+- 36 governed operations and 36 policy evaluations come from the same dispatch
+  population. Each governed dispatch records one policy evaluation. The pair shows that
+  every dispatch was evaluated, not two independent measurements.
+- 23 tests are the generated dbt test count.
+- 25 quality checks include required model presence plus mart checks and reconciliations.
+
+The Independent Verifier runs on the drift-repair scenario. It does not run on the
+credentialed live Snowflake smoke.
 
 Never invented: financial ROI, LLM token cost, or Snowflake credits on the offline path.
+The historical manual-minutes baseline is not a result of this demo. It remains only in
+[`EVALUATION_STRATEGY.md`](EVALUATION_STRATEGY.md) §4.
 
 ## Known limitations
 
 - One business request and one automatic repair class
+- `POLICY_CHECK` is a placeholder phase; gateway dispatch is the effective policy control
 - No GitHub delivery, UI, real LLM provider, production, or staging
-- Live RAW is not drifted; repair is the offline closed loop
+- Live RAW is not drifted, and live smoke does not run the verifier
 - Cost metadata is classified, not fabricated
 - Evidence is application-audit immutability, not cryptographic tamper evidence
 
 ## How to explain this in an interview
 
 1. Start from the business request, not from a warehouse UI.
-2. Show that estate understanding is a pinned Twin snapshot, not a chatty catalogue dump.
-3. Show generated dbt models and the first green build.
+2. Show that the estate is a pinned Twin snapshot of Snowflake schema metadata, not a chatty catalogue dump.
+3. Show the recorded dbt project and the first green build.
 4. Inject the rename and show `SCHEMA_MISMATCH` rather than a retry loop.
 5. Show the repair validator refusing anything broader than one column reference.
 6. Show the Independent Verifier reading evidence it cannot mutate.

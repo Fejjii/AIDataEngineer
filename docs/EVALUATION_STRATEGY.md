@@ -10,7 +10,7 @@ command surface.
 | Recruiter / interview benchmark | `uv run aide interview benchmark` (scenario `interview_mvp_customer_revenue_schema_drift`) |
 | Machine-readable demo | `uv run aide interview demo --json` |
 | Implemented adversarial scorecard | [`docs/evaluation/`](evaluation/README.md) and `tests/evaluation/` |
-| Time-saved figures | Labelled estimates in §4; Interview counts **nine** automated steps (**690** minutes) |
+| Time-saved figures | Historical estimate in §4 only (**690** minutes). Not measured productivity or ROI |
 
 There is **no** `aide eval` CLI in this repository. `aide eval run` / `aide eval report`
 are V1 design names from DE-ADR-019. Do not treat them as recruiter commands.
@@ -143,6 +143,14 @@ engineering steps (find/profile/model/staging/intermediate/dims-facts-mart/tests
 debug/reconcile) for **690** minutes. Duplicate-payment repair, documentation/lineage, and
 GitHub PR remain deferred and are **not** counted as automated.
 
+**690 minutes is not measured productivity or ROI.** It is a versioned historical
+estimate kept only in this section. Three of the credited steps are stronger than the
+Interview implementation:
+
+- Find relevant sources is fixed in the Interview scenario. The run does not search an open catalogue.
+- Model design is recorded and validated against objective signals. It is not freely generated.
+- The SCD2 portion of the modelling baseline, inside the dims/facts/mart step, is stronger than the current implementation. The demo does not keep full Type 2 history.
+
 ---
 
 ## 5. Harness design
@@ -163,5 +171,5 @@ Do not run those commands today. The recruiter demo is the Interview scenario, n
 
 - No LLM-as-judge scores in V1 (avoids circularity). Qualitative rubric review may be
   added later as advisory only.
-- Time-saved figures are baseline estimates, not measured human studies.
+- Time-saved figures are baseline estimates, not measured human studies, productivity, or ROI. The **690** minute figure stays in §4 with the fixed-source, recorded-design, and SCD2 caveats above.
 - Live results depend on model versions; reports record provider, model, template versions.
