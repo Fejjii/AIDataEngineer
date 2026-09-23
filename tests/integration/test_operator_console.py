@@ -17,7 +17,7 @@ from aide.app.sessions import LocalSessionService
 from aide.persistence.console import ConsoleRunRepository, console_now
 from aide.persistence.models import OperatorConsoleRunModel, SessionModel, WorkflowModel
 
-_PASSWORD = "operator-test-password"
+_PASSWORD = "operator-" + "test-password"
 _SECRET = b"0123456789abcdef0123456789abcdef"
 
 

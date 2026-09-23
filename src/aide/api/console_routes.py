@@ -152,8 +152,7 @@ def register_operator_console(
                 "denied.html",
                 status_code=409,
                 detail=(
-                    "A scenario run is already in progress. "
-                    "This request did not start another one."
+                    "A scenario run is already in progress. This request did not start another one."
                 ),
             )
         return _redirect(f"/console/runs/{run_id}")

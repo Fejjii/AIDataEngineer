@@ -66,8 +66,8 @@ PostgreSQL must already be migrated (`alembic upgrade head`, including
 `b7e4c1a09d55`). From the repository root:
 
 ```bash
-export AIDE_OPERATOR_PASSWORD='set-a-long-local-password'
-export AIDE_CSRF_SECRET='set-a-local-csrf-secret'
+# Export AIDE_OPERATOR_PASSWORD (12 or more characters) and AIDE_CSRF_SECRET
+# (32 or more characters) in this shell before starting the process.
 export AIDE_SESSION_COOKIE_SECURE=0
 export AIDE_LEGACY_ANONYMOUS_ROUTES=0
 uv run uvicorn asgi:app --host 127.0.0.1 --port 8000
