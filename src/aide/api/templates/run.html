@@ -10,7 +10,10 @@
   {% endif %}
 {% endblock %}
 {% block header_actions %}
-  <a class="button-ghost" href="/console">Overview</a>
+  <form class="inline" method="post" action="/console/logout">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="button-ghost" type="submit">Sign out</button>
+  </form>
 {% endblock %}
 {% block subnav %}
   <nav class="subnav" aria-label="Run sections">
@@ -65,6 +68,7 @@
       <section class="notice">Workflow evidence is unavailable because the run did not record workflow ids.</section>
     {% endif %}
 
+    {% if page.status != "running" %}
     {# Executive summary #}
     <section class="panel" id="summary">
       <div class="panel-head">
@@ -142,13 +146,22 @@
               {% if w.block_reason != "unavailable" %}<div>Block reason: <code>{{ w.block_reason }}</code></div>{% endif %}
             </div>
           {% endif %}
-        {% elif page.status == "running" %}
-          <p class="muted">Workflow running. Stage evidence appears when the run completes; nothing is inferred while it executes.</p>
         {% else %}
           <p class="muted">Workflow evidence unavailable.</p>
         {% endif %}
       </div>
     </section>
+    {% else %}
+    <section class="panel" id="workflow">
+      <div class="panel-head">
+        <div>
+          <div class="kicker">Workflow</div>
+          <h2>Engineering loop</h2>
+          <p class="lede">Stage evidence appears when the run completes. Nothing is inferred while it executes.</p>
+        </div>
+      </div>
+    </section>
+    {% endif %}
 
     {% if w %}
       {# Estate context / Digital Twin #}
@@ -167,7 +180,8 @@
               {{ ui.kv("Snapshot identifier", w.twin.snapshot_id, mono=True) }}
               {{ ui.kv("Manifest digest", w.twin.manifest_sha256, mono=True) }}
               {{ ui.kv("Estate context digest", w.twin.estate_context_sha256, mono=True) }}
-              {{ ui.kv("Selected asset count", w.twin.pinned_asset_count) }}
+              {{ ui.kv("Selected asset count", w.twin.selected_assets | length if w.twin.selected_assets else "unavailable") }}
+              {{ ui.kv("Pinned asset versions", w.twin.pinned_asset_count) }}
             </dl>
             <div>
               <div class="subhead"><h3>Selected assets</h3><span class="count">{{ w.twin.selected_assets | length if w.twin.selected_assets else "unavailable" }}</span></div>

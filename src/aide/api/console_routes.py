@@ -175,7 +175,8 @@ def register_operator_console(
         page = await console.run_page(run_id)
         if page is None:
             return render("denied.html", status_code=404, detail="This run is unavailable.")
-        return render("run.html", page=page)
+        csrf = await sessions.csrf_token_for(request.cookies.get(SESSION_COOKIE))
+        return render("run.html", page=page, csrf_token=csrf)
 
     @app.get("/console/runs/{run_id}/exports/{export_name}")
     async def export_run(request: Request, run_id: UUID, export_name: str) -> Response:

@@ -53,6 +53,11 @@ class _StubDemo:
         raise RuntimeError("boom <script>alert(1)</script>")
 
 
+def _body(html: str) -> str:
+    """Rendered markup after the inline stylesheet, so CSS selectors do not count."""
+    return html.split("<main", 1)[1]
+
+
 def _hidden(html: str, name: str) -> str:
     match = re.search(rf'name="{name}" value="([^"]*)"', html)
     assert match is not None
@@ -146,6 +151,10 @@ async def test_wrong_password_and_bad_csrf_do_not_write(
         home = await client.get("/console")
         assert "taylor.johnson7213@novasystems-0.com" not in home.text
         assert "NOT_VALIDATED" in home.text
+        assert "Run Data Engineering Workflow" in home.text
+        # Run-scoped navigation has no backing data before the first completed run.
+        assert "Incident and Repair" not in home.text
+        assert "No persisted runs yet" in home.text
         blocked = await client.post("/console/runs", data={})
         assert blocked.status_code == 403
         assert await _count(session_factory, OperatorConsoleRunModel) == 0
@@ -171,8 +180,12 @@ async def test_double_submit_refresh_escape_and_missing_export(
         run_id = started.headers["location"].rsplit("/", 1)[-1]
         running = await client.get(f"/console/runs/{run_id}")
         assert running.status_code == 200
+        assert "Workflow running" in running.text
         assert "Running." in running.text
         assert "does not invent stages" in running.text
+        assert 'data-state="complete"' not in _body(running.text)
+        home_while_running = await client.get("/console")
+        assert "View running workflow" in home_while_running.text
         demo.release.set()
         await console.wait()
         failed = await client.get(f"/console/runs/{run_id}")
@@ -181,6 +194,7 @@ async def test_double_submit_refresh_escape_and_missing_export(
         assert "<script>alert(1)</script>" not in failed.text
         assert "&lt;script&gt;" in failed.text
         assert 'data-benchmark="unavailable"' in failed.text
+        assert 'data-verifier="PASS"' not in failed.text
         refreshed = await client.get(f"/console/runs/{run_id}")
         assert refreshed.status_code == 200
         assert demo.calls == 1
@@ -281,12 +295,30 @@ async def test_secure_cookie_flag_and_real_scenario(
         assert "NOT_VALIDATED" in page.text
         assert "mixed-currency" in page.text or "EUR, USD, and GBP" in page.text
         assert page.text.count("Workflow ") >= 2 or page.text.count("workflow") >= 1
+        # The engineering loop is populated from persisted evidence only.
+        assert _body(page.text).count('data-state="complete"') == 12
+        assert 'data-state="unavailable"' not in _body(page.text)
+        assert 'data-state="issue"' not in _body(page.text)
+        assert 'data-drift="present"' in page.text
+        assert "INVOICE_STATUS" in page.text and "SCHEMA_MISMATCH" in page.text
+        assert "Independent Evidence Verification" in page.text
+        assert "does not independently rerun the warehouse" in page.text
+        assert 'data-verifier="PASS"' in page.text
+        assert 'data-preview="present"' in page.text
+        assert 'data-metric="human"' in page.text
         preview = await client.get(f"/console/runs/{run_id}/exports/output-preview")
         assert preview.status_code == 200
         assert "invoiced_amount" in preview.text
         assert "text/csv" in preview.headers["content-type"]
+        for name in ("verifier", "tests", "quality", "generated-sql", "repaired-sql"):
+            exported = await client.get(f"/console/runs/{run_id}/exports/{name}")
+            assert exported.status_code == 200, name
         again = await client.get(f"/console/runs/{run_id}")
         assert again.status_code == 200
+        home = await client.get("/console")
+        assert "Incident and Repair" in home.text
+        assert f"/console/runs/{run_id}#incident" in home.text
+        assert "No persisted runs yet" not in home.text
     async with session_factory() as db:
         row = await ConsoleRunRepository(db).get(UUID(run_id))
     assert row is not None

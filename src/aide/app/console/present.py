@@ -307,14 +307,10 @@ def summarize_snapshot(body: dict[str, Any] | None) -> tuple[str, str, str]:
     workflows = body.get("workflows")
     first = workflows[0] if isinstance(workflows, list) and workflows else None
     verifier = _UNAVAILABLE
-    models = _UNAVAILABLE
-    if isinstance(first, dict):
-        verdict = first.get("verifier_verdict")
-        if verdict in {"PASS", "FAIL"}:
-            verifier = str(verdict)
-        files = first.get("models")
-        if isinstance(files, list):
-            models = str(len(files))
+    if isinstance(first, dict) and first.get("verifier_verdict") in {"PASS", "FAIL"}:
+        verifier = str(first["verifier_verdict"])
+    metrics = body.get("metrics")
+    models = _text(metrics if isinstance(metrics, dict) else None, "models_generated")
     return verifier, _text(body, "benchmark_verdict"), models
 
 
@@ -357,7 +353,7 @@ def _workflow_panel(
     evidence: EvidenceView,
 ) -> WorkflowView:
     snap = snapshot_workflow or {}
-    twin = _twin(snapshot)
+    twin = _twin(snapshot, artifact_bodies)
     incident = _incident(snap, artifact_bodies)
     models = _models(snap.get("models"))
     quality = _quality(snap, artifact_bodies)
@@ -604,23 +600,25 @@ def _outcome_state(present: bool, passed: bool) -> str:
     return _COMPLETE if passed else _ISSUE
 
 
-def _twin(snapshot: dict[str, Any] | None) -> TwinView:
-    body = snapshot.get("digital_twin") if isinstance(snapshot, dict) else None
-    if not isinstance(body, dict):
+def _twin(snapshot: dict[str, Any] | None, bodies: dict[str, dict[str, Any]]) -> TwinView:
+    """Digital Twin summary. Per-workflow artifacts win over the run-level snapshot copy."""
+    summary = snapshot.get("digital_twin") if isinstance(snapshot, dict) else None
+    body = summary if isinstance(summary, dict) else None
+    snapshot_id = _text(bodies.get("twin_snapshot"), "twin_snapshot_id")
+    estate_digest = _text(bodies.get("estate_context"), "sha256")
+    if snapshot_id == _UNAVAILABLE:
+        snapshot_id = _text(body, "snapshot_id")
+    if estate_digest == _UNAVAILABLE:
+        estate_digest = _text(body, "estate_context_sha256")
+    if body is None and snapshot_id == _UNAVAILABLE and estate_digest == _UNAVAILABLE:
         return TwinView(_UNAVAILABLE, _UNAVAILABLE, _UNAVAILABLE, _UNAVAILABLE, _UNAVAILABLE, ())
-    assets = body.get("selected_assets")
-    selected = (
-        tuple(str(item) for item in assets if isinstance(item, str))
-        if isinstance(assets, list)
-        else ()
-    )
     return TwinView(
         state=_PRESENT,
-        snapshot_id=_text(body, "snapshot_id"),
+        snapshot_id=snapshot_id,
         manifest_sha256=_text(body, "manifest_sha256"),
-        estate_context_sha256=_text(body, "estate_context_sha256"),
+        estate_context_sha256=estate_digest,
         pinned_asset_count=_text(body, "pinned_asset_count"),
-        selected_assets=selected,
+        selected_assets=_string_list(body, "selected_assets"),
     )
 
 
@@ -628,9 +626,8 @@ def _incident(snap: dict[str, Any], bodies: dict[str, dict[str, Any]]) -> Incide
     proposal = bodies.get("repair_proposal")
     validation = bodies.get("repair_validation")
     application = bodies.get("repair_application")
-    drift = bodies.get("schema_drift")
     revalidation = bodies.get("post_repair_validation")
-    drift_body = drift if isinstance(drift, dict) else None
+    drift_body = _drift_observation(bodies.get("twin_observations"))
     proposal_body = proposal if isinstance(proposal, dict) else None
     source = drift_body or proposal_body
     present = source is not None
@@ -661,6 +658,14 @@ def _incident(snap: dict[str, Any], bodies: dict[str, dict[str, Any]]) -> Incide
         revalidation_state=_PRESENT if isinstance(revalidation, dict) else _UNAVAILABLE,
         revalidation=_revalidation(revalidation),
     )
+
+
+def _drift_observation(body: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The persisted DriftEvidence inside the twin_observations evidence section."""
+    if not isinstance(body, dict):
+        return None
+    drift = body.get("drift")
+    return drift if isinstance(drift, dict) and drift.get("drifted") is True else None
 
 
 def _asset_address(body: dict[str, Any] | None) -> str:
@@ -781,7 +786,7 @@ def _reconciliation(
             CheckView(
                 "revenue_payment_reconciliation",
                 _flag(revenue, "passed"),
-                "Staged invoice and payment totals reconcile with the executed mart",
+                "Supervisor revenue and payment reconciliation flag (evidence section)",
             )
         )
     gateway = bodies.get("reconciliation")
@@ -790,7 +795,7 @@ def _reconciliation(
             CheckView(
                 "gateway_dispatch_reconciled",
                 _flag(gateway, "reconciled"),
-                "Every governed tool dispatch reached a reconciled outcome",
+                "All governed tool dispatches reconciled flag (evidence section)",
             )
         )
     return tuple(rows)

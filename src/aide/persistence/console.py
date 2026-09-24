@@ -29,7 +29,9 @@ EVIDENCE_ARTIFACT_TYPES: frozenset[str] = frozenset(
         "repair_validation",
         "repair_application",
         "original_failure",
-        "schema_drift",
+        "twin_snapshot",
+        "estate_context",
+        "twin_observations",
         "dbt_parse",
         "dbt_compile",
         "dbt_execution",
@@ -147,9 +149,7 @@ class ConsoleRunRepository:
             found.setdefault(row.workflow_id, {})[row.artifact_type] = row.body
         return found
 
-    async def snapshot_bodies(
-        self, artifact_ids: tuple[UUID, ...]
-    ) -> dict[UUID, dict[str, Any]]:
+    async def snapshot_bodies(self, artifact_ids: tuple[UUID, ...]) -> dict[UUID, dict[str, Any]]:
         """Console snapshot bodies keyed by artifact id. Used for the history list."""
         if not artifact_ids:
             return {}

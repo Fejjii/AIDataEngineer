@@ -101,11 +101,14 @@ code { font-size: 0.85em; background: var(--neutral-soft); padding: 0.05em 0.35e
 .page-header .lede { color: var(--text-muted); margin-top: 4px; max-width: 70ch; }
 .page-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .page-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.stack { display: grid; gap: 18px; }
+.stack { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr); }
 .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
 .grid-tight { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-.two-col { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
-.compare { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+.two-col { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); }
+.compare { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); }
+/* Grid items default to min-width:auto, which lets wide tables and code blocks push the
+   whole layout past the viewport. Every item may shrink; wide content scrolls inside it. */
+.stack > *, .grid > *, .two-col > *, .compare > * { min-width: 0; }
 
 /* Cards and panels */
 .card {
@@ -116,10 +119,13 @@ code { font-size: 0.85em; background: var(--neutral-soft); padding: 0.05em 0.35e
 .card-value { font-size: 1.25rem; font-weight: 650; line-height: 1.2; word-break: break-word; }
 .card-value.small { font-size: 0.95rem; }
 .card-note { color: var(--text-muted); font-size: 0.8rem; margin-top: 6px; }
+.card-note.mono { word-break: break-all; font-size: 0.72rem; }
 .metric-card .card-value { font-size: 1.5rem; }
 .metric-card .card-value.unavailable { color: var(--text-faint); font-size: 1rem; font-weight: 500; }
 
-.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; overflow: hidden; }
+.card { min-width: 0; overflow-wrap: anywhere; }
+.lede, .kv dd, .stage-detail, .card-value, .notice { overflow-wrap: anywhere; }
 .panel > .panel-head {
   display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap;
   padding: 14px 18px; border-bottom: 1px solid var(--border);
@@ -155,7 +161,7 @@ code { font-size: 0.85em; background: var(--neutral-soft); padding: 0.05em 0.35e
 .badge-error { background: var(--error-soft); color: var(--error); border-color: #f3c3c6; }
 .badge-info { background: var(--accent-soft); color: var(--accent); border-color: #c5d8f2; }
 .badge-neutral { background: var(--neutral-soft); color: var(--neutral); border-color: #d5dce3; }
-.badge-correctness { background: var(--correctness-soft); color: var(--correctness); border-color: #d8c8ee; }
+.badge-correctness { background: var(--correctness-soft); color: var(--correctness); border-color: #d8c8ee; white-space: normal; }
 .badge-incident { background: var(--incident-soft); color: var(--incident); border-color: #f5cfa4; }
 .badge-repair { background: var(--repair-soft); color: var(--repair); border-color: #b5e0da; }
 .badge-verify { background: var(--verify-soft); color: var(--verify); border-color: #cbc6f2; }
@@ -279,7 +285,7 @@ details.disclosure.quiet { border-style: dashed; background: var(--surface-muted
 
 /* Responsive */
 @media (max-width: 900px) {
-  .compare { grid-template-columns: 1fr; }
+  .compare { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 640px) {
   .appbar-inner, .subnav-inner, .shell { padding-left: 14px; padding-right: 14px; }
