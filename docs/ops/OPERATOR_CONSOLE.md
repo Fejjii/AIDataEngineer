@@ -1,8 +1,9 @@
 # Operator console
 
-**Task:** INTERACTIVE_VALIDATION_001  
-**Audience:** the operator who accepts the synthetic Interview scenario  
-**Scope:** one authenticated browser page inside the existing FastAPI process.
+**Tasks:** INTERACTIVE_VALIDATION_001 (console), UI_PRODUCT_POLISH_001 (product UI)  
+**Audience:** the operator who accepts the synthetic Interview scenario; interview
+and recruiter demonstrations  
+**Scope:** authenticated server-rendered pages inside the existing FastAPI process.
 
 This is the fixed Vantara customer-revenue schema-drift scenario. It is not a
 generic request box, an upload surface, or a validated finance product.
@@ -18,6 +19,40 @@ benchmark can compare them. The page shows persisted workflow ids, generated
 SQL, a bounded output preview captured from that execution, drift and repair
 SQL, individual test and quality outcomes, and verifier evidence when those
 artifacts exist.
+
+## Screens
+
+| Route | Screen | Content |
+|---|---|---|
+| `/console/login` | Sign-in | Data Pilot AI brand, Interview MVP and synthetic badges, operator password |
+| `/console` | Overview | Summary cards (environment, scenario, data sources, models, workflow status, latest result), primary action, scenario panel with a secondary Validation scope disclosure, grouped data estate, persisted run history |
+| `/console/runs/{run_id}` | Run | Result summary, engineering-loop timeline, Digital Twin estate context, incident and bounded repair before/after, data product preview and generated SQL, separated quality signals, Independent Evidence Verification, evidence bundle, audit events, exports, determinism rerun |
+
+Presentation rules:
+
+- Every number on the run page is read from persisted artifacts for that run.
+  The `operator_console_snapshot` artifact (schema version 2) stores the
+  benchmark value metrics, evidence completeness, Digital Twin summary, and
+  per-workflow phase sequence and outcomes that the run just produced. Version 1
+  snapshots from earlier runs still render; the fields they lack show
+  `unavailable`.
+- The console reads back only allowlisted artifact types
+  (`aide.persistence.console.EVIDENCE_ARTIFACT_TYPES`). All of them are already
+  written by the Supervisor: repair proposal, validation and application,
+  original failure, twin snapshot and estate context digests, drift observation,
+  dbt parse/compile/execution/tests flags, post-repair validation, quality
+  results, revenue reconciliation, gateway reconciliation, verifier verdict, and
+  the evidence bundle.
+- The timeline marks a stage complete only when its evidence exists. A verifier
+  `FAIL`, a rejected repair, or a failed revalidation renders as an issue, never
+  as a pass. While a run executes the page shows "Workflow running" and
+  refreshes; no stage progress is inferred.
+- Run-scoped navigation (Workflow, Incident and Repair, Data Product, Quality,
+  Evidence) is shown only when a completed run exists.
+- Business correctness stays `NOT_VALIDATED` on the overview, the run header,
+  the data product panel, the verification panel, and every history row.
+- No JavaScript. The CSP remains `script-src 'none'`; styling is one inline
+  stylesheet template (`_theme.css`) and native `<details>` disclosures.
 
 Three labels stay separate:
 
@@ -111,6 +146,9 @@ this image later:
 - [ ] Execution, evidence consistency, and business correctness stay distinct.
 - [ ] Currency, refund, and history limitations are visible.
 - [ ] HTML in a failure message is escaped. Export paths stay on the allowlist.
+- [ ] The engineering-loop timeline, result summary, incident and repair, quality,
+      verification, and evidence panels show persisted values or `unavailable`.
+- [ ] The page is usable at about 1440 px, tablet width, and about 390 px.
 
 ## Human acceptance script
 
@@ -118,16 +156,23 @@ this image later:
 Sofien completes it on the deployed or local synthetic process.
 
 1. Sign in at `/console/login`.
-2. Inspect the scenario, objective, synthetic label, and masked source samples.
-3. Start a run. Confirm the page says the benchmark executes two workflows and
-   does not invent stages.
-4. When the run completes, inspect generated SQL and the actual output preview.
-   Confirm amounts are not labelled validated financial revenue.
-5. Inspect drift diagnosis, original SQL, and repaired SQL.
-6. Examine individual tests, quality outcomes, and verifier evidence. Note
-   anything marked unavailable.
-7. Reopen the same run from history. Confirm the workflow ids did not change
+2. Inspect the scenario, objective, synthetic label, Validation scope, and the
+   grouped masked source samples.
+3. Start a run. Confirm the page says "Workflow running" and does not invent
+   stages while the benchmark executes two workflows.
+4. When the run completes, read the result summary and the engineering-loop
+   timeline. Confirm every value comes from this run (compare with the exports)
+   and that nothing shows a PASS where evidence is missing.
+5. Inspect the incident and repair panel: failure class, `INVOICE_STATUS` to
+   `STATUS`, original SQL, repaired SQL, repair validation rules, and
+   revalidation.
+6. Inspect generated SQL and the actual output preview. Confirm amounts are
+   labelled synthetic executed output, not validated financial revenue.
+7. Examine dbt tests, quality checks, reconciliation, and the Independent
+   Evidence Verification panel separately. Note anything marked unavailable.
+8. Reopen the same run from history. Confirm the workflow ids did not change
    and no second run started.
+9. Repeat steps 1, 4, and 5 in a narrow (about 390 px) browser window.
 
 Record the run id and what you accepted or rejected. Do not mark business
 correctness validated.

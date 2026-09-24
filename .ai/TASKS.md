@@ -309,6 +309,34 @@ tasks do not run concurrently because their shared high-conflict contracts are s
 - Git authority: branch-only; commit/push; one PR to `main`; do not merge.
 - Deployment authority: package and document only. Do not change the live service.
 
+## UI_PRODUCT_POLISH_001 — Data Pilot AI console product polish
+
+- Compact ID: `UI_PRODUCT_POLISH_001`
+- Priority: P1
+- Status: IN REVIEW (PR 37; UI IMPLEMENTED; USER ACCEPTANCE PENDING; BUSINESS
+  CORRECTNESS NOT VALIDATED; do not merge from the agent)
+- Owner: Cursor Cloud agent (Claude Fable 5.1)
+- Environment: CURSOR_CLOUD
+- Branch: `cursor/ui-product-polish-001-2d7d`
+- Base commit: `804b0dc` (`origin/main`, merge of INTERACTIVE_VALIDATION_001)
+- Dependencies: INTERACTIVE_VALIDATION_001 merged
+- Risk: Low (presentation; additive snapshot fields; no capability change)
+- Goal: Turn the operator console into an interview-ready Data Pilot AI
+  interface: branded login, overview dashboard, grouped data estate,
+  evidence-driven workflow timeline, incident and bounded repair before/after,
+  data product preview, separated quality signals, Independent Evidence
+  Verification, evidence bundle, and run history. Keep FastAPI + Jinja, CSP,
+  authentication, CSRF, repair semantics, generated SQL, and benchmark
+  semantics unchanged.
+- Explicit exclusions: SPA or React, new frontend service, CDN dependencies,
+  new capabilities, generic request box, uploads, invented metrics, labelling
+  verifier PASS as business correctness.
+- Expected files: console templates and theme, `aide.app.console` presenter,
+  snapshot v2, console artifact allowlist, focused tests,
+  `docs/ops/OPERATOR_CONSOLE.md`, run report.
+- Git authority: branch-only; commit/push; one PR to `main`; do not merge.
+- Deployment authority: none.
+
 ---
 
 # Historical DE implementation backlog

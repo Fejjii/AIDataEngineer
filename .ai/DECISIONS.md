@@ -259,3 +259,22 @@ emitter, retry summary).
   does not replace the deferred Vite/React SPA.
 - **Rejected:** a second frontend service; browser token storage; treating
   verifier PASS as validated revenue; changing generated SQL in this task.
+
+## UI_PRODUCT_POLISH_001 — Console reads only persisted evidence; snapshot v2 is additive
+
+- **Date:** 2026-09-24
+- **Status:** Proposed for review with PR 37 (additive under DE-ADR-026)
+- **Decision:** The product-polished console keeps the server-rendered Jinja
+  architecture, `script-src 'none'`, the operator session, and CSRF. The
+  `operator_console_snapshot` artifact moves to schema version 2 and adds the
+  benchmark value metrics, evidence completeness detail, Digital Twin summary,
+  and per-workflow phase sequence and outcomes that the run just produced;
+  version 1 snapshots stay readable. The console artifact allowlist grows only
+  by evidence types the Supervisor already persists. The engineering-loop
+  timeline, result summary, and history verdicts are derived from those
+  artifacts and render `unavailable` when they are missing; a verifier `FAIL`
+  or rejected repair renders as an issue. Business correctness stays
+  `NOT_VALIDATED` everywhere.
+- **Rejected:** client-side JavaScript or a SPA; live stage progress while a
+  run executes; hardcoded or expected-value metrics; combining dbt tests,
+  quality checks, reconciliation, and verification into one pass.
