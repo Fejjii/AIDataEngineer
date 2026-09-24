@@ -1,0 +1,63 @@
+{# Shared presentation helpers. Values arrive pre-computed; nothing here derives evidence. #}
+
+{% macro tone_for(value) -%}
+  {%- set v = (value | string) | lower -%}
+  {%- if v in ["completed", "pass", "true", "verified", "passed", "ok", "yes"] -%}success
+  {%- elif v in ["running", "in_progress"] -%}info
+  {%- elif v in ["failed", "fail", "false", "error", "blocked", "no"] -%}error
+  {%- elif v in ["warn", "warning", "partial"] -%}warning
+  {%- elif v == "not_validated" -%}correctness
+  {%- else -%}neutral
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro badge(value, tone=None, label=None) -%}
+  <span class="badge badge-{{ tone if tone else tone_for(value) }}">{{ label if label is not none else value }}</span>
+{%- endmacro %}
+
+{% macro flag_badge(value, yes="passed", no="failed") -%}
+  {%- if value == "true" -%}{{ badge("true", "success", yes) }}
+  {%- elif value == "false" -%}{{ badge("false", "error", no) }}
+  {%- else -%}{{ badge("unavailable", "neutral") }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro business_badge(value) -%}
+  <span class="badge badge-correctness" data-business-correctness="{{ value }}">Business correctness {{ value | replace("_", " ") }}</span>
+{%- endmacro %}
+
+{% macro kv(label, value, mono=False) -%}
+  <dt>{{ label }}</dt><dd{% if mono %} class="mono"{% endif %}>{{ value }}</dd>
+{%- endmacro %}
+
+{% macro check_table(rows, name_header="Check", outcome_header="Outcome", detail_header="Detail", yes="passed", no="failed") -%}
+  <div class="scroll table-frame">
+    <table class="table compact">
+      <thead><tr><th>{{ name_header }}</th><th>{{ outcome_header }}</th><th>{{ detail_header }}</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td class="mono">{{ row.name }}</td>
+            <td>
+              {% if row.outcome in ["true", "false"] %}{{ flag_badge(row.outcome, yes, no) }}
+              {% else %}{{ badge(row.outcome) }}{% endif %}
+            </td>
+            <td class="muted small">{{ row.detail }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{%- endmacro %}
+
+{% macro sql_block(title, sql, tone=None, tag=None) -%}
+  <div class="code-frame">
+    <div class="code-head">
+      <span>{{ title }}</span>
+      {% if tag %}{{ badge(tag, tone or "neutral") }}{% endif %}
+    </div>
+    <pre class="code">{{ sql }}</pre>
+  </div>
+{%- endmacro %}
+
+{% macro short_id(value) -%}{{ (value | string)[:8] }}{%- endmacro %}

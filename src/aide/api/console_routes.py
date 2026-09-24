@@ -30,6 +30,12 @@ from aide.domain.benchmark import (
     OPERATOR_LIMITATIONS,
 )
 from aide.domain.principal import Role
+from aide.domain.repair import (
+    ACCEPTED_ARTIFACT_PATH,
+    ACCEPTED_ASSET_ADDRESS,
+    ACCEPTED_FROM_COLUMN,
+    ACCEPTED_TO_COLUMN,
+)
 
 _TEMPLATES = Path(__file__).resolve().parent / "templates"
 _LOGIN_COOKIE = "aide_login_nonce"
@@ -134,8 +140,12 @@ def register_operator_console(
             execution_label=OPERATOR_EXECUTION_LABEL,
             business_correctness=OPERATOR_BUSINESS_CORRECTNESS,
             limitations=OPERATOR_LIMITATIONS,
-            sources=console.source_catalog(),
-            runs=await console.list_runs(),
+            estate=console.source_catalog(),
+            dashboard=await console.dashboard(),
+            drift_from=ACCEPTED_FROM_COLUMN,
+            drift_to=ACCEPTED_TO_COLUMN,
+            drift_asset=".".join(ACCEPTED_ASSET_ADDRESS),
+            repair_path=ACCEPTED_ARTIFACT_PATH,
             csrf_token=csrf,
         )
 

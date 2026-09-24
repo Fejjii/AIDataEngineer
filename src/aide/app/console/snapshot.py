@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from aide.app.benchmarking.summary import summarize_interview_demo
 from aide.app.supervisor import InterviewResult
 from aide.capabilities.io import RunTestsOutput
 from aide.connectors.snowflake.masking import mask_row
@@ -18,6 +19,7 @@ from aide.domain.benchmark import (
     OPERATOR_EXECUTION_LABEL,
     OPERATOR_LIMITATIONS,
     BenchmarkResult,
+    BenchmarkRunRecord,
 )
 from aide.domain.repair import ACCEPTED_ARTIFACT_PATH
 from aide.persistence.console import SNAPSHOT_ARTIFACT_TYPE
@@ -27,6 +29,11 @@ _MAX_SQL_FILES = 24
 _MAX_SQL_CHARS = 8000
 _MAX_TESTS = 40
 _MAX_CELL = 80
+
+# Version 2 adds benchmark metrics, evidence completeness, the Digital Twin summary,
+# and per-workflow phase and outcome fields. Version 1 snapshots remain readable.
+SNAPSHOT_SCHEMA_VERSION = 2
+READABLE_SNAPSHOT_VERSIONS: frozenset[int] = frozenset({1, SNAPSHOT_SCHEMA_VERSION})
 
 BUSINESS_CORRECTNESS = OPERATOR_BUSINESS_CORRECTNESS
 EXECUTION_LABEL = OPERATOR_EXECUTION_LABEL
@@ -39,8 +46,9 @@ def build_operator_snapshot(
     second: InterviewResult,
 ) -> dict[str, Any]:
     """Return a JSON-safe snapshot small enough to store as one artifact."""
+    twin = summarize_interview_demo(report, first).digital_twin
     return {
-        "schema_version": 1,
+        "schema_version": SNAPSHOT_SCHEMA_VERSION,
         "artifact_type": SNAPSHOT_ARTIFACT_TYPE,
         "scenario_id": report.scenario_id or INTERVIEW_SCENARIO_ID,
         "business_objective": INTERVIEW_REQUEST,
@@ -48,23 +56,41 @@ def build_operator_snapshot(
         "business_correctness": BUSINESS_CORRECTNESS,
         "limitations": list(LIMITATIONS),
         "benchmark_verdict": report.verdict.value,
+        "workflow_outcome": report.workflow_outcome,
         "determinism_equivalent": report.determinism.equivalent,
         "evidence_completeness_pct": report.evidence_completeness.completeness_pct,
         "evidence_complete": report.evidence_completeness.complete,
+        "evidence_completeness": report.evidence_completeness.model_dump(mode="json"),
+        "metrics": report.value_metrics.model_dump(mode="json"),
+        "digital_twin": twin.model_dump(mode="json"),
         "workflows": [
-            _workflow_snapshot(first, report.runs[0].workflow_outcome),
-            _workflow_snapshot(second, report.runs[1].workflow_outcome),
+            _workflow_snapshot(first, report.runs[0]),
+            _workflow_snapshot(second, report.runs[1]),
         ],
     }
 
 
-def _workflow_snapshot(result: InterviewResult, outcome: str) -> dict[str, Any]:
+def _workflow_snapshot(result: InterviewResult, record: BenchmarkRunRecord) -> dict[str, Any]:
     preview = result.extra.get("output_preview")
     return {
         "workflow_id": str(result.workflow_id),
-        "benchmark_outcome": outcome,
+        "benchmark_outcome": record.workflow_outcome,
         "fail_reason": result.fail_reason,
         "block_reason": result.block_reason,
+        "phase_sequence": list(result.workflow_states),
+        "repair_class": record.repair_class,
+        "repair_count": record.repair_count,
+        "test_outcome": record.test_outcome,
+        "quality_outcome": record.quality_outcome,
+        "reconciliation_outcome": record.reconciliation_outcome,
+        "verifier_verdict": (
+            record.verifier_verdict.value if record.verifier_verdict is not None else None
+        ),
+        "tests_executed": record.tests_executed,
+        "quality_checks_executed": record.quality_checks_executed,
+        "governed_tool_operations": record.governed_tool_operations,
+        "policy_evaluations": record.policy_evaluations,
+        "wall_clock_duration_ms": record.wall_clock_duration_ms,
         "models": _model_files(result),
         "original_sql": _original_sql(result),
         "individual_tests": _tests(result),
@@ -204,6 +230,8 @@ __all__ = [
     "BUSINESS_CORRECTNESS",
     "EXECUTION_LABEL",
     "LIMITATIONS",
+    "READABLE_SNAPSHOT_VERSIONS",
+    "SNAPSHOT_SCHEMA_VERSION",
     "build_operator_snapshot",
     "failure_messages",
     "public_failure_message",

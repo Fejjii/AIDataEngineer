@@ -18,6 +18,8 @@ from aide.persistence.models import (
 )
 
 SNAPSHOT_ARTIFACT_TYPE = "operator_console_snapshot"
+# Only these persisted artifact types are read back for the console. Every entry is
+# already written by the Supervisor or the console itself; nothing here is derived.
 EVIDENCE_ARTIFACT_TYPES: frozenset[str] = frozenset(
     {
         SNAPSHOT_ARTIFACT_TYPE,
@@ -27,7 +29,15 @@ EVIDENCE_ARTIFACT_TYPES: frozenset[str] = frozenset(
         "repair_validation",
         "repair_application",
         "original_failure",
+        "schema_drift",
+        "dbt_parse",
+        "dbt_compile",
+        "dbt_execution",
         "dbt_tests",
+        "post_repair_validation",
+        "reconciliation",
+        "revenue_payment_reconciliation",
+        "evidence_bundle",
     }
 )
 
@@ -136,6 +146,22 @@ class ConsoleRunRepository:
                 continue
             found.setdefault(row.workflow_id, {})[row.artifact_type] = row.body
         return found
+
+    async def snapshot_bodies(
+        self, artifact_ids: tuple[UUID, ...]
+    ) -> dict[UUID, dict[str, Any]]:
+        """Console snapshot bodies keyed by artifact id. Used for the history list."""
+        if not artifact_ids:
+            return {}
+        rows = (
+            await self._session.scalars(
+                select(ArtifactModel).where(
+                    ArtifactModel.artifact_id.in_(artifact_ids),
+                    ArtifactModel.artifact_type == SNAPSHOT_ARTIFACT_TYPE,
+                )
+            )
+        ).all()
+        return {row.artifact_id: row.body for row in rows if isinstance(row.body, dict)}
 
     async def audit_events(
         self, workflow_ids: tuple[UUID, ...], *, limit: int = 80

@@ -1,9 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Console — request denied{% endblock %}
+{% block title %}Request not completed — Data Pilot AI{% endblock %}
 {% block body %}
-  <section class="card">
-    <h2>Request denied</h2>
-    <p>{{ detail }}</p>
-    <p><a href="/console">Back to the console</a></p>
+  <div class="page-header">
+    <div>
+      <h1>Request not completed</h1>
+      <p class="lede">The console refused this request. Nothing was changed.</p>
+    </div>
+  </div>
+  <section class="card" style="max-width: 640px;">
+    <p class="notice warning">{{ detail }}</p>
+    <p style="margin-top: 12px;"><a class="button secondary" href="/console">Back to the overview</a></p>
   </section>
 {% endblock %}
