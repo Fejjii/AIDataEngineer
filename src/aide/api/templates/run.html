@@ -22,7 +22,8 @@
       {% if w %}
         {% if w.twin.state == "present" %}<a href="#estate">Estate context</a>{% endif %}
         {% if w.incident.state == "present" %}<a href="#incident">Incident and Repair</a>{% endif %}
-        {% if w.models or w.preview.state == "present" %}<a href="#data-product">Data Product</a>{% endif %}
+        {% if w.preview.state == "present" %}<a href="#preview">Data product preview</a>{% endif %}
+        {% if w.models or w.preview.state == "present" %}<a href="#data-product">Generated SQL</a>{% endif %}
         {% if w.quality.tests_state == "present" or w.quality.quality_state == "present" %}<a href="#quality">Quality</a>{% endif %}
         {% if w.verification.state == "present" %}<a href="#verification">Verification</a>{% endif %}
         <a href="#evidence">Evidence</a>
@@ -45,6 +46,9 @@
       <p class="faint small mono">{{ page.run_id }}</p>
     </div>
     <div class="page-actions">
+      {% if w and w.preview.state == "present" %}
+        <a class="button secondary" href="#preview">Data product preview</a>
+      {% endif %}
       <a class="button secondary" href="/console">Back to overview</a>
     </div>
   </div>
@@ -73,30 +77,62 @@
     <section class="panel" id="summary">
       <div class="panel-head">
         <div>
-          <div class="kicker">Result summary</div>
+          <div class="kicker">What happened</div>
           <h2>Persisted run evidence</h2>
-          <p class="lede">Every value below is read from stored artifacts for this run. Fields the run did not persist are shown as unavailable.</p>
-        </div>
-        <div class="head-badges">
-          <span class="badge badge-outline">Benchmark</span>
-          <span data-benchmark="{{ page.benchmark_verdict }}">{{ ui.badge(page.benchmark_verdict) }}</span>
-          <span class="badge badge-outline">Deterministic rerun</span>
-          {{ ui.flag_badge(page.determinism, "equivalent", "differs") }}
+          {% if page.what_happened %}
+            <p class="lede narrative" data-narrative="present">{{ page.what_happened }}</p>
+          {% else %}
+            <p class="lede" data-narrative="absent">A narrative is shown only when this run stored the counts it would describe.</p>
+          {% endif %}
         </div>
       </div>
       <div class="panel-body">
+        <div class="signals" aria-label="Separated judgements">
+          {% for signal in page.signals %}
+            <article class="card signal-card" data-signal="{{ signal.key }}">
+              <div class="card-label">{{ signal.label }}</div>
+              <div class="card-value small">
+                {% if signal.key == "verification" %}
+                  <span data-verifier="{{ signal.value }}">{{ ui.badge(signal.value) }}</span>
+                {% elif signal.key == "business" %}
+                  {{ ui.business_badge(signal.value) }}
+                {% else %}
+                  {{ ui.badge(signal.value) }}
+                {% endif %}
+              </div>
+              <div class="card-note">{{ signal.detail }}</div>
+            </article>
+          {% endfor %}
+        </div>
+        <div class="subhead" style="margin-top: 16px;"><h3>Primary results</h3><span class="count">from the stored benchmark metrics</span></div>
         <div class="grid grid-tight">
-          {% for metric in page.summary %}
+          {% for metric in page.summary if metric.group == "primary" %}
             <article class="card metric-card" data-metric="{{ metric.key }}">
               <div class="card-label">{{ metric.label }}</div>
-              <div class="card-value{% if metric.value == 'unavailable' %} unavailable{% endif %}"{% if metric.key == "verifier" %} data-verifier="{{ metric.value }}"{% endif %}>{% if metric.key == "verifier" %}{{ ui.badge(metric.value) }}{% else %}{{ metric.value }}{% endif %}</div>
+              <div class="card-value{% if metric.value == 'unavailable' %} unavailable{% endif %}">{{ metric.value }}</div>
               {% if metric.note %}<div class="card-note">{{ metric.note }}</div>{% endif %}
             </article>
           {% endfor %}
         </div>
+        <div class="subhead" id="telemetry" style="margin-top: 16px;"><h3>Technical telemetry</h3><span class="count">not a product result</span></div>
+        <p class="muted small">Governed operations and policy evaluations count the same dispatch population: each governed tool call is evaluated by policy once.</p>
+        <div class="grid grid-tight secondary-metrics">
+          {% for metric in page.summary if metric.group == "secondary" %}
+            <article class="card metric-card metric-secondary" data-metric="{{ metric.key }}">
+              <div class="card-label">{{ metric.label }}</div>
+              <div class="card-value{% if metric.value == 'unavailable' %} unavailable{% endif %}">{{ metric.value }}</div>
+              {% if metric.note %}<div class="card-note">{{ metric.note }}</div>{% endif %}
+            </article>
+          {% endfor %}
+          <article class="card metric-card metric-secondary" data-metric="determinism">
+            <div class="card-label">Determinism</div>
+            <div class="card-value small">{{ ui.flag_badge(page.determinism, "equivalent", "differs") }}</div>
+            <div class="card-note">The benchmark ran the scenario twice and compared fingerprints. Benchmark <span data-benchmark="{{ page.benchmark_verdict }}">{{ ui.badge(page.benchmark_verdict) }}</span>.</div>
+          </article>
+        </div>
         <div class="notice correctness" style="margin-top: 14px;">
           <strong>Business correctness: {{ page.business_correctness }}.</strong>
-          A verifier PASS is evidence consistency for the drift repair, not validated revenue.
+          Pending validation. A verifier PASS is evidence consistency for the drift repair, not validated revenue.
           <details class="disclosure quiet" style="margin-top: 8px; border-color: #d8c8ee;">
             <summary>Validation scope</summary>
             <div class="disclosure-body"><ul class="small">{% for item in page.limitations %}<li>{{ item }}</li>{% endfor %}</ul></div>
@@ -110,9 +146,10 @@
       <div class="panel-head">
         <div>
           <div class="kicker">Workflow</div>
-          <h2>Engineering loop</h2>
+          <h2>What the workflow did</h2>
           <p class="lede">
             {% if w %}
+              Read top to bottom: objective, estate, models, execution, tests, the incident, the repair, revalidation, verification, and evidence.
               Primary workflow <span class="mono">{{ w.workflow_id }}</span> · control-plane state {{ ui.badge(w.control_plane_state) }} · benchmark outcome {{ ui.badge(w.benchmark_outcome) }}{% if w.duration != "unavailable" %} · {{ w.duration }}{% endif %}
             {% else %}
               Stages populate from persisted evidence after the run completes.
@@ -200,8 +237,8 @@
         <div class="panel-head">
           <div>
             <div class="kicker">Incident and repair</div>
-            <h2>Schema drift on the invoice source</h2>
-            <p class="lede">The second execution runs against a drifted source. The Supervisor classifies the failure, proposes exactly one allowlisted column-reference repair, validates it against the repair rules, applies it once, and reruns the pipeline.</p>
+            <h2>{% if w.incident.from_column != "unavailable" %}{{ w.incident.from_column }} renamed to {{ w.incident.to_column }}{% else %}Schema drift{% endif %}</h2>
+            <p class="lede">One planted schema change. The workflow may apply one allowlisted column-reference repair, then rerun validation. It does not rewrite the model freely.</p>
           </div>
           <div class="head-badges">
             <span data-drift="{{ w.incident.state }}">{{ ui.badge("incident detected" if w.incident.state == "present" else "unavailable", "incident" if w.incident.state == "present" else "neutral") }}</span>
@@ -244,15 +281,25 @@
           </div>
 
           <hr class="divider">
-          <div class="subhead"><h3>Before and after</h3><span class="count">{{ w.incident.repair_path if w.incident.repair_path != "unavailable" else "" }}</span></div>
+          <div class="subhead"><h3>Original SQL and repaired SQL</h3><span class="count">{{ w.incident.repair_path if w.incident.repair_path != "unavailable" else "" }}</span></div>
+          {% if w.incident.change_summary %}
+            <p class="change-callout">{{ w.incident.change_summary }}</p>
+          {% endif %}
+          {% if w.incident.replacements %}
+            <p class="small">Column reference: {% for item in w.incident.replacements %}<span class="chip">{{ item }}</span>{% endfor %}</p>
+          {% endif %}
           <div class="compare">
-            {% if w.incident.original_sql != "unavailable" %}
-              {{ ui.sql_block("Original staging SQL", w.incident.original_sql, "incident", "before") }}
+            {% if w.incident.original_lines %}
+              {{ ui.sql_lines("Original SQL", w.incident.original_lines, "incident", "before") }}
+            {% elif w.incident.original_sql != "unavailable" %}
+              {{ ui.sql_block("Original SQL", w.incident.original_sql, "incident", "before") }}
             {% else %}
               <div class="notice">Original SQL unavailable.</div>
             {% endif %}
-            {% if w.incident.repaired_sql != "unavailable" %}
-              {{ ui.sql_block("Repaired staging SQL", w.incident.repaired_sql, "repair", "after") }}
+            {% if w.incident.repaired_lines %}
+              {{ ui.sql_lines("Repaired SQL", w.incident.repaired_lines, "repair", "after") }}
+            {% elif w.incident.repaired_sql != "unavailable" %}
+              {{ ui.sql_block("Repaired SQL", w.incident.repaired_sql, "repair", "after") }}
             {% else %}
               <div class="notice">Repaired SQL unavailable.</div>
             {% endif %}
@@ -291,8 +338,8 @@
         <div class="panel-head">
           <div>
             <div class="kicker">Data product</div>
-            <h2>Generated dbt models and executed output</h2>
-            <p class="lede">Model SQL is the text generated for this workflow. The preview is a bounded sample captured from the executed synthetic mart.</p>
+            <h2 id="preview">Data product preview</h2>
+            <p class="lede">This is the bounded sample captured from the synthetic mart after execution. It is not validated financial revenue. Generated SQL for the same workflow is below the table.</p>
           </div>
           <div class="head-badges">
             <span class="badge badge-neutral">Synthetic executed output</span>
@@ -345,7 +392,7 @@
           <div>
             <div class="kicker">Quality</div>
             <h2>Tests, quality checks, and reconciliation</h2>
-            <p class="lede">Four independent signals stay separate. None of them is combined into one overall pass, and none of them validates business correctness.</p>
+            <p class="lede">These stay separate. dbt tests check model contracts. Quality checks inspect the mart. Reconciliation compares source totals with the mart and confirms tool dispatches. None of them validates business correctness.</p>
           </div>
         </div>
         <div class="panel-body">
@@ -404,7 +451,7 @@
           <div>
             <div class="kicker">Verification</div>
             <h2>Independent Evidence Verification</h2>
-            <p class="lede">The verifier checks scenario evidence completeness, consistency, repair evidence, and reconciliation. It does not independently rerun the warehouse, and it does not establish financial correctness.</p>
+            <p class="lede">The verifier checks scenario evidence completeness, consistency, repair evidence, and reconciliation. It does not independently rerun the warehouse, and it does not establish financial correctness. A PASS here is evidence verification, not business correctness.</p>
           </div>
           <div class="head-badges">
             <span data-verifier="{{ w.verification.verdict }}">{{ ui.badge(w.verification.verdict) }}</span>
