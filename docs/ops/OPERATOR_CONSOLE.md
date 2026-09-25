@@ -175,71 +175,35 @@ Sofien completes it on the deployed or local synthetic process.
 
 Record the run id and what you accepted or rejected. Do not treat scoped synthetic contract validation as production financial certification.
 
-## Subsequent data-correctness cases
+## Synthetic business correctness contract
 
-These cases are **not run** and **not passed**. Expected outcomes are defined
-from `docs/DEMO_COMPANY.md` and the Frontier review, independently of whatever
-SQL the generator emits. Unresolved definitions stay questions.
+The current build has an independent fixture-derived oracle in `aide.quality.business_oracle`.
+It validates the generated mart against committed v1 and v2 source fixtures without
+reusing the mart SQL as its expected answer.
 
-### Currency separation
+The accepted synthetic contract covers:
 
-Tiny invoices contain EUR, USD, GBP, and the literal codes `eur` and `€`.
-The mart normalizes those codes and keeps each currency in its own grain.
-It does not convert FX.
+* canonical EUR, USD, and GBP currency isolation with no FX conversion
+* one row per customer, day, and currency
+* invoice totals from invoice lines on invoice issue date
+* deduplicated payment totals on payment date
+* refund totals on refund date
+* net paid amount equal to paid amount minus refunded amount
+* deterministic duplicate payment handling
+* exclusion of deleted CRM accounts from survivorship
+* preservation of the unknown customer member
 
-Independent expectation: amounts are reported per currency, or converted with a
-dated rate table and a written policy. A single mixed sum is not financial
-revenue.
+The independent oracle and generated mart match for the committed fixtures. This
+supports the status `VALIDATED_SYNTHETIC_CONTRACT`.
 
-Open question: which base currency, which rate source, and which rate date
-(invoice date, payment date, or a fixed demo date)? Do not invent a rate.
+Remaining scope limits are explicit:
 
-### Refund treatment
+* no FX conversion or base-currency reporting
+* no open invoice amount
+* no active subscription metric
+* no MRR calculation
+* customer and plan history remain simplified current-row shapes
+* this validation does not certify arbitrary customer data or production finance
 
-The tiny fixture has 190 refund rows. v1 refunds total 103447.13. The mart
-stores `refunded_amount` and sets `net_paid_amount` to paid minus refunded
-on the same customer, day, and currency.
-
-Independent expectation: if the business measure is net cash, refunds reduce
-the paid measure. If the measure is gross collections, refunds stay a separate
-column and the page says so.
-
-Open question: is `paid_amount` gross receipts or net of refunds? Which refund
-statuses count?
-
-### Row grain
-
-The business grain in the demo company notes is one row per customer and day,
-with invoiced, paid, refunded, open, active subscriptions, and MRR. The unknown
-customer member is specified as `-1`.
-
-Independent expectation: one row per `customer_sk` and `date_day`, refunded and
-open amounts present when defined, and facts that do not match a customer use
-the unknown member.
-
-Open question: which date (invoice date, payment date, or both) defines
-`date_day` when a payment lands on a later day?
-
-### Duplicate handling
-
-Payments are deduplicated on `invoice_id` plus `payment_ref`. Account
-survivorship keeps the latest non-deleted `updated_at`. Tiny has 2 deleted
-account rows, and those account ids do not survive deduplication. Billing
-customers still fall back to billing attributes when no CRM survivor matches.
-
-Independent expectation: duplicate payment keys collapse to one fact row.
-Deleted accounts do not appear in the customer dimension if P1 is the rule.
-
-Open question: does “latest `updated_at`” win even when that row is deleted, or
-must a non-deleted row win when one exists?
-
-## Limitations
-
-- One fixed scenario. The backend ignores arbitrary request text.
-- No uploads, no user SQL, no new repair class, no RAW writes.
-- Output previews are capped (20 rows, 12 columns) and sanitized. They are a
-  snapshot of the synthetic mart, not a warehouse query after restart.
-- While a run is in progress, workflow ids are not known. The page shows a
-  running indicator and refreshes. It does not invent stage progress.
-- The in-process event bus is not the history source. Completed runs show
-  persisted audit event types only.
+See `docs/evaluation/BUSINESS_CORRECTNESS_001.md` for the exact expectations,
+before-state defects, fixture totals, and regression evidence.
