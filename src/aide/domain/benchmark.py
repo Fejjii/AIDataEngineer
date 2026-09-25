@@ -13,12 +13,16 @@ from aide.domain.verification import VerifierVerdict
 INTERVIEW_SCENARIO_ID = "interview_mvp_customer_revenue_schema_drift"
 INTERVIEW_REQUEST = "Build a customer revenue analytical data product from CRM and billing data."
 OPERATOR_EXECUTION_LABEL = "synthetic"
-OPERATOR_BUSINESS_CORRECTNESS = "NOT_VALIDATED"
+OPERATOR_BUSINESS_CORRECTNESS = "VALIDATED_SYNTHETIC_CONTRACT"
 OPERATOR_LIMITATIONS: tuple[str, ...] = (
-    "Successful execution means the synthetic scenario finished. It is not business correctness.",
+    (
+        "The defined synthetic business contract is independently validated from committed "
+        "fixtures. Successful execution is still a separate run-level result."
+    ),
     (
         "The Independent Verifier scores evidence consistency for this schema-drift repair. "
-        "It does not validate financial revenue."
+        "It does not itself validate financial revenue; business semantics are covered "
+        "separately by the independent synthetic fixture oracle."
     ),
     (
         "Amounts stay in canonical invoice currency. There is no FX conversion, "

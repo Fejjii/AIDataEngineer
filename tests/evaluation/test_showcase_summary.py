@@ -15,7 +15,7 @@ def _page(**overrides: object) -> RunPage:
         "started_at": "",
         "finished_at": "",
         "execution_label": "synthetic",
-        "business_correctness": "NOT_VALIDATED",
+        "business_correctness": "VALIDATED_SYNTHETIC_CONTRACT",
         "limitations": (),
         "benchmark_verdict": "unavailable",
         "workflow_outcome": "unavailable",
@@ -36,7 +36,7 @@ def _page(**overrides: object) -> RunPage:
 def test_missing_evidence_is_not_recorded_as_pass() -> None:
     text = format_showcase_summary(summary_from_run_page(_page()))
     assert "verifier: unavailable" in text
-    assert "business correctness: NOT_VALIDATED" in text
+    assert "business correctness: VALIDATED_SYNTHETIC_CONTRACT" in text
     assert "verifier: PASS" not in text
     assert "business correctness: PASS" not in text
     assert "Digital Twin: unavailable" in text
@@ -52,5 +52,5 @@ def test_verifier_pass_stays_distinct_from_business_correctness() -> None:
         line for line in rendered.splitlines() if line.startswith("business correctness:")
     )
     assert verifier_line != "verifier: PASS"
-    assert business_line == "business correctness: NOT_VALIDATED"
+    assert business_line == "business correctness: VALIDATED_SYNTHETIC_CONTRACT"
     assert business_line.rsplit(": ", 1)[-1] != "PASS"

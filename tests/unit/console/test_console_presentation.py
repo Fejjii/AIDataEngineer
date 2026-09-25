@@ -229,7 +229,7 @@ def test_complete_evidence_populates_every_stage_from_persisted_values() -> None
     assert metrics["human"] == "0"
     assert metrics["evidence"] == "100%"
     assert metrics["verifier"] == "PASS"
-    assert page.business_correctness == "NOT_VALIDATED"
+    assert page.business_correctness == "VALIDATED_SYNTHETIC_CONTRACT"
     assert panel.duration == "6.0 s"
 
 
@@ -249,7 +249,7 @@ def test_narrative_uses_persisted_counts_and_omits_missing_claims() -> None:
     assert [signal.key for signal in page.signals] == ["technical", "verification", "business"]
     assert page.signals[0].value == "completed"
     assert page.signals[1].value == "PASS"
-    assert page.signals[2].value == "NOT_VALIDATED"
+    assert page.signals[2].value == "VALIDATED_SYNTHETIC_CONTRACT"
     changed = [line.text for line in page.workflows[0].incident.original_lines if line.changed]
     assert changed == ["select INVOICE_STATUS from invoices"]
     assert "INVOICE_STATUS → STATUS" in page.workflows[0].incident.change_summary
@@ -301,7 +301,7 @@ def test_verifier_fail_is_an_issue_not_a_pass() -> None:
     stage = {stage.key: stage for stage in panel.timeline}["verification"]
     assert stage.state == "issue"
     assert "FAIL" in stage.detail
-    assert page.business_correctness == "NOT_VALIDATED"
+    assert page.business_correctness == "VALIDATED_SYNTHETIC_CONTRACT"
 
 
 def test_twin_prefers_per_workflow_artifacts_over_snapshot_copy() -> None:

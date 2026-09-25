@@ -23,7 +23,7 @@ correctness, live Snowflake, or a production deployment.
   comparison are recorded from persisted artifacts
 - History reopens that run and does not create another one
 - Anonymous legacy routes stay unavailable
-- Business correctness stays `NOT_VALIDATED`
+- Business correctness stays `VALIDATED_SYNTHETIC_CONTRACT`
 
 ## What it does not prove
 
@@ -64,7 +64,7 @@ repair: applied=true count=1 path=models/staging/stg_billing__invoices.sql
 verifier: PASS
 evidence: complete=true completeness=<pct>
 determinism: true
-business correctness: NOT_VALIDATED
+business correctness: VALIDATED_SYNTHETIC_CONTRACT
 ```
 
 `<id>`, `<count>`, `<n>`, `<passed>`, `<total>`, and `<pct>` come from the
@@ -84,7 +84,7 @@ Do not change generated SQL, repair behavior, or the page styling for this walkt
 2. Open `/console/login` and sign in. An anonymous visit to `/console` returns
    to the login page.
 3. On `/console`, confirm the synthetic database, source schemas, column names,
-   and types. Confirm business correctness reads `NOT_VALIDATED`.
+   and types. Confirm business correctness reads `VALIDATED_SYNTHETIC_CONTRACT`.
 4. Start **Run Data Engineering Workflow** once. Refreshing the run page must
    not start another run.
 5. When the run completes, read the engineering loop from the persisted page:
@@ -114,7 +114,7 @@ Do not change generated SQL, repair behavior, or the page styling for this walkt
 | verifier | `verifier_verdict` artifact | business correctness |
 | evidence | evidence completeness on the snapshot | a missing bundle |
 | determinism | `determinism_equivalent` on the snapshot | a second console run |
-| business correctness | constant `NOT_VALIDATED` on the page | verifier `PASS` or `FAIL` |
+| business correctness | constant `VALIDATED_SYNTHETIC_CONTRACT` on the page | verifier `PASS` or `FAIL` |
 
 ## Final verdict
 
