@@ -23,6 +23,8 @@ def _page(**overrides: object) -> RunPage:
         "evidence_completeness": "unavailable",
         "evidence_complete": "unavailable",
         "summary": (),
+        "signals": (),
+        "what_happened": "",
         "workflows": (),
         "audit_events": (),
         "running_note": "",
