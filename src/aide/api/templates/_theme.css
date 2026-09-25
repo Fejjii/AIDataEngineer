@@ -236,8 +236,20 @@ details.disclosure.quiet { border-style: dashed; background: var(--surface-muted
 .stage[data-state="complete"] { border-left: 3px solid var(--success); }
 .stage[data-state="issue"] { border-left: 3px solid var(--error); }
 .stage[data-state="unavailable"] { border-left: 3px solid var(--border-strong); background: var(--surface-muted); color: var(--text-muted); }
-.stage[data-key="drift"][data-state="complete"], .stage[data-key="diagnosis"][data-state="complete"] { border-left-color: var(--incident); }
-.stage[data-key="repair"][data-state="complete"], .stage[data-key="revalidation"][data-state="complete"] { border-left-color: var(--repair); }
+.stage[data-key="incident"][data-state="complete"], .stage[data-key="diagnosis"][data-state="complete"] { border-left-color: var(--incident); background: var(--incident-soft); }
+.stage[data-key="repair"][data-state="complete"], .stage[data-key="revalidation"][data-state="complete"] { border-left-color: var(--repair); background: var(--repair-soft); }
+.stage[data-key="incident"] .stage-title, .stage[data-key="repair"] .stage-title { font-size: 0.95rem; }
+.signals { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.signal-card { border-top: 3px solid var(--border-strong); }
+.signal-card[data-signal="technical"] { border-top-color: var(--accent); }
+.signal-card[data-signal="verification"] { border-top-color: var(--verify); }
+.signal-card[data-signal="business"] { border-top-color: var(--correctness); }
+.metric-secondary { background: var(--surface-muted); box-shadow: none; }
+.metric-secondary .card-value { font-size: 1.15rem; }
+.narrative { color: var(--text); font-size: 1.02rem; }
+.change-callout { margin: 0 0 12px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--incident-soft); border: 1px solid #f5cfa4; }
+.code-line { display: block; }
+.code-line.line-changed { background: #3d2a12; box-shadow: inset 3px 0 0 #e0a15a; }
 .stage[data-key="verification"][data-state="complete"] { border-left-color: var(--verify); }
 
 /* Notices */
@@ -286,6 +298,7 @@ details.disclosure.quiet { border-style: dashed; background: var(--surface-muted
 /* Responsive */
 @media (max-width: 900px) {
   .compare { grid-template-columns: minmax(0, 1fr); }
+  .signals { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
   .appbar-inner, .subnav-inner, .shell { padding-left: 14px; padding-right: 14px; }

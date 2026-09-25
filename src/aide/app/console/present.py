@@ -39,6 +39,23 @@ class MetricView:
     label: str
     value: str
     note: str = ""
+    group: str = "primary"
+
+
+@dataclass(frozen=True)
+class SignalView:
+    """One of the three judgements a completed run must keep separate."""
+
+    key: str
+    label: str
+    value: str
+    detail: str
+
+
+@dataclass(frozen=True)
+class SqlLineView:
+    text: str
+    changed: bool
 
 
 @dataclass(frozen=True)
@@ -85,6 +102,9 @@ class IncidentView:
     rules: tuple[CheckView, ...]
     revalidation_state: str
     revalidation: tuple[CheckView, ...]
+    change_summary: str
+    original_lines: tuple[SqlLineView, ...]
+    repaired_lines: tuple[SqlLineView, ...]
 
 
 @dataclass(frozen=True)
@@ -192,6 +212,8 @@ class RunPage:
     evidence_completeness: str
     evidence_complete: str
     summary: tuple[MetricView, ...]
+    signals: tuple[SignalView, ...]
+    what_happened: str
     workflows: tuple[WorkflowView, ...]
     audit_events: tuple[AuditEventView, ...]
     running_note: str
@@ -291,6 +313,12 @@ def present_run(
         evidence_completeness=_text(snapshot, "evidence_completeness_pct"),
         evidence_complete=_bool_text(snapshot, "evidence_complete"),
         summary=_summary(snapshot, panels[0] if panels else None),
+        signals=_signals(status, panels[0] if panels else None),
+        what_happened=_what_happened(
+            status=status,
+            snapshot=snapshot,
+            primary=panels[0] if panels else None,
+        ),
         workflows=panels,
         audit_events=audit_events,
         running_note=(
@@ -400,25 +428,51 @@ def _summary(
     metrics = snapshot.get("metrics") if isinstance(snapshot, dict) else None
     body = metrics if isinstance(metrics, dict) else None
     verifier = primary.verification.verdict if primary is not None else _UNAVAILABLE
+    same_population = "Same dispatch population as the other count."
     return (
-        MetricView("models", "Models generated", _text(body, "models_generated")),
-        MetricView("tests", "dbt tests executed", _text(body, "tests_executed")),
-        MetricView("quality", "Quality checks", _text(body, "quality_checks_executed")),
-        MetricView("governed", "Governed tool operations", _text(body, "governed_tool_operations")),
-        MetricView("policy", "Policy evaluations", _text(body, "policy_evaluations")),
-        MetricView("incidents", "Incidents detected", _text(body, "detected_incidents")),
-        MetricView("repairs", "Automatic repairs", _text(body, "automatic_repairs")),
-        MetricView("human", "Human interventions", _text(body, "human_interventions")),
+        MetricView("models", "Models", _text(body, "models_generated"), "dbt models generated"),
+        MetricView("tests", "Tests", _text(body, "tests_executed"), "dbt tests executed"),
+        MetricView(
+            "quality", "Quality", _text(body, "quality_checks_executed"), "quality checks executed"
+        ),
+        MetricView(
+            "incidents", "Incident", _text(body, "detected_incidents"), "incidents detected"
+        ),
+        MetricView(
+            "repairs", "Repair", _text(body, "automatic_repairs"), "bounded repairs applied"
+        ),
+        MetricView(
+            "human",
+            "Human intervention",
+            _text(body, "human_interventions"),
+            "approvals during the run",
+        ),
         MetricView(
             "evidence",
             "Evidence completeness",
             _percent(_text(body, "evidence_completeness_pct")),
+            "required evidence sections present",
+        ),
+        MetricView(
+            "governed",
+            "Governed operations",
+            _text(body, "governed_tool_operations"),
+            same_population,
+            "secondary",
+        ),
+        MetricView(
+            "policy",
+            "Policy evaluations",
+            _text(body, "policy_evaluations"),
+            same_population,
+            "secondary",
         ),
         MetricView(
             "verifier",
             "Verifier verdict",
             verifier,
             "Evidence consistency only. Not business correctness.",
+            "signal",
         ),
     )
 
@@ -439,10 +493,15 @@ def _timeline(
     """Derive the engineering loop from persisted evidence. Missing evidence is unavailable."""
     seen = set(phases)
     executed = seen.intersection({"EXECUTION"})
+    generation_detail = (
+        f"{len(models)} dbt SQL files generated" if models else "Generation phase recorded"
+    )
+    if "DESIGN" in seen and generation_detail != _UNAVAILABLE:
+        generation_detail = f"{generation_detail} after model design"
     stages = [
         _stage(
             "request",
-            "Business request",
+            "Business objective",
             snapshot is not None,
             _text(snapshot, "business_objective") if snapshot is not None else _UNAVAILABLE,
             "#scenario",
@@ -459,29 +518,23 @@ def _timeline(
             "#estate",
         ),
         _stage(
-            "design",
-            "Model design",
-            "DESIGN" in seen,
-            "Deterministic model design phase recorded",
-            "#data-product",
-        ),
-        _stage(
             "generation",
-            "dbt generation",
-            "GENERATION" in seen or bool(models),
-            f"{len(models)} dbt SQL files generated" if models else "Generation phase recorded",
-            "#data-product",
+            "Model generation",
+            "GENERATION" in seen or "DESIGN" in seen or bool(models),
+            generation_detail,
+            "#preview",
         ),
         _stage(
             "execution",
-            "Governed execution",
+            "Execution",
             bool(executed),
             (
-                f"{governed} governed tool operations · {policies} policy evaluations"
-                if governed != _UNAVAILABLE
+                f"{governed} governed operations, the same population as "
+                f"{policies} policy evaluations"
+                if governed != _UNAVAILABLE and policies != _UNAVAILABLE
                 else "Execution phase recorded"
             ),
-            "#quality",
+            "#telemetry",
         ),
     ]
     tests_ok = quality.tests_state == _PRESENT
@@ -503,8 +556,8 @@ def _timeline(
     drift_present = incident.state == _PRESENT
     stages.append(
         _stage(
-            "drift",
-            "Schema drift",
+            "incident",
+            "Incident",
             drift_present,
             f"{incident.from_column} renamed to {incident.to_column} on {incident.asset}"
             if drift_present
@@ -562,7 +615,7 @@ def _timeline(
     stages.append(
         StageView(
             "verification",
-            "Independent verification",
+            "Verification",
             _outcome_state(verification.state == _PRESENT, verification.verdict == "PASS"),
             (
                 f"Evidence consistency {verification.verdict} "
@@ -588,6 +641,166 @@ def _timeline(
         )
     )
     return tuple(stages)
+
+
+def _signals(status: str, primary: WorkflowView | None) -> tuple[SignalView, ...]:
+    """Separate technical completion, evidence verification, and business correctness."""
+    verdict = primary.verification.verdict if primary is not None else _UNAVAILABLE
+    if verdict == "PASS":
+        verification_detail = (
+            "The verifier accepted the persisted evidence for this run, including the "
+            "repair record. It does not independently rerun the warehouse and it does "
+            "not establish financial correctness."
+        )
+    elif verdict == "FAIL":
+        verification_detail = (
+            "The verifier rejected the persisted evidence. "
+            "This is not a business-correctness result."
+        )
+    else:
+        verification_detail = "Verifier artifact unavailable. A missing verdict is not a pass."
+    if status == "completed":
+        technical_detail = "The workflow finished and stored its artifacts."
+    elif status == "running":
+        technical_detail = "The workflow is still executing. Stage results are not inferred."
+    elif status == "failed":
+        technical_detail = "The workflow did not finish successfully."
+    else:
+        technical_detail = "Run status from the persisted console row."
+    return (
+        SignalView("technical", "Technical workflow", status, technical_detail),
+        SignalView("verification", "Evidence verification", verdict, verification_detail),
+        SignalView(
+            "business",
+            "Business correctness",
+            BUSINESS_CORRECTNESS,
+            "Pending validation. Currency, refunds, and grain are not accepted.",
+        ),
+    )
+
+
+def _what_happened(
+    *,
+    status: str,
+    snapshot: dict[str, Any] | None,
+    primary: WorkflowView | None,
+) -> str:
+    """One sentence from persisted values. Omit any claim the run did not store."""
+    if status == "running" or snapshot is None:
+        return ""
+    metrics = snapshot.get("metrics")
+    body = metrics if isinstance(metrics, dict) else None
+    incident = primary.incident if primary is not None else None
+    objective = _text(snapshot, "business_objective").lower()
+    product = "the customer revenue data product" if "customer revenue" in objective else ""
+    clauses: list[str] = []
+    models = _count(_text(body, "models_generated"))
+    if status == "completed" and models is not None and models > 0 and product:
+        clauses.append(f"built {product}")
+    elif models is not None and models > 0:
+        clauses.append(f"generated {models} models")
+    elif models == 0:
+        clauses.append("recorded no generated models")
+
+    incidents = _count(_text(body, "detected_incidents"))
+    if (
+        incidents == 1
+        and incident is not None
+        and incident.state == _PRESENT
+        and incident.from_column != _UNAVAILABLE
+        and incident.to_column != _UNAVAILABLE
+    ):
+        clauses.append(
+            "detected one schema drift incident "
+            f"({incident.from_column} renamed to {incident.to_column})"
+        )
+    elif incidents == 1:
+        clauses.append("detected one incident")
+    elif incidents == 0:
+        clauses.append("detected no incident")
+    elif incidents is not None:
+        clauses.append(f"detected {incidents} incidents")
+
+    repairs = _count(_text(body, "automatic_repairs"))
+    applied = incident.repair_applied if incident is not None else _UNAVAILABLE
+    if repairs == 1 and applied == "true":
+        clauses.append("applied one bounded repair")
+    elif applied == "false":
+        clauses.append("did not apply the proposed repair")
+    elif repairs == 0:
+        clauses.append("applied no automatic repair")
+    elif repairs is not None and repairs > 1:
+        clauses.append(f"applied {repairs} automatic repairs")
+
+    if incident is not None and incident.revalidation and incident.revalidation_state == _PRESENT:
+        if all(item.outcome == "true" for item in incident.revalidation):
+            clauses.append("reran validation")
+        else:
+            clauses.append("reran validation with a failed check")
+
+    human = _count(_text(body, "human_interventions"))
+    if status == "completed":
+        ending = "completed the workflow"
+        if human == 0:
+            ending += " without human intervention"
+        elif human is not None and human > 0:
+            noun = "intervention" if human == 1 else "interventions"
+            ending += f" with {human} human {noun}"
+        clauses.append(ending)
+    elif status == "failed":
+        clauses.append("did not complete the workflow")
+
+    if not clauses:
+        return ""
+    sentence = clauses[0] if len(clauses) == 1 else ", ".join(clauses[:-1]) + ", and " + clauses[-1]
+    return f"Data Pilot AI {sentence}."
+
+
+def _count(value: str) -> int | None:
+    if value == _UNAVAILABLE:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _sql_line_diff(
+    original: str, repaired: str
+) -> tuple[tuple[SqlLineView, ...], tuple[SqlLineView, ...]]:
+    if original == _UNAVAILABLE or repaired == _UNAVAILABLE:
+        return (), ()
+    import difflib
+
+    before = original.splitlines() or [original]
+    after = repaired.splitlines() or [repaired]
+    before_changed: set[int] = set()
+    after_changed: set[int] = set()
+    matcher = difflib.SequenceMatcher(a=before, b=after)
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        before_changed.update(range(i1, i2))
+        after_changed.update(range(j1, j2))
+    return (
+        tuple(SqlLineView(text, index in before_changed) for index, text in enumerate(before)),
+        tuple(SqlLineView(text, index in after_changed) for index, text in enumerate(after)),
+    )
+
+
+def _change_summary(original: str, repaired: str, replacements: tuple[str, ...]) -> str:
+    if original == _UNAVAILABLE or repaired == _UNAVAILABLE:
+        return ""
+    if replacements:
+        changed = ", ".join(replacements)
+        return (
+            f"The recorded SQL change is the column reference {changed}. "
+            "Highlighted lines are the only lines that differ. "
+            "This is one allowlisted column reference, not a general SQL rewrite."
+        )
+    if original == repaired:
+        return "The stored original SQL and repaired SQL are identical."
+    return "Highlighted lines are the only lines that differ between the stored SQL texts."
 
 
 def _stage(key: str, title: str, present: bool, detail: str, href: str) -> StageView:
@@ -635,6 +848,10 @@ def _incident(snap: dict[str, Any], bodies: dict[str, dict[str, Any]]) -> Incide
     if failure_class == _UNAVAILABLE:
         failure_class = _snap_text(snap, "repair_class")
     repair_count = _snap_text(snap, "repair_count")
+    original_sql = _snap_text(snap, "original_sql")
+    repaired_sql = _short(proposal_body, "patched_sql")
+    replacements = _replacements(validation)
+    original_lines, repaired_lines = _sql_line_diff(original_sql, repaired_sql)
     return IncidentView(
         state=_PRESENT if present else _UNAVAILABLE,
         failure_class=failure_class,
@@ -650,13 +867,16 @@ def _incident(snap: dict[str, Any], bodies: dict[str, dict[str, Any]]) -> Incide
         repair_applied=_flag(application, "applied"),
         repair_path=_short(proposal_body, "artifact_path"),
         repair_count=repair_count,
-        original_sql=_snap_text(snap, "original_sql"),
-        repaired_sql=_short(proposal_body, "patched_sql"),
-        replacements=_replacements(validation),
+        original_sql=original_sql,
+        repaired_sql=repaired_sql,
+        replacements=replacements,
         scope_flags=_scope_flags(validation),
         rules=_rules(validation),
         revalidation_state=_PRESENT if isinstance(revalidation, dict) else _UNAVAILABLE,
         revalidation=_revalidation(revalidation),
+        change_summary=_change_summary(original_sql, repaired_sql, replacements),
+        original_lines=original_lines,
+        repaired_lines=repaired_lines,
     )
 
 
