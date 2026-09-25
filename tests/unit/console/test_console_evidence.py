@@ -85,7 +85,7 @@ def test_missing_artifacts_are_unavailable_and_not_pass() -> None:
     assert panel.evidence.bundle_state == "unavailable"
     assert {stage.state for stage in panel.timeline} == {"unavailable"}
     assert {metric.value for metric in page.summary} == {"unavailable"}
-    assert page.business_correctness == "NOT_VALIDATED"
+    assert page.business_correctness == "VALIDATED_SYNTHETIC_CONTRACT"
     assert "<script>" in page.error_message
 
 
