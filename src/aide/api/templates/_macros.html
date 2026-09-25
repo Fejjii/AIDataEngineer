@@ -60,4 +60,15 @@
   </div>
 {%- endmacro %}
 
+{% macro sql_lines(title, lines, tone=None, tag=None) -%}
+  <div class="code-frame">
+    <div class="code-head">
+      <span>{{ title }}</span>
+      {% if tag %}{{ badge(tag, tone or "neutral") }}{% endif %}
+    </div>
+    <pre class="code">{% for line in lines %}<span class="code-line{% if line.changed %} line-changed{% endif %}">{{ line.text }}</span>
+{% endfor %}</pre>
+  </div>
+{%- endmacro %}
+
 {% macro short_id(value) -%}{{ (value | string)[:8] }}{%- endmacro %}

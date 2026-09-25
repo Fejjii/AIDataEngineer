@@ -198,16 +198,28 @@ def test_complete_evidence_populates_every_stage_from_persisted_values() -> None
     assert [stage.key for stage in panel.timeline] == [
         "request",
         "estate",
-        "design",
         "generation",
         "execution",
         "testing",
-        "drift",
+        "incident",
         "diagnosis",
         "repair",
         "revalidation",
         "verification",
         "evidence",
+    ]
+    assert [stage.title for stage in panel.timeline] == [
+        "Business objective",
+        "Estate context",
+        "Model generation",
+        "Execution",
+        "Testing",
+        "Incident",
+        "Diagnosis",
+        "Bounded repair",
+        "Revalidation",
+        "Verification",
+        "Evidence",
     ]
     assert {stage.state for stage in panel.timeline} == {"complete"}
     metrics = {metric.key: metric.value for metric in page.summary}
@@ -219,6 +231,34 @@ def test_complete_evidence_populates_every_stage_from_persisted_values() -> None
     assert metrics["verifier"] == "PASS"
     assert page.business_correctness == "NOT_VALIDATED"
     assert panel.duration == "6.0 s"
+
+
+def test_narrative_uses_persisted_counts_and_omits_missing_claims() -> None:
+    page = _page(_artifacts())
+    assert page.what_happened == (
+        "Data Pilot AI built the customer revenue data product, "
+        "detected one schema drift incident (INVOICE_STATUS renamed to STATUS), "
+        "applied one bounded repair, reran validation, "
+        "and completed the workflow without human intervention."
+    )
+    groups = {metric.key: metric.group for metric in page.summary}
+    assert groups["models"] == "primary"
+    assert groups["governed"] == "secondary"
+    assert groups["policy"] == "secondary"
+    assert groups["verifier"] == "signal"
+    assert [signal.key for signal in page.signals] == ["technical", "verification", "business"]
+    assert page.signals[0].value == "completed"
+    assert page.signals[1].value == "PASS"
+    assert page.signals[2].value == "NOT_VALIDATED"
+    changed = [line.text for line in page.workflows[0].incident.original_lines if line.changed]
+    assert changed == ["select INVOICE_STATUS from invoices"]
+    assert "INVOICE_STATUS → STATUS" in page.workflows[0].incident.change_summary
+
+    sparse = _page({SNAPSHOT_ARTIFACT_TYPE: _snapshot(version=1)})
+    assert "without human intervention" not in sparse.what_happened
+    assert "bounded repair" not in sparse.what_happened
+    assert "schema drift" not in sparse.what_happened
+    assert sparse.signals[1].value == "unavailable"
 
 
 def test_incident_view_reads_drift_repair_and_revalidation_evidence() -> None:
@@ -296,7 +336,7 @@ def test_version_one_snapshot_remains_readable_with_new_fields_unavailable() -> 
     states = {stage.key: stage.state for stage in panel.timeline}
     assert states["generation"] == "complete"
     assert states["testing"] == "complete"
-    assert states["drift"] == "unavailable"
+    assert states["incident"] == "unavailable"
     assert states["verification"] == "unavailable"
 
 

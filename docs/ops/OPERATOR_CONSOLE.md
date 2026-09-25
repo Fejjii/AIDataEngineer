@@ -1,6 +1,6 @@
 # Operator console
 
-**Tasks:** INTERACTIVE_VALIDATION_001 (console), UI_PRODUCT_POLISH_001 (product UI)  
+**Tasks:** INTERACTIVE_VALIDATION_001 (console), UI_PRODUCT_POLISH_001 (product UI), UI_UAT_REFINEMENT_002 (interpretability)  
 **Audience:** the operator who accepts the synthetic Interview scenario; interview
 and recruiter demonstrations  
 **Scope:** authenticated server-rendered pages inside the existing FastAPI process.
@@ -26,10 +26,14 @@ artifacts exist.
 |---|---|---|
 | `/console/login` | Sign-in | Data Pilot AI brand, Interview MVP and synthetic badges, operator password |
 | `/console` | Overview | Summary cards (environment, scenario, data sources, models, workflow status, latest result), primary action, scenario panel with a secondary Validation scope disclosure, grouped data estate, persisted run history |
-| `/console/runs/{run_id}` | Run | Result summary, engineering-loop timeline, Digital Twin estate context, incident and bounded repair before/after, data product preview and generated SQL, separated quality signals, Independent Evidence Verification, evidence bundle, audit events, exports, determinism rerun |
+| `/console/runs/{run_id}` | Run | Persisted narrative, three separated judgements, primary metrics and secondary telemetry, workflow timeline, Digital Twin estate context, incident and repaired SQL, data product preview, generated SQL, quality signals, Independent Evidence Verification, evidence bundle, audit events, exports, determinism rerun |
 
 Presentation rules:
 
+- The "What happened" sentence is assembled only from persisted counts and artifact fields. A missing count is omitted. The sentence does not claim a repair, an incident, or zero human interventions unless those values were stored.
+- Technical workflow, evidence verification, and business correctness are three separate judgements. Business correctness stays pending (`NOT_VALIDATED`).
+- Primary metrics are models, tests, quality, incident, repair, human intervention, and evidence completeness. Governed operations, policy evaluations, and determinism are secondary telemetry. Governed operations and policy evaluations count the same dispatch population.
+- The timeline is business objective, estate context, model generation, execution, testing, incident, diagnosis, bounded repair, revalidation, verification, and evidence. Incident and repair stages are visually distinct. Highlighted SQL lines are the lines that differ.
 - Every number on the run page is read from persisted artifacts for that run.
   The `operator_console_snapshot` artifact (schema version 2) stores the
   benchmark value metrics, evidence completeness, Digital Twin summary, and
@@ -160,7 +164,7 @@ Sofien completes it on the deployed or local synthetic process.
    grouped masked source samples.
 3. Start a run. Confirm the page says "Workflow running" and does not invent
    stages while the benchmark executes two workflows.
-4. When the run completes, read the result summary and the engineering-loop
+4. When the run completes, read What happened, the three judgements, and the
    timeline. Confirm every value comes from this run (compare with the exports)
    and that nothing shows a PASS where evidence is missing.
 5. Inspect the incident and repair panel: failure class, `INVOICE_STATUS` to

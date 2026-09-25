@@ -337,6 +337,21 @@ tasks do not run concurrently because their shared high-conflict contracts are s
 - Git authority: branch-only; commit/push; one PR to `main`; do not merge.
 - Deployment authority: none.
 
+## UI_UAT_REFINEMENT_002 — Console interpretability after the first human run
+
+- Compact ID: `UI_UAT_REFINEMENT_002`
+- Priority: P1
+- Status: IN REVIEW (UI UAT REFINED; USER ACCEPTANCE PENDING; BUSINESS CORRECTNESS NOT VALIDATED; do not merge from the agent)
+- Owner: Cursor Cloud agent
+- Environment: CURSOR_CLOUD
+- Dependencies: UI_PRODUCT_POLISH_001 merged
+- Risk: Low (presentation only)
+- Goal: Make a completed run understandable from persisted evidence: what happened, the incident, the repair, what validation passed, what the verifier proved, and what remains unvalidated.
+- Explicit exclusions: backend redesign, business logic, generated SQL, repair semantics, policy, benchmark semantics, Snowflake permissions, persistence contracts.
+- Expected files: console templates, `aide.app.console.present`, console presentation tests, `docs/ops/OPERATOR_CONSOLE.md`, run report.
+- Git authority: branch-only; commit/push; one PR to `main`; do not merge.
+- Deployment authority: none.
+
 ---
 
 # Historical DE implementation backlog
