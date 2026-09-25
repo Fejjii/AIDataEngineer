@@ -170,8 +170,8 @@ def _preview(raw: dict[str, Any]) -> dict[str, Any] | None:
         "total_row_count": total if isinstance(total, int) else None,
         "truncated": bool(raw.get("truncated")),
         "note": (
-            "Bounded sample from the executed mart. Mixed-currency gross sums "
-            "are not validated financial revenue."
+            "Bounded sample from the executed mart. Amounts are synthetic, "
+            "separated by currency, and are not production financial revenue."
         ),
     }
 

@@ -293,7 +293,8 @@ async def test_secure_cookie_flag_and_real_scenario(
         assert "completed" in page.text
         assert "stg_billing__invoices.sql" in page.text
         assert "NOT_VALIDATED" in page.text
-        assert "mixed-currency" in page.text or "EUR, USD, and GBP" in page.text
+        assert "canonical invoice currency" in page.text
+        assert "different currencies are not summed" in page.text
         assert page.text.count("Workflow ") >= 2 or page.text.count("workflow") >= 1
         # The engineering loop is populated from persisted evidence only.
         assert _body(page.text).count('data-state="complete"') == 12

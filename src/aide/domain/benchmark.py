@@ -21,12 +21,12 @@ OPERATOR_LIMITATIONS: tuple[str, ...] = (
         "It does not validate financial revenue."
     ),
     (
-        "invoiced_amount and paid_amount add EUR, USD, and GBP with no FX conversion. "
-        "They are not validated financial revenue."
+        "Amounts stay in canonical invoice currency. There is no FX conversion, "
+        "and different currencies are not summed into one measure."
     ),
-    "Refunds are staged and are not subtracted from paid_amount.",
+    "net_paid_amount is paid_amount minus refunded_amount on the same daily currency grain.",
     "Customer history columns are shape only. Plan history is not a record of plan changes.",
-    "Deleted CRM accounts are not removed by IS_DELETED in the current survivorship rule.",
+    "Open invoice amount, active subscriptions, and MRR are not in this mart.",
 )
 
 # Labelled baseline minutes from docs/EVALUATION_STRATEGY.md §4 for steps this
