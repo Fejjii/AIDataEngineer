@@ -186,8 +186,8 @@ SQL the generator emits. Unresolved definitions stay questions.
 ### Currency separation
 
 Tiny invoices contain EUR, USD, GBP, and the literal codes `eur` and `€`.
-The current mart adds those amounts into `invoiced_amount` and `paid_amount`
-with no FX conversion.
+The mart normalizes those codes and keeps each currency in its own grain.
+It does not convert FX.
 
 Independent expectation: amounts are reported per currency, or converted with a
 dated rate table and a written policy. A single mixed sum is not financial
@@ -198,8 +198,9 @@ Open question: which base currency, which rate source, and which rate date
 
 ### Refund treatment
 
-The tiny fixture has 190 refund rows totalling 103447.13. Refunds are staged
-and are not subtracted from `paid_amount`.
+The tiny fixture has 190 refund rows. v1 refunds total 103447.13. The mart
+stores `refunded_amount` and sets `net_paid_amount` to paid minus refunded
+on the same customer, day, and currency.
 
 Independent expectation: if the business measure is net cash, refunds reduce
 the paid measure. If the measure is gross collections, refunds stay a separate
@@ -224,9 +225,9 @@ Open question: which date (invoice date, payment date, or both) defines
 ### Duplicate handling
 
 Payments are deduplicated on `invoice_id` plus `payment_ref`. Account
-survivorship keeps the latest `updated_at` and does not apply `IS_DELETED`.
-The demo company P1 note says deleted CRM accounts are filtered. Tiny has 2
-deleted account rows.
+survivorship keeps the latest non-deleted `updated_at`. Tiny has 2 deleted
+account rows, and those account ids do not survive deduplication. Billing
+customers still fall back to billing attributes when no CRM survivor matches.
 
 Independent expectation: duplicate payment keys collapse to one fact row.
 Deleted accounts do not appear in the customer dimension if P1 is the rule.

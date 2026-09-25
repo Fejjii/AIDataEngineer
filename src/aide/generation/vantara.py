@@ -157,7 +157,12 @@ def _schema_yml() -> TransformationFile:
         ("dim_date", "date_day", ""),
         ("fct_invoice_line", "invoice_line_id", ""),
         ("fct_payment", "payment_id", ""),
-        ("mart_customer_revenue_daily", "customer_sk", ""),
+        (
+            "mart_customer_revenue_daily",
+            "customer_sk",
+            "      - name: date_day\n        tests:\n          - not_null\n"
+            "      - name: currency\n        tests:\n          - not_null\n",
+        ),
         ("fct_invoices", "invoice_id", ""),
     ):
         models.append(
@@ -347,6 +352,7 @@ from (
       order by updated_at desc, account_id
     ) as rn
   from {{ ref('stg_crm__accounts') }}
+  where not is_deleted
 ) ranked
 where rn = 1
 """,
@@ -487,7 +493,7 @@ from {{ ref('stg_billing__invoices') }}
 select
   lines.invoice_line_id,
   lines.invoice_id,
-  customers.customer_sk,
+  coalesce(customers.customer_sk, md5('-1')) as customer_sk,
   plans.plan_sk,
   cast(invoices.issue_date as date) as date_day,
   lines.amount,
@@ -498,7 +504,20 @@ inner join {{ ref('stg_billing__invoices') }} invoices
   on lines.invoice_id = invoices.invoice_id
 left join {{ ref('dim_customer') }} customers
   on cast(customers.billing_customer_id as varchar) = cast(invoices.customer_id as varchar)
-left join {{ ref('dim_plan') }} plans
+left join (
+  select plan_sk, plan_code
+  from (
+    select
+      plan_sk,
+      plan_code,
+      row_number() over (
+        partition by plan_code
+        order by valid_from desc, plan_sk
+      ) as rn
+    from {{ ref('dim_plan') }}
+  ) ranked_plans
+  where rn = 1
+) plans
   on cast(plans.plan_code as varchar) = cast(lines.plan_code as varchar)
 """,
         ),
@@ -509,8 +528,9 @@ left join {{ ref('dim_plan') }} plans
 select
   payments.payment_id,
   payments.invoice_id,
-  customers.customer_sk,
+  coalesce(customers.customer_sk, md5('-1')) as customer_sk,
   payments.amount,
+  invoices.currency,
   payments.paid_at,
   cast(payments.paid_at as date) as date_day,
   payments._loaded_at
@@ -525,23 +545,56 @@ left join {{ ref('dim_customer') }} customers
             "models/marts/mart_customer_revenue_daily.sql",
             """
 {{ config(materialized='table') }}
-select
-  coalesce(invoiced.customer_sk, paid.customer_sk) as customer_sk,
-  coalesce(invoiced.date_day, paid.date_day) as date_day,
-  coalesce(invoiced.invoiced_amount, 0) as invoiced_amount,
-  coalesce(paid.paid_amount, 0) as paid_amount
-from (
-  select customer_sk, date_day, sum(amount) as invoiced_amount
+with invoiced as (
+  select
+    customer_sk,
+    date_day,
+    currency,
+    sum(cast(amount as decimal(18, 2))) as invoiced_amount
   from {{ ref('fct_invoice_line') }}
-  group by 1, 2
-) invoiced
-full outer join (
-  select customer_sk, date_day, sum(amount) as paid_amount
+  group by 1, 2, 3
+),
+paid as (
+  select
+    customer_sk,
+    date_day,
+    currency,
+    sum(cast(amount as decimal(18, 2))) as paid_amount
   from {{ ref('fct_payment') }}
-  group by 1, 2
-) paid
+  group by 1, 2, 3
+),
+refunded as (
+  select
+    coalesce(customers.customer_sk, md5('-1')) as customer_sk,
+    cast(refunds.refunded_at as date) as date_day,
+    invoices.currency as currency,
+    sum(cast(refunds.amount as decimal(18, 2))) as refunded_amount
+  from {{ ref('stg_payments__refunds') }} refunds
+  inner join {{ ref('stg_payments__payments') }} payments
+    on refunds.payment_id = payments.payment_id
+  inner join {{ ref('stg_billing__invoices') }} invoices
+    on payments.invoice_id = invoices.invoice_id
+  left join {{ ref('dim_customer') }} customers
+    on cast(customers.billing_customer_id as varchar) = cast(invoices.customer_id as varchar)
+  group by 1, 2, 3
+)
+select
+  coalesce(invoiced.customer_sk, paid.customer_sk, refunded.customer_sk) as customer_sk,
+  coalesce(invoiced.date_day, paid.date_day, refunded.date_day) as date_day,
+  coalesce(invoiced.currency, paid.currency, refunded.currency) as currency,
+  coalesce(invoiced.invoiced_amount, 0) as invoiced_amount,
+  coalesce(paid.paid_amount, 0) as paid_amount,
+  coalesce(refunded.refunded_amount, 0) as refunded_amount,
+  coalesce(paid.paid_amount, 0) - coalesce(refunded.refunded_amount, 0) as net_paid_amount
+from invoiced
+full outer join paid
   on invoiced.customer_sk = paid.customer_sk
  and invoiced.date_day = paid.date_day
+ and invoiced.currency = paid.currency
+full outer join refunded
+  on coalesce(invoiced.customer_sk, paid.customer_sk) = refunded.customer_sk
+ and coalesce(invoiced.date_day, paid.date_day) = refunded.date_day
+ and coalesce(invoiced.currency, paid.currency) = refunded.currency
 """,
         ),
         _file(

@@ -36,7 +36,7 @@ smoke. No production or staging action is part of the interview.
 | Reasoning | Typed, tool-less capabilities grouped as Estate Intelligence, Data Engineering, and Reliability |
 | Modelling | Deterministic modelling engine validates a recorded design against objective signals |
 | Execution | Existing Snowflake/dbt foundations through the sole Governed Tool Gateway; workflow-scoped `AIDE_DEV` objects |
-| Quality | dbt compile/build/tests plus fact-to-mart reconciliation; the revenue mart is currency-agnostic and gross of refunds |
+| Quality | dbt compile/build/tests, fact-to-mart reconciliation, and fixture-independent currency, refund, grain, duplicate-payment, and deleted-CRM checks |
 | Fault | One injected rename: `BILLING.INVOICES.INVOICE_STATUS` → `STATUS` |
 | Repair | One allow-listed reference-only dbt SQL correction; at most one automatic application |
 | Verification | Read-only deterministic verifier over immutable evidence; optional LLM explanation cannot set verdict |
@@ -98,10 +98,12 @@ The executable test mapping is `docs/pivot/PIVOT001_CONTRACT_BOUNDARY.md` §14.
 
 ## 4.1 Data modelling limitation
 
-The demo revenue mart is currency-agnostic and gross of refunds. Fact-to-mart sums can
-pass without a currency grain or refund netting. Dimension tables expose current-row
-validity columns. That shape is not full Type 2 history. These limits are accepted for
-the Interview fingerprint. Changing the SQL would reopen the benchmark evidence.
+The demo revenue mart grain is `customer_sk`, `date_day`, and canonical invoice
+currency. `invoiced_amount`, `paid_amount`, and `refunded_amount` are not summed
+across currencies, and `net_paid_amount` is paid minus refunded on that grain.
+There is no FX conversion. Dimension tables expose current-row validity columns.
+That shape is not full Type 2 history. Open amount, active subscriptions, and MRR
+are not in the mart.
 
 ## 5. Hard bounds
 
