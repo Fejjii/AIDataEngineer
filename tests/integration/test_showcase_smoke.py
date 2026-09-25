@@ -151,7 +151,7 @@ async def test_showcase_smoke_operator_story(
             for column in table.columns:
                 assert column.name in home.text
                 assert column.data_type in home.text
-        assert "NOT_VALIDATED" in home.text
+        assert "VALIDATED_SYNTHETIC_CONTRACT" in home.text
         runs_before = await _count(session_factory, OperatorConsoleRunModel)
         workflows_before = await _count(session_factory, WorkflowModel)
         started = await client.post(
@@ -175,7 +175,7 @@ async def test_showcase_smoke_operator_story(
         assert summary.business_correctness != "PASS"
         assert summary.verifier != summary.business_correctness
         assert f'data-verifier="{summary.verifier}"' in page.text
-        assert "NOT_VALIDATED" in page.text
+        assert "VALIDATED_SYNTHETIC_CONTRACT" in page.text
         exported = await client.get(f"/console/runs/{run_id}/exports/generated-sql")
         assert exported.status_code == 200
         assert run_page.primary is not None
@@ -192,7 +192,7 @@ async def test_showcase_smoke_operator_story(
         assert runs_after == runs_before + 1
         assert workflows_after > workflows_before
     captured = capsys.readouterr()
-    assert "business correctness: NOT_VALIDATED" in captured.out
+    assert "business correctness: VALIDATED_SYNTHETIC_CONTRACT" in captured.out
     assert "business correctness: PASS" not in captured.out
     stdout = sys.__stdout__
     if stdout is not None:
