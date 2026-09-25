@@ -674,7 +674,8 @@ def _signals(status: str, primary: WorkflowView | None) -> tuple[SignalView, ...
             "business",
             "Business correctness",
             BUSINESS_CORRECTNESS,
-            "Validated against the independent fixture oracle for the defined synthetic contract. This is not production financial validation.",
+            "Validated against the independent fixture oracle for the defined synthetic "
+            "contract. This is not production financial validation.",
         ),
     )
 
