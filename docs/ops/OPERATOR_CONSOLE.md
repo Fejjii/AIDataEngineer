@@ -53,8 +53,7 @@ Presentation rules:
   refreshes; no stage progress is inferred.
 - Run-scoped navigation (Workflow, Incident and Repair, Data Product, Quality,
   Evidence) is shown only when a completed run exists.
-- Business correctness stays `NOT_VALIDATED` on the overview, the run header,
-  the data product panel, the verification panel, and every history row.
+- Business correctness for new runs is labelled `VALIDATED_SYNTHETIC_CONTRACT`, meaning the defined synthetic fixture contract passed the independent oracle. This is not production financial validation.
 - No JavaScript. The CSP remains `script-src 'none'`; styling is one inline
   stylesheet template (`_theme.css`) and native `<details>` disclosures.
 
@@ -64,12 +63,9 @@ Three labels stay separate:
 |---|---|
 | Run status | `running`, `completed`, or `failed` |
 | Evidence consistency | Independent Verifier `PASS` or `FAIL` only when that artifact was stored. Otherwise `unavailable` |
-| Business correctness | Always `NOT_VALIDATED` |
+| Business correctness | `VALIDATED_SYNTHETIC_CONTRACT` for the defined synthetic fixture contract on current builds; not a production finance certification |
 
-A verifier PASS is evidence consistency for the schema-drift repair. It is not
-validated financial revenue. Mixed-currency gross sums, un-netted refunds, and
-history-shape columns stay visible as limitations. This task does not invent FX
-rates or change the generated SQL.
+A verifier PASS is evidence consistency for the schema-drift repair. It is not production financial validation. The independent fixture oracle separately validates the defined synthetic contract for currency isolation, refunds, net paid amount, grain, duplicate payments, deleted CRM handling, and unknown customer handling. FX conversion and several broader finance measures remain out of scope.
 
 Refreshing a result page does not start another run. A second Run while one is
 active returns HTTP 409. If the process restarts mid-run, the row is marked
@@ -156,7 +152,7 @@ this image later:
 
 ## Human acceptance script
 
-**Status: USER_ACCEPTANCE_NOT_RUN.** Automated checks do not replace this script.
+**Status: USER_ACCEPTANCE_NOT_RUN.** Automated checks do not replace this script. The synthetic business contract has passed the independent fixture oracle, but operator acceptance is still pending.
 Sofien completes it on the deployed or local synthetic process.
 
 1. Sign in at `/console/login`.
@@ -170,16 +166,14 @@ Sofien completes it on the deployed or local synthetic process.
 5. Inspect the incident and repair panel: failure class, `INVOICE_STATUS` to
    `STATUS`, original SQL, repaired SQL, repair validation rules, and
    revalidation.
-6. Inspect generated SQL and the actual output preview. Confirm amounts are
-   labelled synthetic executed output, not validated financial revenue.
+6. Inspect generated SQL and the actual output preview. Confirm the page states that the defined synthetic contract is validated while production financial validation remains out of scope.
 7. Examine dbt tests, quality checks, reconciliation, and the Independent
    Evidence Verification panel separately. Note anything marked unavailable.
 8. Reopen the same run from history. Confirm the workflow ids did not change
    and no second run started.
 9. Repeat steps 1, 4, and 5 in a narrow (about 390 px) browser window.
 
-Record the run id and what you accepted or rejected. Do not mark business
-correctness validated.
+Record the run id and what you accepted or rejected. Do not treat scoped synthetic contract validation as production financial certification.
 
 ## Subsequent data-correctness cases
 
