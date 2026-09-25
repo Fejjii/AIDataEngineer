@@ -60,6 +60,9 @@ class _Slice:
     def __init__(self) -> None:
         self.events = EventBus()
 
+    async def run_offline(self, requirement_text: str, **kwargs: object) -> object:
+        raise AssertionError(requirement_text)
+
 
 def _hidden(html: str, name: str) -> str:
     match = re.search(rf'name="{name}" value="([^"]*)"', html)
@@ -100,7 +103,9 @@ async def _sign_in(client: AsyncClient) -> None:
     assert _PASSWORD not in response.headers.get("set-cookie", "")
 
 
-def _body(artifacts: dict[str, dict[str, dict[str, object]]], workflow_id: str, name: str) -> dict:
+def _body(
+    artifacts: dict[str, dict[str, dict[str, object]]], workflow_id: str, name: str
+) -> dict[str, object]:
     raw = artifacts.get(workflow_id, {}).get(name)
     assert isinstance(raw, dict), f"{name} missing for {workflow_id}"
     return raw
@@ -189,7 +194,9 @@ async def test_showcase_smoke_operator_story(
     captured = capsys.readouterr()
     assert "business correctness: NOT_VALIDATED" in captured.out
     assert "business correctness: PASS" not in captured.out
-    sys.__stdout__.write(captured.out)
+    stdout = sys.__stdout__
+    if stdout is not None:
+        stdout.write(captured.out)
 
 
 async def _artifacts(
@@ -287,6 +294,7 @@ def _assert_persisted_story(
         diff = validation.get("parsed_diff")
         assert isinstance(diff, dict)
         pairs = diff.get("column_reference_replacements")
+        assert isinstance(pairs, list)
         assert [ACCEPTED_FROM_COLUMN, ACCEPTED_TO_COLUMN] in pairs
         application = _body(artifacts, panel.workflow_id, "repair_application")
         assert application.get("applied") is True
