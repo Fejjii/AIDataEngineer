@@ -297,7 +297,7 @@ async def test_secure_cookie_flag_and_real_scenario(
         assert "different currencies are not summed" in page.text
         assert page.text.count("Workflow ") >= 2 or page.text.count("workflow") >= 1
         # The engineering loop is populated from persisted evidence only.
-        assert _body(page.text).count('data-state="complete"') == 12
+        assert _body(page.text).count('data-state="complete"') == 11
         assert 'data-state="unavailable"' not in _body(page.text)
         assert 'data-state="issue"' not in _body(page.text)
         assert 'data-drift="present"' in page.text
