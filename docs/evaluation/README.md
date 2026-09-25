@@ -10,6 +10,7 @@ proof is one customer-revenue schema-drift loop.
 | [`LIVE_ACCEPTANCE_001.md`](LIVE_ACCEPTANCE_001.md) | LIVE ACCEPTANCE of the Railway synthetic demo |
 | [`FRONTIER_HOLISTIC_CHALLENGE_002.md`](FRONTIER_HOLISTIC_CHALLENGE_002.md) | Frontier holistic challenge and the documentation closure that follows it |
 | [`DEMO_SCENARIOS_001.md`](DEMO_SCENARIOS_001.md) | Interview conversation scenarios |
+| [`SHOWCASE_SMOKE_001.md`](SHOWCASE_SMOKE_001.md) | Recruiter console smoke and runbook |
 | [`../EVALUATION_STRATEGY.md`](../EVALUATION_STRATEGY.md) | V1 evaluation design and the historical manual-minutes baseline |
 
 - Scorecard contracts: `aide.domain.evaluation` and `aide.app.evaluation`
