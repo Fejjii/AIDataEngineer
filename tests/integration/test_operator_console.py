@@ -150,7 +150,7 @@ async def test_wrong_password_and_bad_csrf_do_not_write(
         await _sign_in(client)
         home = await client.get("/console")
         assert "taylor.johnson7213@novasystems-0.com" not in home.text
-        assert "NOT_VALIDATED" in home.text
+        assert "VALIDATED_SYNTHETIC_CONTRACT" in home.text
         assert "Run Data Engineering Workflow" in home.text
         # Run-scoped navigation has no backing data before the first completed run.
         assert "Incident and Repair" not in home.text
@@ -233,7 +233,7 @@ async def test_completed_run_without_artifacts_is_not_pass(
     assert 'data-verifier="unavailable"' in page.text
     assert 'data-verifier="PASS"' not in page.text
     assert 'data-benchmark="unavailable"' in page.text
-    assert "NOT_VALIDATED" in page.text
+    assert "VALIDATED_SYNTHETIC_CONTRACT" in page.text
 
 
 @pytest.mark.asyncio
@@ -292,7 +292,7 @@ async def test_secure_cookie_flag_and_real_scenario(
         assert page.status_code == 200
         assert "completed" in page.text
         assert "stg_billing__invoices.sql" in page.text
-        assert "NOT_VALIDATED" in page.text
+        assert "VALIDATED_SYNTHETIC_CONTRACT" in page.text
         assert "canonical invoice currency" in page.text
         assert "different currencies are not summed" in page.text
         assert page.text.count("Workflow ") >= 2 or page.text.count("workflow") >= 1
