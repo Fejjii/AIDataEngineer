@@ -150,6 +150,7 @@ def test_mart_matches_fixture_oracle(version: str) -> None:
               )
             """
         ).fetchone()
+        assert fallback is not None
         assert int(fallback[0]) == 0
         unknown = conn.execute(
             """
@@ -159,15 +160,18 @@ def test_mart_matches_fixture_oracle(version: str) -> None:
             """,
             [expected.unknown_customer_sk],
         ).fetchone()
+        assert unknown is not None
         assert int(unknown[0]) == expected.unknown_invoice_count
         null_customers = conn.execute(
             'SELECT count(*) FROM "AIDE_DEV"."mart_customer_revenue_daily" '
             "WHERE customer_sk IS NULL"
         ).fetchone()
+        assert null_customers is not None
         assert int(null_customers[0]) == 0
         line_rows = conn.execute(
             'SELECT count(*), count(DISTINCT invoice_line_id) FROM "AIDE_DEV"."fct_invoice_line"'
         ).fetchone()
+        assert line_rows is not None
         assert line_rows[0] == line_rows[1]
         report = evaluate_interview_quality(conn.execute, required_models=REQUIRED_DEMO_MODELS)
         failed = [(item.check_id, item.detail) for item in report.checks if not item.passed]
