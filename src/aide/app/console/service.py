@@ -13,14 +13,21 @@ from aide.app.benchmarking.errors import DemoBusyError
 from aide.app.benchmarking.service import SyntheticInterviewDemoService
 from aide.app.console.present import (
     AuditEventView,
+    Dashboard,
     ExportFile,
     RunPage,
     RunSummary,
+    build_dashboard,
     export_file,
     present_run,
+    summarize_snapshot,
 )
-from aide.app.console.snapshot import build_operator_snapshot, public_failure_message
-from aide.app.console.sources import SourceTableView, load_source_catalog
+from aide.app.console.snapshot import (
+    SNAPSHOT_SCHEMA_VERSION,
+    build_operator_snapshot,
+    public_failure_message,
+)
+from aide.app.console.sources import SourceCatalogView, group_source_catalog, load_source_catalog
 from aide.app.sessions import LocalSessionService
 from aide.app.supervisor import InterviewResult
 from aide.auth.session import IssuedLocalSession
@@ -76,8 +83,8 @@ class OperatorConsoleService:
     async def issue_operator_session(self) -> IssuedLocalSession:
         return await self._sessions.issue(roles=frozenset({Role.OPERATOR}))
 
-    def source_catalog(self) -> tuple[SourceTableView, ...]:
-        return load_source_catalog()
+    def source_catalog(self) -> SourceCatalogView:
+        return group_source_catalog(load_source_catalog())
 
     async def reconcile_interrupted_runs(self) -> None:
         async with self._factory() as db, db.begin():
@@ -110,19 +117,38 @@ class OperatorConsoleService:
         if pending:
             await asyncio.gather(*pending)
 
+    async def dashboard(self) -> Dashboard:
+        return build_dashboard(await self.list_runs())
+
     async def list_runs(self) -> tuple[RunSummary, ...]:
         async with self._factory() as db:
-            rows = await ConsoleRunRepository(db).list_recent()
-        return tuple(
-            RunSummary(
-                run_id=str(row.run_id),
-                status=row.status,
-                started_at=_stamp(row.started_at),
-                finished_at=_stamp(row.finished_at) if row.finished_at is not None else "",
-                workflow_count=len(row.workflow_ids or []),
+            repo = ConsoleRunRepository(db)
+            rows = await repo.list_recent()
+            snapshot_ids = tuple(
+                row.snapshot_artifact_id for row in rows if row.snapshot_artifact_id is not None
             )
-            for row in rows
-        )
+            snapshots = await repo.snapshot_bodies(snapshot_ids)
+        summaries: list[RunSummary] = []
+        for row in rows:
+            body = (
+                snapshots.get(row.snapshot_artifact_id)
+                if row.snapshot_artifact_id is not None
+                else None
+            )
+            verifier, benchmark, models = summarize_snapshot(body)
+            summaries.append(
+                RunSummary(
+                    run_id=str(row.run_id),
+                    status=row.status,
+                    started_at=_stamp(row.started_at),
+                    finished_at=_stamp(row.finished_at) if row.finished_at is not None else "",
+                    workflow_count=len(row.workflow_ids or []),
+                    verifier_verdict=verifier,
+                    benchmark_verdict=benchmark,
+                    models_generated=models,
+                )
+            )
+        return tuple(summaries)
 
     async def run_page(self, run_id: UUID) -> RunPage | None:
         async with self._factory() as db:
@@ -200,7 +226,7 @@ class OperatorConsoleService:
                 task_id=None,
                 artifact_type=SNAPSHOT_ARTIFACT_TYPE,
                 version=version,
-                schema_version=1,
+                schema_version=SNAPSHOT_SCHEMA_VERSION,
                 sha256=digest,
                 provenance=provenance,
                 body=snapshot,

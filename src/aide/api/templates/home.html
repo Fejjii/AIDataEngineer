@@ -1,93 +1,229 @@
 {% extends "base.html" %}
-{% block title %}Scenario — operator console{% endblock %}
+{% import "_macros.html" as ui %}
+{% set active_nav = "overview" %}
+{% set latest = dashboard.latest_completed %}
+{% block title %}Overview — Data Pilot AI{% endblock %}
 {% block header_actions %}
   <form class="inline" method="post" action="/console/logout">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button class="secondary" type="submit">Sign out</button>
+    <button class="button-ghost" type="submit">Sign out</button>
   </form>
 {% endblock %}
-{% block body %}
-  <section class="banner">
-    <p><strong>Business correctness: {{ business_correctness }}.</strong></p>
-    <ul>
-      {% for item in limitations %}
-        <li>{{ item }}</li>
-      {% endfor %}
-    </ul>
-  </section>
-  <section class="grid">
-    <article class="card">
-      <div class="label">Scenario</div>
-      <div>{{ scenario_id }}</div>
-    </article>
-    <article class="card">
-      <div class="label">Execution</div>
-      <div>{{ execution_label }}</div>
-    </article>
-    <article class="card">
-      <div class="label">Business objective</div>
-      <div>{{ business_objective }}</div>
-    </article>
-  </section>
-  <p>There is no request box. The backend runs this objective only, twice, and ignores any other text.</p>
-  <form method="post" action="/console/runs">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit">Run scenario</button>
-  </form>
-  <h2>Selected source tables</h2>
-  <p>Schema and a capped masked sample from the synthetic fixture. These are inputs, not expected output.</p>
-  {% for table in sources %}
-    <details {% if loop.first %}open{% endif %}>
-      <summary>{{ table.address }}{% if table.grain %} — grain {{ table.grain }}{% endif %}</summary>
-      <p class="label">{{ table.sample_note }}</p>
-      <div class="scroll">
-        <table>
-          <caption>Schema</caption>
-          <thead><tr><th>Column</th><th>Type</th><th>Nullable</th></tr></thead>
-          <tbody>
-            {% for column in table.columns %}
-              <tr><td>{{ column.name }}</td><td>{{ column.data_type }}</td><td>{{ "yes" if column.nullable else "no" }}</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% if table.sample_rows %}
-        <div class="scroll">
-          <table>
-            <caption>Masked sample</caption>
-            <thead>
-              <tr>{% for name in table.sample_columns %}<th>{{ name }}</th>{% endfor %}</tr>
-            </thead>
-            <tbody>
-              {% for row in table.sample_rows %}
-                <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      {% else %}
-        <p>Sample unavailable.</p>
+{% block subnav %}
+  <nav class="subnav" aria-label="Sections">
+    <div class="subnav-inner">
+      <a href="#scenario" class="active">Scenario</a>
+      <a href="#estate">Data Estate</a>
+      {% if latest %}
+        <a href="/console/runs/{{ latest.run_id }}#workflow">Workflow</a>
+        <a href="/console/runs/{{ latest.run_id }}#incident">Incident and Repair</a>
+        <a href="/console/runs/{{ latest.run_id }}#data-product">Data Product</a>
+        <a href="/console/runs/{{ latest.run_id }}#quality">Quality</a>
+        <a href="/console/runs/{{ latest.run_id }}#evidence">Evidence</a>
       {% endif %}
-    </details>
-  {% endfor %}
-  <h2>Run history</h2>
-  {% if runs %}
-    <div class="scroll">
-      <table>
-        <thead><tr><th>Run</th><th>Status</th><th>Started</th><th>Workflows</th></tr></thead>
-        <tbody>
-          {% for run in runs %}
-            <tr>
-              <td><a href="/console/runs/{{ run.run_id }}">{{ run.run_id }}</a></td>
-              <td class="status">{{ run.status }}</td>
-              <td>{{ run.started_at }}</td>
-              <td>{{ run.workflow_count }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <a href="#history">History</a>
     </div>
-  {% else %}
-    <p>No persisted runs yet.</p>
-  {% endif %}
+  </nav>
+{% endblock %}
+{% block body %}
+  <div class="page-header">
+    <div>
+      <h1>Overview</h1>
+      <p class="lede">One governed engineering loop: business request, estate context, model design, dbt generation, governed execution, testing, schema-drift incident, bounded repair, revalidation, independent verification, evidence.</p>
+    </div>
+    <div class="page-actions">
+      {% if dashboard.running %}
+        <a class="button large" href="/console/runs/{{ dashboard.running.run_id }}">View running workflow</a>
+      {% else %}
+        <form method="post" action="/console/runs">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="button large" type="submit">Run Data Engineering Workflow</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stack">
+    <section class="grid" aria-label="Summary">
+      <article class="card">
+        <div class="card-label">Environment</div>
+        <div class="card-value small">{{ execution_label | capitalize }} · Interview MVP</div>
+        <div class="card-note">Fake warehouse and dbt connectors. No production data.</div>
+      </article>
+      <article class="card">
+        <div class="card-label">Scenario</div>
+        <div class="card-value small">Customer Revenue Data Product</div>
+        <div class="card-note mono">{{ scenario_id }}</div>
+      </article>
+      <article class="card">
+        <div class="card-label">Data sources</div>
+        <div class="card-value">{{ estate.table_count }} <span class="small muted" style="font-weight: 500;">tables</span></div>
+        <div class="card-note">{{ estate.groups | length }} source domains · {{ estate.column_count }} columns</div>
+      </article>
+      <article class="card">
+        <div class="card-label">Models</div>
+        <div class="card-value{% if not latest or latest.models_generated == 'unavailable' %} small muted{% endif %}">{{ latest.models_generated if latest else "unavailable" }}</div>
+        <div class="card-note">{% if latest %}Generated in the latest completed run{% else %}No completed run yet{% endif %}</div>
+      </article>
+      <article class="card">
+        <div class="card-label">Workflow status</div>
+        <div class="card-value small">{{ ui.badge(dashboard.workflow_status) }}</div>
+        <div class="card-note">{% if dashboard.latest %}Latest run {{ dashboard.latest.started_at }}{% else %}No runs recorded{% endif %}</div>
+      </article>
+      <article class="card">
+        <div class="card-label">Latest result</div>
+        <div class="card-value small">
+          {% if latest %}Verifier {{ ui.badge(latest.verifier_verdict) }}{% else %}{{ ui.badge("unavailable") }}{% endif %}
+        </div>
+        <div class="card-note">{{ ui.business_badge(business_correctness) }}</div>
+      </article>
+    </section>
+
+    <section class="panel tone-correctness" id="scenario">
+      <div class="panel-head">
+        <div>
+          <div class="kicker">Scenario</div>
+          <h2>Customer Revenue Data Product</h2>
+          <p class="lede">{{ business_objective }}</p>
+        </div>
+        <div class="head-badges">
+          <span class="badge badge-neutral">Synthetic environment</span>
+          {{ ui.business_badge(business_correctness) }}
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="two-col">
+          <dl class="kv">
+            {{ ui.kv("Inputs", estate.groups | map(attribute="label") | join(", ") ~ " · " ~ estate.table_count ~ " synthetic source tables") }}
+            {{ ui.kv("Request handling", "Fixed scenario. There is no free-text request box or upload; the backend runs this objective only.") }}
+            {{ ui.kv("Planted incident", "Source column " ~ drift_from ~ " renamed to " ~ drift_to ~ " on " ~ drift_asset) }}
+            {{ ui.kv("Repair boundary", "One allowlisted column reference in " ~ repair_path, mono=True) }}
+          </dl>
+          <details class="disclosure quiet">
+            <summary>Validation scope <span class="muted small">what a successful run does and does not prove</span></summary>
+            <div class="disclosure-body">
+              <ul class="small">
+                {% for item in limitations %}<li>{{ item }}</li>{% endfor %}
+              </ul>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="estate">
+      <div class="panel-head">
+        <div>
+          <div class="kicker">Data estate</div>
+          <h2>Selected synthetic sources</h2>
+          <p class="lede">{{ estate.table_count }} tables across {{ estate.groups | length }} domains in <code>{{ estate.database }}</code>. Schemas come from the fixture definition; samples are capped and masked. They are inputs, not expected output.</p>
+        </div>
+        <div class="head-badges">
+          <span class="badge badge-neutral">Masked samples</span>
+          <span class="badge badge-outline">Read-only</span>
+        </div>
+      </div>
+      <div class="panel-body">
+        <ul class="inline-list" style="margin-bottom: 14px;">
+          {% for group in estate.groups %}
+            <li><strong>{{ group.label }}</strong> · {{ group.tables | length }} table{{ "s" if group.tables | length != 1 }} · {{ group.column_count }} columns</li>
+          {% endfor %}
+        </ul>
+        {% for group in estate.groups %}
+          <details class="disclosure" {% if loop.first %}open{% endif %}>
+            <summary>{{ group.label }} <span class="muted small">{{ group.tables | length }} table{{ "s" if group.tables | length != 1 }} · {{ group.column_count }} columns</span></summary>
+            <div class="disclosure-body">
+              <div class="scroll table-frame" style="margin-top: 10px;">
+                <table class="table compact">
+                  <thead><tr><th>Table</th><th>Grain</th><th class="num">Columns</th><th>Masked in sample</th></tr></thead>
+                  <tbody>
+                    {% for table in group.tables %}
+                      <tr>
+                        <td class="mono"><a href="#table-{{ group.key }}-{{ table.name | lower }}">{{ table.name }}</a></td>
+                        <td class="muted">{{ table.grain or "unavailable" }}</td>
+                        <td class="num">{{ table.columns | length }}</td>
+                        <td class="muted small">{% if table.masked_columns %}{{ table.masked_columns | join(", ") }}{% else %}none{% endif %}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              {% for table in group.tables %}
+                <details class="disclosure" id="table-{{ group.key }}-{{ table.name | lower }}" style="margin-top: 10px;">
+                  <summary><span class="mono">{{ table.address }}</span>{% if table.grain %}<span class="muted small">grain {{ table.grain }}</span>{% endif %}</summary>
+                  <div class="disclosure-body">
+                    <div class="two-col" style="margin-top: 10px;">
+                      <div>
+                        <div class="subhead"><h3>Schema</h3><span class="count">{{ table.columns | length }} columns</span></div>
+                        <div class="scroll table-frame">
+                          <table class="table compact">
+                            <thead><tr><th>Column</th><th>Type</th><th>Nullable</th></tr></thead>
+                            <tbody>
+                              {% for column in table.columns %}
+                                <tr><td class="mono">{{ column.name }}</td><td class="mono muted">{{ column.data_type }}</td><td class="muted">{{ "yes" if column.nullable else "no" }}</td></tr>
+                              {% endfor %}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                      <div>
+                        <div class="subhead"><h3>Masked sample</h3><span class="count">{{ table.sample_note }}</span></div>
+                        {% if table.sample_rows %}
+                          <div class="scroll table-frame">
+                            <table class="table compact">
+                              <thead><tr>{% for name in table.sample_columns %}<th class="mono">{{ name }}</th>{% endfor %}</tr></thead>
+                              <tbody>
+                                {% for row in table.sample_rows %}
+                                  <tr>{% for cell in row %}<td class="mono">{{ cell }}</td>{% endfor %}</tr>
+                                {% endfor %}
+                              </tbody>
+                            </table>
+                          </div>
+                        {% else %}
+                          <p class="muted">Sample unavailable.</p>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </div>
+                </details>
+              {% endfor %}
+            </div>
+          </details>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="panel" id="history">
+      <div class="panel-head">
+        <div>
+          <div class="kicker">History</div>
+          <h2>Persisted runs</h2>
+          <p class="lede">Each run executes the scenario twice so the benchmark can compare the two workflows. Opening a run reads persisted evidence; it never starts another run.</p>
+        </div>
+      </div>
+      <div class="panel-body">
+        {% if dashboard.runs %}
+          <div class="scroll table-frame">
+            <table class="table">
+              <thead><tr><th>Run</th><th>Started</th><th>Status</th><th class="num">Workflows</th><th>Verifier</th><th>Business correctness</th></tr></thead>
+              <tbody>
+                {% for run in dashboard.runs %}
+                  <tr>
+                    <td><a class="mono" href="/console/runs/{{ run.run_id }}" title="{{ run.run_id }}">{{ run.run_id }}</a></td>
+                    <td class="nowrap muted">{{ run.started_at }}</td>
+                    <td>{{ ui.badge(run.status) }}</td>
+                    <td class="num">{{ run.workflow_count }}</td>
+                    <td>{{ ui.badge(run.verifier_verdict) }}</td>
+                    <td>{{ ui.badge(run.business_correctness, "correctness", run.business_correctness | replace("_", " ")) }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="muted">No persisted runs yet. Start the workflow to create the first one.</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
 {% endblock %}

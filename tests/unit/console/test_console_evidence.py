@@ -71,14 +71,20 @@ def test_missing_artifacts_are_unavailable_and_not_pass() -> None:
     )
     panel = page.workflows[0]
     assert page.benchmark_verdict == "unavailable"
-    assert panel.verifier_verdict == "unavailable"
-    assert panel.verifier_state == "unavailable"
-    assert panel.quality_state == "unavailable"
-    assert panel.tests_state == "unavailable"
+    assert panel.verification.verdict == "unavailable"
+    assert panel.verification.state == "unavailable"
+    assert panel.quality.quality_state == "unavailable"
+    assert panel.quality.tests_state == "unavailable"
+    assert panel.quality.reconciliation_state == "unavailable"
     assert panel.preview.state == "unavailable"
-    assert panel.original_sql == "unavailable"
-    assert panel.repaired_sql == "unavailable"
-    assert panel.repair_applied == "unavailable"
+    assert panel.incident.state == "unavailable"
+    assert panel.incident.original_sql == "unavailable"
+    assert panel.incident.repaired_sql == "unavailable"
+    assert panel.incident.repair_applied == "unavailable"
+    assert panel.twin.state == "unavailable"
+    assert panel.evidence.bundle_state == "unavailable"
+    assert {stage.state for stage in panel.timeline} == {"unavailable"}
+    assert {metric.value for metric in page.summary} == {"unavailable"}
     assert page.business_correctness == "NOT_VALIDATED"
     assert "<script>" in page.error_message
 

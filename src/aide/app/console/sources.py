@@ -13,7 +13,7 @@ from pathlib import Path
 import yaml
 from synthetic.vantara.schema import TABLES
 
-from aide.connectors.snowflake.masking import mask_row
+from aide.connectors.snowflake.masking import column_is_sensitive, mask_row
 from aide.modelling.vantara import vantara_selected_addresses
 from aide.profiling.fixtures import PII_COLUMNS_PATH, csv_path
 
@@ -37,6 +37,68 @@ class SourceTableView:
     sample_columns: tuple[str, ...]
     sample_rows: tuple[tuple[str, ...], ...]
     sample_note: str
+    masked_columns: tuple[str, ...] = ()
+
+    @property
+    def name(self) -> str:
+        return self.address.rsplit(".", 1)[-1]
+
+    @property
+    def schema(self) -> str:
+        parts = self.address.split(".")
+        return parts[-2] if len(parts) >= 2 else ""
+
+
+@dataclass(frozen=True)
+class SourceGroupView:
+    """Tables that share one source schema, shown as one estate domain."""
+
+    key: str
+    label: str
+    tables: tuple[SourceTableView, ...]
+
+    @property
+    def column_count(self) -> int:
+        return sum(len(table.columns) for table in self.tables)
+
+
+@dataclass(frozen=True)
+class SourceCatalogView:
+    groups: tuple[SourceGroupView, ...]
+
+    @property
+    def tables(self) -> tuple[SourceTableView, ...]:
+        return tuple(table for group in self.groups for table in group.tables)
+
+    @property
+    def table_count(self) -> int:
+        return len(self.tables)
+
+    @property
+    def column_count(self) -> int:
+        return sum(len(table.columns) for table in self.tables)
+
+    @property
+    def database(self) -> str:
+        first = self.tables[0].address if self.tables else ""
+        return first.split(".", 1)[0] if first else ""
+
+
+def group_source_catalog(tables: tuple[SourceTableView, ...]) -> SourceCatalogView:
+    """Group selected tables by source schema, preserving the selection order."""
+    ordered: dict[str, list[SourceTableView]] = {}
+    for table in tables:
+        ordered.setdefault(table.schema, []).append(table)
+    groups = tuple(
+        SourceGroupView(key=schema.lower(), label=_group_label(schema), tables=tuple(items))
+        for schema, items in ordered.items()
+    )
+    return SourceCatalogView(groups=groups)
+
+
+def _group_label(schema: str) -> str:
+    # Short schema names such as CRM are acronyms; longer ones read better in title case.
+    return schema if len(schema) <= 3 else schema.capitalize()
 
 
 def load_source_catalog(
@@ -72,6 +134,11 @@ def load_source_catalog(
                 sample_columns=sample_columns,
                 sample_rows=sample_rows,
                 sample_note=note,
+                masked_columns=tuple(
+                    column
+                    for column in sample_columns
+                    if column in sensitive or column_is_sensitive(column)
+                ),
             )
         )
     return tuple(tables)

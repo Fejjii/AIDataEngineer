@@ -1,18 +1,38 @@
 {% extends "base.html" %}
-{% block title %}Sign in — operator console{% endblock %}
-{% block body %}
-  <section class="card">
-    <h2>Sign in</h2>
-    <p>This console shows the fixed customer-revenue scenario and its persisted evidence.</p>
-    {% if error %}<p class="error">{{ error }}</p>{% endif %}
-    {% if configured %}
-      <form method="post" action="/console/login">
-        <input type="hidden" name="login_token" value="{{ login_token }}">
-        <p><label>Operator password<br><input type="password" name="password" autocomplete="current-password" required></label></p>
-        <button type="submit">Sign in</button>
-      </form>
-    {% else %}
-      <p>Operator authentication is not configured. Set the operator password in the environment and restart.</p>
-    {% endif %}
-  </section>
+{% block title %}Sign in — Data Pilot AI{% endblock %}
+{% block chrome %}{% endblock %}
+{% block main %}
+  <main class="login-shell">
+    <div class="login-card">
+      <div class="login-brand">
+        <span class="brand-mark" aria-hidden="true">DP</span>
+        <div>
+          <h1>Data Pilot AI</h1>
+          <div class="brand-tagline">Governed Data Engineering Control Plane</div>
+        </div>
+      </div>
+      <section class="card">
+        <div class="chip-row" style="margin-bottom: 12px;">
+          <span class="badge badge-info">Interview MVP</span>
+          <span class="badge badge-neutral">Synthetic environment</span>
+        </div>
+        <h2>Operator sign-in</h2>
+        <p class="muted small">One fixed customer-revenue scenario on synthetic Vantara data. No production systems are connected.</p>
+        {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+        {% if configured %}
+          <form method="post" action="/console/login">
+            <input type="hidden" name="login_token" value="{{ login_token }}">
+            <div class="field">
+              <label for="password">Operator password</label>
+              <input id="password" type="password" name="password" autocomplete="current-password" required autofocus>
+            </div>
+            <button class="button large" type="submit">Sign in</button>
+          </form>
+        {% else %}
+          <p class="notice warning">Operator authentication is not configured. Set the operator password in the environment and restart the service.</p>
+        {% endif %}
+      </section>
+      <p class="login-footer">Sessions use an HttpOnly cookie and expire after 8 hours. Nothing is stored in the browser.</p>
+    </div>
+  </main>
 {% endblock %}
