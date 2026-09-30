@@ -116,10 +116,13 @@ Exports are allowlisted names under
 `repaired-sql`, `generated-sql`, `quality`, `verifier`, `tests`. Anything else
 is `unavailable`.
 
-## Railway (prepare only)
+## Railway deployment and retained configuration checklist
 
-Do not change the live service from this task. When Development Control deploys
-this image later:
+Verified 2026-09-30: the console and current synthetic validation wording are
+serving from main `a9e65ce7597354fba58bf190dd40042d707703ec`, deployment
+`a29fe27b-9858-4526-a8e8-d5654e687246` (SUCCESS). Health and readiness passed.
+This records existing deployment state; it does not authorize redeployment.
+The following configuration checklist remains applicable:
 
 1. Deploy the application image that contains this revision. The container
    entrypoint already runs Alembic before the process serves traffic.

@@ -289,7 +289,7 @@ tasks do not run concurrently because their shared high-conflict contracts are s
 
 - Compact ID: `INTERACTIVE_VALIDATION_001`
 - Priority: P1
-- Status: IN REVIEW (branch only; human acceptance NOT_RUN; do not merge from the agent)
+- Status: MERGED (PR 36, commit `804b0dc`; human acceptance NOT_RUN)
 - Owner: Cursor Cloud agent
 - Environment: CURSOR_CLOUD
 - Branch: `feat/interactive_validation_001`
@@ -313,8 +313,10 @@ tasks do not run concurrently because their shared high-conflict contracts are s
 
 - Compact ID: `UI_PRODUCT_POLISH_001`
 - Priority: P1
-- Status: IN REVIEW (PR 37; UI IMPLEMENTED; USER ACCEPTANCE PENDING; BUSINESS
-  CORRECTNESS NOT VALIDATED; do not merge from the agent)
+- Status: MERGED (PR 37, commit `b84edc3`; refinement PR 41 merged; USER ACCEPTANCE
+  PENDING). PRs 40 and 42 established `VALIDATED_SYNTHETIC_CONTRACT`; current
+  FINAL_ACCEPTANCE_001 found a session-time-zone date defect, corrected on its
+  isolated task branch pending review and integration.
 - Owner: Cursor Cloud agent (Claude Fable 5.1)
 - Environment: CURSOR_CLOUD
 - Branch: `cursor/ui-product-polish-001-2d7d`
