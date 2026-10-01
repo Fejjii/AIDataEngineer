@@ -8,6 +8,7 @@
   <style>{% include "_theme.css" %}</style>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
   {% block chrome %}
   <header class="appbar">
     <div class="appbar-inner">
@@ -33,7 +34,7 @@
   {% block subnav %}{% endblock %}
   {% endblock %}
   {% block main %}
-  <main class="shell">
+  <main class="shell" id="main-content" tabindex="-1">
     {% block body %}{% endblock %}
   </main>
   {% endblock %}
