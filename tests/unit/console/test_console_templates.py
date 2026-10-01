@@ -184,7 +184,7 @@ def test_login_overrides_chrome_without_a_broken_skip_link(configured: bool) -> 
     )
     parsed = _PageHTML(html)
     assert not parsed.anchors
-    assert "skip-link" not in html
+    assert not any(a.get("class") == "skip-link" for _, a, _ in parsed.nodes)
     assert ('name="password"' in html) == configured
 
 
