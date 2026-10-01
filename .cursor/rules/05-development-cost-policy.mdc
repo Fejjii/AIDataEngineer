@@ -1,0 +1,9 @@
+---
+description: Default cost-efficient development lifecycle and safe policy inheritance
+alwaysApply: true
+---
+
+Read root `AGENTS.md` and its AI Development Cost Efficiency Protocol. Its normal
+development cadence supersedes older full-local-suite, CI-wait, repeated-checkpoint
+and sync-acknowledgement instructions. Apply at the next safe boundary; do not
+interrupt current agents. Keep all project security and release authority intact.
