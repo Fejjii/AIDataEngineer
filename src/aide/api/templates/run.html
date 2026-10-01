@@ -18,7 +18,8 @@
 {% block subnav %}
   <nav class="subnav" aria-label="Run sections">
     <div class="subnav-inner">
-      <a href="#workflow" class="active">Workflow</a>
+      {% if page.status != "running" %}<a href="#summary" class="active">Summary</a>{% endif %}
+      <a href="#workflow">Workflow</a>
       {% if w %}
         {% if w.twin.state == "present" %}<a href="#estate">Estate context</a>{% endif %}
         {% if w.incident.state == "present" %}<a href="#incident">Incident and Repair</a>{% endif %}
@@ -39,8 +40,6 @@
       <div class="page-title-row">
         <h1>Run <span class="mono">{{ ui.short_id(page.run_id) }}</span></h1>
         {{ ui.badge(page.status) }}
-        {% if w %}Verifier {{ ui.badge(w.verification.verdict) }}{% endif %}
-        {{ ui.business_badge(page.business_correctness) }}
       </div>
       <p class="lede">Customer Revenue Data Product · started {{ page.started_at }}{% if page.finished_at %} · finished {{ page.finished_at }}{% endif %}</p>
       <p class="faint small mono">{{ page.run_id }}</p>
@@ -74,11 +73,11 @@
 
     {% if page.status != "running" %}
     {# Executive summary #}
-    <section class="panel" id="summary">
+    <section class="panel executive-summary" id="summary">
       <div class="panel-head">
         <div>
           <div class="kicker">What happened</div>
-          <h2>Persisted run evidence</h2>
+          <h2>Executive summary</h2>
           {% if page.what_happened %}
             <p class="lede narrative" data-narrative="present">{{ page.what_happened }}</p>
           {% else %}
@@ -87,10 +86,10 @@
         </div>
       </div>
       <div class="panel-body">
-        <div class="signals" aria-label="Separated judgements">
+        <div class="signals" role="group" aria-label="Separated judgements">
           {% for signal in page.signals %}
             <article class="card signal-card" data-signal="{{ signal.key }}">
-              <div class="card-label">{{ signal.label }}</div>
+              <div class="card-label">{{ "Independent Verifier" if signal.key == "verification" else signal.label }}</div>
               <div class="card-value small">
                 {% if signal.key == "verification" %}
                   <span data-verifier="{{ signal.value }}">{{ ui.badge(signal.value) }}</span>
@@ -114,22 +113,27 @@
             </article>
           {% endfor %}
         </div>
-        <div class="subhead" id="telemetry" style="margin-top: 16px;"><h3>Technical telemetry</h3><span class="count">not a product result</span></div>
-        <p class="muted small">Governed operations and policy evaluations count the same dispatch population: each governed tool call is evaluated by policy once.</p>
-        <div class="grid grid-tight secondary-metrics">
-          {% for metric in page.summary if metric.group == "secondary" %}
-            <article class="card metric-card metric-secondary" data-metric="{{ metric.key }}">
-              <div class="card-label">{{ metric.label }}</div>
-              <div class="card-value{% if metric.value == 'unavailable' %} unavailable{% endif %}">{{ metric.value }}</div>
-              {% if metric.note %}<div class="card-note">{{ metric.note }}</div>{% endif %}
-            </article>
-          {% endfor %}
-          <article class="card metric-card metric-secondary" data-metric="determinism">
-            <div class="card-label">Determinism</div>
-            <div class="card-value small">{{ ui.flag_badge(page.determinism, "equivalent", "differs") }}</div>
-            <div class="card-note">The benchmark ran the scenario twice and compared fingerprints. Benchmark <span data-benchmark="{{ page.benchmark_verdict }}">{{ ui.badge(page.benchmark_verdict) }}</span>.</div>
-          </article>
-        </div>
+        <details class="disclosure quiet telemetry" id="telemetry">
+          <summary>Technical telemetry and determinism <span class="muted small">governed operations, policy evaluations, benchmark</span></summary>
+          <div class="disclosure-body">
+            <div class="subhead" style="margin-top: 16px;"><h3>Technical telemetry</h3><span class="count">not a product result</span></div>
+            <p class="muted small">Governed operations and policy evaluations count the same dispatch population: each governed tool call is evaluated by policy once.</p>
+            <div class="grid grid-tight secondary-metrics">
+              {% for metric in page.summary if metric.group == "secondary" %}
+                <article class="card metric-card metric-secondary" data-metric="{{ metric.key }}">
+                  <div class="card-label">{{ metric.label }}</div>
+                  <div class="card-value{% if metric.value == 'unavailable' %} unavailable{% endif %}">{{ metric.value }}</div>
+                  {% if metric.note %}<div class="card-note">{{ metric.note }}</div>{% endif %}
+                </article>
+              {% endfor %}
+              <article class="card metric-card metric-secondary" data-metric="determinism">
+                <div class="card-label">Determinism</div>
+                <div class="card-value small">{{ ui.flag_badge(page.determinism, "equivalent", "differs") }}</div>
+                <div class="card-note">The benchmark ran the scenario twice and compared fingerprints. Benchmark <span data-benchmark="{{ page.benchmark_verdict }}">{{ ui.badge(page.benchmark_verdict) }}</span>.</div>
+              </article>
+            </div>
+          </div>
+        </details>
         <div class="notice correctness" style="margin-top: 14px;">
           <strong>Business correctness: {{ page.business_correctness }}.</strong>
           Validated for the defined synthetic business contract by an independent fixture oracle. A verifier PASS remains evidence consistency for the drift repair, not production financial validation.
@@ -150,7 +154,6 @@
           <p class="lede">
             {% if w %}
               Read top to bottom: objective, estate, models, execution, tests, the incident, the repair, revalidation, verification, and evidence.
-              Primary workflow <span class="mono">{{ w.workflow_id }}</span> · control-plane state {{ ui.badge(w.control_plane_state) }} · benchmark outcome {{ ui.badge(w.benchmark_outcome) }}{% if w.duration != "unavailable" %} · {{ w.duration }}{% endif %}
             {% else %}
               Stages populate from persisted evidence after the run completes.
             {% endif %}
@@ -171,12 +174,17 @@
               </li>
             {% endfor %}
           </ol>
-          {% if w.phase_sequence %}
-            <details class="disclosure quiet" style="margin-top: 12px;">
-              <summary>Persisted phase sequence <span class="muted small">{{ w.phase_sequence | length }} transitions</span></summary>
-              <div class="disclosure-body"><div class="chip-row" style="margin-top: 8px;">{% for phase in w.phase_sequence %}<span class="chip">{{ phase }}</span>{% endfor %}</div></div>
-            </details>
-          {% endif %}
+          <details class="disclosure quiet" style="margin-top: 12px;">
+            <summary>Workflow identifiers and phase sequence <span class="muted small">{{ w.phase_sequence | length }} transitions</span></summary>
+            <div class="disclosure-body">
+              <p class="small muted">Primary workflow <span class="mono">{{ w.workflow_id }}</span> · control-plane state {{ ui.badge(w.control_plane_state) }} · benchmark outcome {{ ui.badge(w.benchmark_outcome) }}{% if w.duration != "unavailable" %} · {{ w.duration }}{% endif %}</p>
+              {% if w.phase_sequence %}
+                <div class="chip-row" style="margin-top: 8px;">{% for phase in w.phase_sequence %}<span class="chip">{{ phase }}</span>{% endfor %}</div>
+              {% else %}
+                <p class="muted small">Phase sequence unavailable.</p>
+              {% endif %}
+            </div>
+          </details>
           {% if w.fail_reason != "unavailable" or w.block_reason != "unavailable" %}
             <div class="notice error" style="margin-top: 12px;">
               {% if w.fail_reason != "unavailable" %}<div>Fail reason: <code>{{ w.fail_reason }}</code></div>{% endif %}
@@ -202,35 +210,38 @@
 
     {% if w %}
       {# Estate context / Digital Twin #}
-      <section class="panel" id="estate">
-        <div class="panel-head">
-          <div>
-            <div class="kicker">Estate context</div>
-            <h2>Enterprise Data Digital Twin</h2>
-            <p class="lede">The workflow pins one immutable Twin snapshot and derives a bounded estate context. Downstream evidence must match both digests.</p>
-          </div>
-          <div class="head-badges">{{ ui.badge(w.twin.state, "info" if w.twin.state == "present" else "neutral", "snapshot pinned" if w.twin.state == "present" else "unavailable") }}</div>
-        </div>
-        <div class="panel-body">
-          <div class="two-col">
-            <dl class="kv">
-              {{ ui.kv("Snapshot identifier", w.twin.snapshot_id, mono=True) }}
-              {{ ui.kv("Manifest digest", w.twin.manifest_sha256, mono=True) }}
-              {{ ui.kv("Estate context digest", w.twin.estate_context_sha256, mono=True) }}
-              {{ ui.kv("Selected asset count", w.twin.selected_assets | length if w.twin.selected_assets else "unavailable") }}
-              {{ ui.kv("Pinned asset versions", w.twin.pinned_asset_count) }}
-            </dl>
+      <details class="disclosure estate-context" id="estate">
+        <summary>Estate context <span class="muted small">pinned Digital Twin snapshot and selected assets</span></summary>
+        <div class="disclosure-body">
+          <div class="panel-head">
             <div>
-              <div class="subhead"><h3>Selected assets</h3><span class="count">{{ w.twin.selected_assets | length if w.twin.selected_assets else "unavailable" }}</span></div>
-              {% if w.twin.selected_assets %}
-                <div class="chip-row">{% for asset in w.twin.selected_assets %}<span class="chip">{{ asset }}</span>{% endfor %}</div>
-              {% else %}
-                <p class="muted">unavailable</p>
-              {% endif %}
+              <div class="kicker">Estate context</div>
+              <h2>Enterprise Data Digital Twin</h2>
+              <p class="lede">The workflow pins one immutable Twin snapshot and derives a bounded estate context. Downstream evidence must match both digests.</p>
+            </div>
+            <div class="head-badges">{{ ui.badge(w.twin.state, "info" if w.twin.state == "present" else "neutral", "snapshot pinned" if w.twin.state == "present" else "unavailable") }}</div>
+          </div>
+          <div class="panel-body">
+            <div class="two-col">
+              <dl class="kv">
+                {{ ui.kv("Snapshot identifier", w.twin.snapshot_id, mono=True) }}
+                {{ ui.kv("Manifest digest", w.twin.manifest_sha256, mono=True) }}
+                {{ ui.kv("Estate context digest", w.twin.estate_context_sha256, mono=True) }}
+                {{ ui.kv("Selected asset count", w.twin.selected_assets | length if w.twin.selected_assets else "unavailable") }}
+                {{ ui.kv("Pinned asset versions", w.twin.pinned_asset_count) }}
+              </dl>
+              <div>
+                <div class="subhead"><h3>Selected assets</h3><span class="count">{{ w.twin.selected_assets | length if w.twin.selected_assets else "unavailable" }}</span></div>
+                {% if w.twin.selected_assets %}
+                  <div class="chip-row">{% for asset in w.twin.selected_assets %}<span class="chip">{{ asset }}</span>{% endfor %}</div>
+                {% else %}
+                  <p class="muted">unavailable</p>
+                {% endif %}
+              </div>
             </div>
           </div>
         </div>
-      </section>
+      </details>
 
       {# Incident and repair #}
       <section class="panel tone-incident" id="incident">
@@ -281,13 +292,14 @@
           </div>
 
           <hr class="divider">
-          <div class="subhead"><h3>Original SQL and repaired SQL</h3><span class="count">{{ w.incident.repair_path if w.incident.repair_path != "unavailable" else "" }}</span></div>
+          <div class="subhead"><h3>Before and after SQL</h3><span class="count">{{ w.incident.repair_path if w.incident.repair_path != "unavailable" else "" }}</span></div>
           {% if w.incident.change_summary %}
             <p class="change-callout">{{ w.incident.change_summary }}</p>
           {% endif %}
           {% if w.incident.replacements %}
             <p class="small">Column reference: {% for item in w.incident.replacements %}<span class="chip">{{ item }}</span>{% endfor %}</p>
           {% endif %}
+          <p class="muted small">Highlighted lines show the column-reference change. Before and after labels identify each version.</p>
           <div class="compare">
             {% if w.incident.original_lines %}
               {{ ui.sql_lines("Original SQL", w.incident.original_lines, "incident", "before") }}
@@ -306,21 +318,23 @@
           </div>
 
           {% if w.incident.rules or w.incident.scope_flags %}
-            <hr class="divider">
-            <div class="two-col">
-              {% if w.incident.rules %}
-                <div>
-                  <div class="subhead"><h3>Repair validation rules</h3><span class="count">{{ w.incident.rules | length }}</span></div>
-                  {{ ui.check_table(w.incident.rules, "Rule") }}
-                </div>
-              {% endif %}
-              {% if w.incident.scope_flags %}
-                <div>
-                  <div class="subhead"><h3>Parsed diff scope</h3><span class="count">everything except the column reference must stay unchanged</span></div>
-                  {{ ui.check_table(w.incident.scope_flags, "Scope check", "Result", "Field", "unchanged", "changed") }}
-                </div>
-              {% endif %}
-            </div>
+            <details class="disclosure quiet repair-rules">
+              <summary>Repair boundary checks <span class="muted small">validation rules and parsed diff</span></summary>
+              <div class="disclosure-body two-col">
+                {% if w.incident.rules %}
+                  <div>
+                    <div class="subhead"><h3>Repair validation rules</h3><span class="count">{{ w.incident.rules | length }}</span></div>
+                    {{ ui.check_table(w.incident.rules, "Rule") }}
+                  </div>
+                {% endif %}
+                {% if w.incident.scope_flags %}
+                  <div>
+                    <div class="subhead"><h3>Parsed diff scope</h3><span class="count">everything except the column reference must stay unchanged</span></div>
+                    {{ ui.check_table(w.incident.scope_flags, "Scope check", "Result", "Field", "unchanged", "changed") }}
+                  </div>
+                {% endif %}
+              </div>
+            </details>
           {% endif %}
 
           <hr class="divider">
@@ -356,8 +370,9 @@
               <li>Total rows <strong>{{ w.preview.total_row_count }}</strong></li>
               <li>Truncated <strong>{{ w.preview.truncated }}</strong></li>
             </ul>
-            <div class="scroll table-frame">
-              <table class="table compact">
+            <div class="scroll table-frame" tabindex="0" role="region" aria-label="Scrollable evidence table">
+              <table class="table preview-table">
+                <caption>Customer revenue · bounded synthetic output sample. Scroll horizontally to inspect every column.</caption>
                 <thead><tr>{% for name in w.preview.columns %}<th class="mono">{{ name }}</th>{% endfor %}</tr></thead>
                 <tbody>
                   {% for row in w.preview.rows %}
@@ -419,29 +434,44 @@
             </article>
           </div>
         </div>
-        <div class="panel-body">
-          <div class="subhead"><h3>dbt tests</h3>{{ ui.badge(w.quality.tests_state, "info" if w.quality.tests_state == "present" else "neutral", "individual results" if w.quality.tests_state == "present" else "unavailable") }}</div>
-          {% if w.quality.tests %}
-            {{ ui.check_table(w.quality.tests, "Test", "Status", "Detail") }}
-          {% else %}
-            <p class="muted">Individual test results unavailable.</p>
-          {% endif %}
+        <div class="panel-body detail-section">
+          <details class="disclosure">
+            <summary>dbt tests · individual evidence</summary>
+            <div class="disclosure-body">
+              <div class="subhead"><h3>dbt tests</h3>{{ ui.badge(w.quality.tests_state, "info" if w.quality.tests_state == "present" else "neutral", "individual results" if w.quality.tests_state == "present" else "unavailable") }}</div>
+              {% if w.quality.tests %}
+                {{ ui.check_table(w.quality.tests, "Test", "Status", "Detail") }}
+              {% else %}
+                <p class="muted">Individual test results unavailable.</p>
+              {% endif %}
+            </div>
+          </details>
         </div>
-        <div class="panel-body">
-          <div class="subhead"><h3>Quality checks</h3>{{ ui.badge(w.quality.quality_state, "info" if w.quality.quality_state == "present" else "neutral", "persisted" if w.quality.quality_state == "present" else "unavailable") }}</div>
-          {% if w.quality.quality_checks %}
-            {{ ui.check_table(w.quality.quality_checks) }}
-          {% else %}
-            <p class="muted">Quality check results unavailable.</p>
-          {% endif %}
+        <div class="panel-body detail-section">
+          <details class="disclosure">
+            <summary>Quality checks · individual evidence</summary>
+            <div class="disclosure-body">
+              <div class="subhead"><h3>Quality checks</h3>{{ ui.badge(w.quality.quality_state, "info" if w.quality.quality_state == "present" else "neutral", "persisted" if w.quality.quality_state == "present" else "unavailable") }}</div>
+              {% if w.quality.quality_checks %}
+                {{ ui.check_table(w.quality.quality_checks) }}
+              {% else %}
+                <p class="muted">Quality check results unavailable.</p>
+              {% endif %}
+            </div>
+          </details>
         </div>
-        <div class="panel-body">
-          <div class="subhead"><h3>Reconciliation</h3>{{ ui.badge(w.quality.reconciliation_state, "info" if w.quality.reconciliation_state == "present" else "neutral", "persisted" if w.quality.reconciliation_state == "present" else "unavailable") }}</div>
-          {% if w.quality.reconciliation %}
-            {{ ui.check_table(w.quality.reconciliation) }}
-          {% else %}
-            <p class="muted">Reconciliation evidence unavailable.</p>
-          {% endif %}
+        <div class="panel-body detail-section">
+          <details class="disclosure">
+            <summary>Reconciliation · individual evidence</summary>
+            <div class="disclosure-body">
+              <div class="subhead"><h3>Reconciliation</h3>{{ ui.badge(w.quality.reconciliation_state, "info" if w.quality.reconciliation_state == "present" else "neutral", "persisted" if w.quality.reconciliation_state == "present" else "unavailable") }}</div>
+              {% if w.quality.reconciliation %}
+                {{ ui.check_table(w.quality.reconciliation) }}
+              {% else %}
+                <p class="muted">Reconciliation evidence unavailable.</p>
+              {% endif %}
+            </div>
+          </details>
         </div>
       </section>
 
@@ -490,19 +520,24 @@
             <div class="notice error" style="margin-top: 12px;">Reason codes: {% for code in w.verification.reason_codes %}<code>{{ code }}</code> {% endfor %}</div>
           {% endif %}
         </div>
-        <div class="panel-body">
-          <div class="subhead"><h3>Verifier checks</h3><span class="count">{{ w.verification.checks | length if w.verification.checks else "unavailable" }}</span></div>
-          {% if w.verification.checks %}
-            {{ ui.check_table(w.verification.checks) }}
-          {% else %}
-            <p class="muted">Verifier checks unavailable.</p>
-          {% endif %}
-          {% if w.verification.state == "present" %}
-            <dl class="kv" style="margin-top: 12px;">
-              {{ ui.kv("Verified snapshot", w.verification.twin_snapshot_id, mono=True) }}
-              {{ ui.kv("Verified estate context", w.verification.estate_context_sha256, mono=True) }}
-            </dl>
-          {% endif %}
+        <div class="panel-body detail-section">
+          <details class="disclosure">
+            <summary>Verifier checks · individual evidence</summary>
+            <div class="disclosure-body">
+              <div class="subhead"><h3>Verifier checks</h3><span class="count">{{ w.verification.checks | length if w.verification.checks else "unavailable" }}</span></div>
+              {% if w.verification.checks %}
+                {{ ui.check_table(w.verification.checks) }}
+              {% else %}
+                <p class="muted">Verifier checks unavailable.</p>
+              {% endif %}
+              {% if w.verification.state == "present" %}
+                <dl class="kv" style="margin-top: 12px;">
+                  {{ ui.kv("Verified snapshot", w.verification.twin_snapshot_id, mono=True) }}
+                  {{ ui.kv("Verified estate context", w.verification.estate_context_sha256, mono=True) }}
+                </dl>
+              {% endif %}
+            </div>
+          </details>
         </div>
       </section>
 
@@ -539,7 +574,7 @@
             <summary>Persisted audit events <span class="muted small">{{ page.audit_events | length }} recorded</span></summary>
             <div class="disclosure-body">
               {% if page.audit_events %}
-                <div class="scroll table-frame" style="margin-top: 10px;">
+                <div class="scroll table-frame" tabindex="0" role="region" aria-label="Scrollable evidence table" style="margin-top: 10px;">
                   <table class="table compact">
                     <thead><tr><th>Workflow</th><th class="num">Seq</th><th>Event</th><th>Recorded</th></tr></thead>
                     <tbody>
@@ -568,7 +603,7 @@
             </div>
           </div>
           <div class="panel-body">
-            <div class="scroll table-frame">
+            <div class="scroll table-frame" tabindex="0" role="region" aria-label="Scrollable evidence table">
               <table class="table compact">
                 <thead><tr><th>Workflow</th><th>State</th><th>Outcome</th><th>Tests</th><th>Quality</th><th>Reconciliation</th><th>Repair</th><th>Verifier</th><th>Duration</th></tr></thead>
                 <tbody>

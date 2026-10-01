@@ -23,7 +23,7 @@
 {%- endmacro %}
 
 {% macro business_badge(value) -%}
-  <span class="badge badge-correctness" data-business-correctness="{{ value }}">Business correctness {{ value | replace("_", " ") }}</span>
+  <span class="badge badge-correctness" data-business-correctness="{{ value }}">Business correctness {{ value }}</span>
 {%- endmacro %}
 
 {% macro kv(label, value, mono=False) -%}
@@ -31,7 +31,7 @@
 {%- endmacro %}
 
 {% macro check_table(rows, name_header="Check", outcome_header="Outcome", detail_header="Detail", yes="passed", no="failed") -%}
-  <div class="scroll table-frame">
+  <div class="scroll table-frame" tabindex="0" role="region" aria-label="Scrollable evidence table">
     <table class="table compact">
       <thead><tr><th>{{ name_header }}</th><th>{{ outcome_header }}</th><th>{{ detail_header }}</th></tr></thead>
       <tbody>
@@ -51,22 +51,22 @@
 {%- endmacro %}
 
 {% macro sql_block(title, sql, tone=None, tag=None) -%}
-  <div class="code-frame">
+  <div class="code-frame{% if tone %} code-{{ tone }}{% endif %}">
     <div class="code-head">
       <span>{{ title }}</span>
       {% if tag %}{{ badge(tag, tone or "neutral") }}{% endif %}
     </div>
-    <pre class="code">{{ sql }}</pre>
+    <pre class="code" tabindex="0" aria-label="{{ title }}" role="region">{{ sql }}</pre>
   </div>
 {%- endmacro %}
 
 {% macro sql_lines(title, lines, tone=None, tag=None) -%}
-  <div class="code-frame">
+  <div class="code-frame{% if tone %} code-{{ tone }}{% endif %}">
     <div class="code-head">
       <span>{{ title }}</span>
       {% if tag %}{{ badge(tag, tone or "neutral") }}{% endif %}
     </div>
-    <pre class="code">{% for line in lines %}<span class="code-line{% if line.changed %} line-changed{% endif %}">{{ line.text }}</span>
+    <pre class="code" tabindex="0" aria-label="{{ title }}" role="region">{% for line in lines %}<span class="code-line{% if line.changed %} line-changed{% endif %}">{{ line.text }}</span>
 {% endfor %}</pre>
   </div>
 {%- endmacro %}

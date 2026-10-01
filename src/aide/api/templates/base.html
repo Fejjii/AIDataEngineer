@@ -9,6 +9,7 @@
 </head>
 <body>
   {% block chrome %}
+  <a class="skip-link" href="#main-content">Skip to content</a>
   <header class="appbar">
     <div class="appbar-inner">
       <a class="brand" href="/console">
@@ -33,7 +34,7 @@
   {% block subnav %}{% endblock %}
   {% endblock %}
   {% block main %}
-  <main class="shell">
+  <main class="shell" id="main-content" tabindex="-1">
     {% block body %}{% endblock %}
   </main>
   {% endblock %}
