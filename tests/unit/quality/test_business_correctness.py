@@ -22,7 +22,7 @@ WORKFLOW = UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
 _REF_RE = re.compile(r"ref\(\s*'([^']+)'\s*\)")
 
 
-def _build(version: str) -> duckdb.DuckDBPyConnection:
+def _build(version: str, timezone: str) -> duckdb.DuckDBPyConnection:
     generated = generate_vantara_transformation(
         GenerateTransformationInput(
             workflow_id=WORKFLOW,
@@ -32,6 +32,7 @@ def _build(version: str) -> duckdb.DuckDBPyConnection:
     )
     root = Path("synthetic/vantara/fixtures/tiny") / version / "csv"
     conn = duckdb.connect()
+    conn.execute("SET TimeZone = ?", [timezone])
     conn.execute('CREATE SCHEMA "AIDE_DEV"')
     for schema, table in (
         ("crm", "accounts"),
@@ -77,9 +78,10 @@ def _money(value: object) -> Decimal:
 
 
 @pytest.mark.parametrize("version", ["v1", "v2"])
-def test_mart_matches_fixture_oracle(version: str) -> None:
+@pytest.mark.parametrize("timezone", ["UTC", "Europe/Berlin", "America/Los_Angeles"])
+def test_mart_matches_fixture_oracle(version: str, timezone: str) -> None:
     expected = expect_business_correctness(version)
-    conn = _build(version)
+    conn = _build(version, timezone)
     try:
         rows = conn.execute(
             """

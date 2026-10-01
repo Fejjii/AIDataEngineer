@@ -532,7 +532,11 @@ select
   payments.amount,
   invoices.currency,
   payments.paid_at,
-  cast(payments.paid_at as date) as date_day,
+  {% if target.type == 'snowflake' %}
+  cast(convert_timezone('UTC', payments.paid_at) as date) as date_day,
+  {% else %}
+  cast(timezone('UTC', payments.paid_at) as date) as date_day,
+  {% endif %}
   payments._loaded_at
 from {{ ref('int_payments_deduplicated') }} payments
 inner join {{ ref('stg_billing__invoices') }} invoices
@@ -566,7 +570,11 @@ paid as (
 refunded as (
   select
     coalesce(customers.customer_sk, md5('-1')) as customer_sk,
-    cast(refunds.refunded_at as date) as date_day,
+    {% if target.type == 'snowflake' %}
+    cast(convert_timezone('UTC', refunds.refunded_at) as date) as date_day,
+    {% else %}
+    cast(timezone('UTC', refunds.refunded_at) as date) as date_day,
+    {% endif %}
     invoices.currency as currency,
     sum(cast(refunds.amount as decimal(18, 2))) as refunded_amount
   from {{ ref('stg_payments__refunds') }} refunds
