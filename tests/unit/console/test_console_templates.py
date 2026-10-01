@@ -175,3 +175,21 @@ def test_sql_failure_and_preview_text_remain_escaped() -> None:
     assert not any(t == "script" for t, _, _ in parsed.nodes)
     assert "&lt;script&gt;" in html
     assert 'tabindex="0" aria-label="Repaired SQL"' in html
+
+
+@pytest.mark.parametrize("configured", [True, False])
+def test_login_overrides_chrome_without_a_broken_skip_link(configured: bool) -> None:
+    html = _ENV.get_template("login.html").render(
+        configured=configured, login_token="test-login", error=""
+    )
+    parsed = _PageHTML(html)
+    assert not parsed.anchors
+    assert "skip-link" not in html
+    assert ('name="password"' in html) == configured
+
+
+def test_denied_page_retains_a_valid_skip_target_and_escaped_detail() -> None:
+    html = _ENV.get_template("denied.html").render(detail="<script>denied</script>", active_nav="")
+    parsed = _PageHTML(html)
+    assert "main-content" in parsed.anchors
+    assert not any(t == "script" for t, _, _ in parsed.nodes)
