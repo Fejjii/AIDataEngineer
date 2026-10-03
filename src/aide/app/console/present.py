@@ -7,6 +7,7 @@ count on the page is computed from anything other than persisted evidence.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from aide.app.console.snapshot import (
@@ -24,6 +25,8 @@ _COMPLETE = "complete"
 _ISSUE = "issue"
 
 _RECONCILIATION_CHECK_IDS = frozenset({"invoice_line_sum_matches_mart", "payment_sum_matches_mart"})
+_MAX_PREVIEW_ROWS = 8
+_ACTIVITY_COLUMNS = ("paid_amount", "refunded_amount", "net_paid_amount")
 
 
 @dataclass(frozen=True)
@@ -117,6 +120,11 @@ class PreviewView:
     sampled_row_count: str = _UNAVAILABLE
     total_row_count: str = _UNAVAILABLE
     truncated: str = _UNAVAILABLE
+    captured_rows: tuple[tuple[str, ...], ...] = ()
+
+    @property
+    def displayed_row_count(self) -> int:
+        return len(self.rows)
 
 
 @dataclass(frozen=True)
@@ -139,6 +147,46 @@ class QualityView:
     quality_row_count: str
     reconciliation_state: str
     reconciliation: tuple[CheckView, ...]
+
+    @property
+    def engine_reconciliation_count(self) -> int:
+        return len(self.all_quality_checks) - len(self.quality_checks)
+
+    @property
+    def quality_count_note(self) -> str:
+        if self.quality_state != _PRESENT:
+            return "Quality Engine check results unavailable; missing checks are not a pass."
+        return (
+            f"{len(self.all_quality_checks)} Quality Engine "
+            f"{_plural(len(self.all_quality_checks), 'check')} = "
+            f"{len(self.quality_checks)} ordinary quality "
+            f"{_plural(len(self.quality_checks), 'check')} + "
+            f"{self.engine_reconciliation_count} reconciliation "
+            f"{_plural(self.engine_reconciliation_count, 'check')} shown below."
+        )
+
+    @property
+    def reconciliation_count_note(self) -> str:
+        flags = len(self.reconciliation) - self.engine_reconciliation_count
+        flag_count = f"{flags} additional persisted {_plural(flags, 'flag')}"
+        if self.quality_state != _PRESENT:
+            return (
+                f"{flag_count}. Quality Engine reconciliation checks "
+                "are unavailable. These flags are outside the Quality Engine check total."
+            )
+        return (
+            f"{len(self.reconciliation)} reconciliation "
+            f"{_plural(len(self.reconciliation), 'signal')} = "
+            f"{self.engine_reconciliation_count} "
+            f"{_plural(self.engine_reconciliation_count, 'check')} included in the "
+            f"{len(self.all_quality_checks)} Quality Engine "
+            f"{_plural(len(self.all_quality_checks), 'check')} + "
+            f"{flag_count}. These flags are outside that check total."
+        )
+
+
+def _plural(count: int, noun: str) -> str:
+    return noun if count == 1 else noun + "s"
 
 
 @dataclass(frozen=True)
@@ -180,6 +228,7 @@ class WorkflowView:
     twin: TwinView
     incident: IncidentView
     models: tuple[SqlFileView, ...]
+    model_count_note: str
     preview: PreviewView
     quality: QualityView
     verification: VerificationView
@@ -413,6 +462,7 @@ def _workflow_panel(
         twin=twin,
         incident=incident,
         models=models,
+        model_count_note=_model_count_note(snapshot, models),
         preview=_preview(snap.get("output_preview")),
         quality=quality,
         verification=verification,
@@ -430,10 +480,20 @@ def _summary(
     verifier = primary.verification.verdict if primary is not None else _UNAVAILABLE
     same_population = "Same dispatch population as the other count."
     return (
-        MetricView("models", "Models", _text(body, "models_generated"), "dbt models generated"),
+        MetricView(
+            "models",
+            "Required MVP models",
+            _text(body, "models_generated"),
+            primary.model_count_note
+            if primary is not None and primary.models
+            else "Interview MVP benchmark count; generated SQL can include additional models.",
+        ),
         MetricView("tests", "Tests", _text(body, "tests_executed"), "dbt tests executed"),
         MetricView(
-            "quality", "Quality", _text(body, "quality_checks_executed"), "quality checks executed"
+            "quality",
+            "Quality Engine checks",
+            _text(body, "quality_checks_executed"),
+            "Includes the reconciliation checks; additional persisted flags are separate.",
         ),
         MetricView(
             "incidents", "Incident", _text(body, "detected_incidents"), "incidents detected"
@@ -1127,6 +1187,22 @@ def _models(value: object) -> tuple[SqlFileView, ...]:
     return tuple(files)
 
 
+def _model_count_note(snapshot: dict[str, Any] | None, models: tuple[SqlFileView, ...]) -> str:
+    metrics = snapshot.get("metrics") if isinstance(snapshot, dict) else None
+    required = _text(metrics if isinstance(metrics, dict) else None, "models_generated")
+    if not models:
+        return "Generated SQL file count unavailable."
+    benchmark = (
+        f"The benchmark counts {required} required Interview MVP models. "
+        if required != _UNAVAILABLE
+        else "The required MVP benchmark count is unavailable. "
+    )
+    note = f"{benchmark}This workflow exposes {len(models)} generated SQL model files."
+    if any(item.path == "models/marts/fct_invoices.sql" for item in models):
+        note += " fct_invoices.sql is additional to the required MVP models."
+    return note
+
+
 def _preview(value: object) -> PreviewView:
     empty = PreviewView(_UNAVAILABLE, "", (), (), "output preview unavailable")
     if not isinstance(value, dict):
@@ -1136,22 +1212,68 @@ def _preview(value: object) -> PreviewView:
     if not isinstance(columns, list) or not isinstance(rows, list):
         return empty
     names = tuple(str(item) for item in columns)
-    rendered: list[tuple[str, ...]] = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        rendered.append(tuple(_cell(row.get(name)) for name in names))
+    captured = [row for row in rows if isinstance(row, dict)]
+    selected = _representative_preview_rows(captured, names)
+    rendered = tuple(tuple(_cell(row.get(name)) for name in names) for row in selected)
     note = value.get("note")
+    selection_note = (
+        "Deterministic display of stored executed rows, preferring nonzero invoice, payment "
+        "and refund amounts where captured."
+    )
+    if not any(
+        _nonzero_amount(row.get(name))
+        for row in captured
+        for name in _ACTIVITY_COLUMNS
+        if name in names
+    ):
+        selection_note += (
+            " No nonzero paid_amount, refunded_amount or net_paid_amount is available in "
+            "the captured sample. Activity outside this sample is unknown."
+        )
     return PreviewView(
         state=_PRESENT,
         relation=str(value.get("relation") or ""),
         columns=names,
-        rows=tuple(rendered),
-        note=str(note) if isinstance(note, str) else "",
+        rows=rendered,
+        note=f"{note} {selection_note}" if isinstance(note, str) and note else selection_note,
         sampled_row_count=_text(value, "sampled_row_count"),
         total_row_count=_text(value, "total_row_count"),
         truncated=_bool_text(value, "truncated"),
+        captured_rows=tuple(tuple(_cell(row.get(name)) for name in names) for row in captured),
     )
+
+
+def _representative_preview_rows(
+    rows: list[dict[str, Any]], columns: tuple[str, ...]
+) -> tuple[dict[str, Any], ...]:
+    """Select stored rows only, covering each captured amount before filling the bound.
+
+    Ties follow persisted order; the selected rows retain that order. Never derive
+    amounts or retrieve additional warehouse rows for a presentation sample.
+    """
+    activity = tuple(name for name in _ACTIVITY_COLUMNS if name in columns)
+    amounts = activity + (("invoiced_amount",) if "invoiced_amount" in columns else ())
+    selected: set[int] = set()
+    for name in amounts:
+        match = next((i for i, row in enumerate(rows) if _nonzero_amount(row.get(name))), None)
+        if match is not None:
+            selected.add(match)
+    active = [i for i, row in enumerate(rows) if any(_nonzero_amount(row.get(n)) for n in activity)]
+    for index in [*active, *range(len(rows))]:
+        if len(selected) >= _MAX_PREVIEW_ROWS:
+            break
+        selected.add(index)
+    return tuple(rows[index] for index in sorted(selected))
+
+
+def _nonzero_amount(value: object) -> bool:
+    if value is None or isinstance(value, bool):
+        return False
+    try:
+        amount = Decimal(str(value))
+    except InvalidOperation:
+        return False
+    return amount.is_finite() and amount != 0
 
 
 def _test_rows(value: object) -> tuple[CheckView, ...]:
@@ -1307,7 +1429,7 @@ def _preview_csv(preview: PreviewView) -> ExportFile | None:
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(preview.columns)
-    for row in preview.rows:
+    for row in preview.captured_rows:
         writer.writerow(tuple(_csv_cell(item) for item in row))
     return ExportFile("output-preview.csv", "text/csv; charset=utf-8", buffer.getvalue().encode())
 

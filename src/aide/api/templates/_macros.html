@@ -22,8 +22,16 @@
   {%- endif -%}
 {%- endmacro %}
 
+{% macro business_label(value) -%}
+  {{- "Validated synthetic contract" if value == "VALIDATED_SYNTHETIC_CONTRACT" else value -}}
+{%- endmacro %}
+
 {% macro business_badge(value) -%}
-  <span class="badge badge-correctness" data-business-correctness="{{ value }}">Business correctness {{ value }}</span>
+  <span class="badge badge-correctness" data-business-correctness="{{ value }}">{{ business_label(value) }}</span>
+{%- endmacro %}
+
+{% macro workflow_state_note() -%}
+  Persisted control plane state is the stored orchestration state. Successful Interview MVP workflows remain in VALIDATION; VERIFIED is the separate benchmark outcome after the Independent Verifier accepts the evidence.
 {%- endmacro %}
 
 {% macro kv(label, value, mono=False) -%}
