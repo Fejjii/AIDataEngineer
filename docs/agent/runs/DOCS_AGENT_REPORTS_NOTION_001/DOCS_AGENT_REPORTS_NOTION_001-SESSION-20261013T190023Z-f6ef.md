@@ -11,7 +11,7 @@
 | Base commit | 926b439f805a177b893cf566b884c13597125358 |
 | Implementation commit | 811da468addd10fcd622fd8d80fffac04634f602 |
 | Report status | SUCCESS |
-| PR number | None |
+| PR number | 48 |
 
 ## Goal
 
@@ -82,7 +82,7 @@ None
 
 ## Human action required
 
-Review the draft pull request. Do not merge until that review is complete. Issue #44 was not updated; the receipts below are the preserved ledger copies.
+Review the draft pull request https://github.com/Fejjii/AIDataEngineer/pull/48. Do not merge until that review is complete. Issue #44 was not updated; the receipts below are the preserved ledger copies. Agent run: https://cursor.com/agents/bc-f2dad711-cdd0-5d92-9eb5-ff594c0af6ef.
 
 ## Recommended next task
 
@@ -116,4 +116,4 @@ Purpose: docs-only standing instruction that every Codex and Cursor agent files 
 
 ### DONE
 
-Starting SHA: `926b439f805a177b893cf566b884c13597125358`. Implementation SHA: `811da468addd10fcd622fd8d80fffac04634f602`. Final SHA: branch tip of `cursor/agent-reports-notion-f6ef` after the report commit (not stored here). Branch: `cursor/agent-reports-notion-f6ef`. Files changed: `AGENTS.md`; this run report. Tests: secret-pattern scan and scope-sentence check; product unit tests not run. PR: draft, number filled in a follow-up report edit when the pull request exists. CI: not required for this docs edit; state recorded after the pull request is opened. Remaining blockers: issue #44 ledger API inaccessible. Terminal result: SUCCESS, draft PR only, not merged.
+Starting SHA: `926b439f805a177b893cf566b884c13597125358`. Implementation SHA: `811da468addd10fcd622fd8d80fffac04634f602`. Final SHA: branch tip of `cursor/agent-reports-notion-f6ef` after the report commits (not stored here). Branch: `cursor/agent-reports-notion-f6ef`. Files changed: `AGENTS.md`; this run report. Tests: secret-pattern scan and scope-sentence check; product unit tests not run. PR: draft https://github.com/Fejjii/AIDataEngineer/pull/48. CI: not run locally; GitHub CI state was not waited on. Remaining blockers: issue #44 ledger API inaccessible. Terminal result: SUCCESS, draft PR only, not merged.
