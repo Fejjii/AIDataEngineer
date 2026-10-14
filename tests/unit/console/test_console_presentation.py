@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
+from uuid import UUID
+
+import pytest
 
 from aide.app.console.present import (
     RunSummary,
@@ -12,6 +16,9 @@ from aide.app.console.present import (
     summarize_snapshot,
 )
 from aide.app.console.sources import group_source_catalog, load_source_catalog
+from aide.capabilities.io import GenerateTransformationInput
+from aide.generation.vantara import generate_vantara_transformation
+from aide.modelling.demo_design import vantara_model_design
 from aide.persistence.console import EVIDENCE_ARTIFACT_TYPES, SNAPSHOT_ARTIFACT_TYPE
 
 _WF = "11111111-1111-1111-1111-111111111111"
@@ -190,6 +197,225 @@ def _page(artifacts: dict[str, dict[str, Any]]) -> Any:
         artifacts={_WF: artifacts},
         audit_events=(),
     )
+
+
+def _full_count_artifacts() -> dict[str, dict[str, Any]]:
+    """Stored shape with the real generator's files and the final check populations."""
+    artifacts = _artifacts()
+    snapshot = artifacts[SNAPSHOT_ARTIFACT_TYPE]
+    generated = generate_vantara_transformation(
+        GenerateTransformationInput(workflow_id=UUID(_WF), model_design=vantara_model_design())
+    )
+    snapshot["metrics"]["models_generated"] = len(generated.model_names)
+    snapshot["workflows"][0]["models"] = [
+        {"path": item.path, "sql": item.content}
+        for item in generated.files
+        if item.kind == "MODEL_SQL"
+    ]
+    snapshot["metrics"]["quality_checks_executed"] = 33
+    artifacts["quality_results"]["checks"] = [
+        {"check_id": f"ordinary_{index}", "passed": True, "detail": "stored result"}
+        for index in range(31)
+    ] + [
+        {"check_id": "invoice_line_sum_matches_mart", "passed": True, "detail": "stored result"},
+        {"check_id": "payment_sum_matches_mart", "passed": True, "detail": "stored result"},
+    ]
+    return artifacts
+
+
+def test_required_model_metric_and_sql_file_count_describe_distinct_populations() -> None:
+    artifacts = _full_count_artifacts()
+    original = deepcopy(artifacts)
+    page = _page(artifacts)
+    panel = page.primary
+    metric = next(item for item in page.summary if item.key == "models")
+    assert (metric.label, metric.value) == ("Required MVP models", "21")
+    assert len(panel.models) == 22
+    assert metric.note == panel.model_count_note
+    assert panel.model_count_note == (
+        "The benchmark counts 21 required Interview MVP models. "
+        "This workflow exposes 22 generated SQL model files. "
+        "fct_invoices.sql is additional to the required MVP models."
+    )
+    assert artifacts == original
+
+
+def test_model_count_copy_uses_stored_counts_and_requires_the_additional_file() -> None:
+    artifacts = _artifacts()
+    snapshot = artifacts[SNAPSHOT_ARTIFACT_TYPE]
+    snapshot["metrics"]["models_generated"] = 7
+    panel = _page(artifacts).primary
+    assert "7 required Interview MVP models" in panel.model_count_note
+    assert "2 generated SQL model files" in panel.model_count_note
+    assert "fct_invoices.sql" not in panel.model_count_note
+    snapshot.pop("metrics")
+    assert "benchmark count is unavailable" in _page(artifacts).primary.model_count_note
+    snapshot["workflows"][0]["models"] = []
+    assert _page(artifacts).primary.model_count_note == "Generated SQL file count unavailable."
+
+
+def test_quality_count_copy_accounts_for_all_checks_and_additional_flags() -> None:
+    artifacts = _full_count_artifacts()
+    original = deepcopy(artifacts)
+    page = _page(artifacts)
+    quality = page.primary.quality
+    metric = next(item for item in page.summary if item.key == "quality")
+    assert (metric.label, metric.value) == ("Quality Engine checks", "33")
+    assert len(quality.all_quality_checks) == 33
+    assert len(quality.quality_checks) == 31
+    assert quality.engine_reconciliation_count == 2
+    assert len(quality.reconciliation) == 4
+    assert quality.quality_count_note == (
+        "33 Quality Engine checks = 31 ordinary quality checks + "
+        "2 reconciliation checks shown below."
+    )
+    assert quality.reconciliation_count_note == (
+        "4 reconciliation signals = 2 checks included in the 33 Quality Engine checks + "
+        "2 additional persisted flags. These flags are outside that check total."
+    )
+    exported = export_file(page, "quality")
+    assert exported is not None
+    import json
+
+    assert len(json.loads(exported.body)["checks"]) == 33
+    assert artifacts == original
+
+
+def test_quality_count_copy_does_not_invent_missing_checks_or_flags() -> None:
+    artifacts = _artifacts()
+    quality = _page(artifacts).primary.quality
+    assert "2 Quality Engine checks = 1 ordinary quality check + 1 reconciliation" in (
+        quality.quality_count_note
+    )
+    assert "3 reconciliation signals = 1 check included in the 2 Quality Engine checks" in (
+        quality.reconciliation_count_note
+    )
+    artifacts.pop("reconciliation")
+    artifacts.pop("revenue_payment_reconciliation")
+    assert (
+        "0 additional persisted flags" in _page(artifacts).primary.quality.reconciliation_count_note
+    )
+    artifacts.pop("quality_results")
+    quality = _page(artifacts).primary.quality
+    assert quality.quality_state == "unavailable"
+    assert "results unavailable" in quality.quality_count_note
+    assert "reconciliation checks are unavailable" in quality.reconciliation_count_note
+
+
+def test_persisted_workflow_phase_and_benchmark_outcome_remain_independent() -> None:
+    panel = _page(_artifacts()).primary
+    assert panel.control_plane_state == "VALIDATION"
+    assert panel.benchmark_outcome == "VERIFIED"
+    assert panel.phase_sequence[-1] == "VALIDATION"
+    assert panel.verification.verdict == "PASS"
+
+
+def test_representative_preview_selects_only_stored_rows_without_changing_the_capture() -> None:
+    artifacts = _artifacts()
+    raw = artifacts[SNAPSHOT_ARTIFACT_TYPE]["workflows"][0]["output_preview"]
+    raw["columns"] = [
+        "customer_sk",
+        "invoiced_amount",
+        "paid_amount",
+        "refunded_amount",
+        "net_paid_amount",
+    ]
+    raw["rows"] = [
+        {
+            "customer_sk": i,
+            "invoiced_amount": 10,
+            "paid_amount": 0,
+            "refunded_amount": 0,
+            "net_paid_amount": 0,
+        }
+        for i in range(20)
+    ]
+    raw["rows"][16].update(paid_amount="18.50", net_paid_amount="18.50")
+    raw["rows"][17].update(refunded_amount="3.25", net_paid_amount="-3.25")
+    raw["rows"][18].update(paid_amount=8, net_paid_amount=8)
+    raw["rows"][19].update(paid_amount=5, refunded_amount=1, net_paid_amount=4)
+    raw["sampled_row_count"] = 20
+    original = deepcopy(artifacts)
+    page = _page(artifacts)
+    preview = page.primary.preview
+    assert preview.displayed_row_count == 8
+    assert (preview.sampled_row_count, preview.total_row_count, preview.truncated) == (
+        "20",
+        "11341",
+        "true",
+    )
+    expected = tuple(
+        tuple(str(raw["rows"][i][name]) for name in raw["columns"])
+        for i in [0, 1, 2, 3, 16, 17, 18, 19]
+    )
+    assert preview.rows == expected
+    assert _page(artifacts).primary.preview == preview
+    assert "No nonzero" not in preview.note
+    assert artifacts == original
+    # The display subset must not shrink the existing captured-output export.
+    exported = export_file(page, "output-preview")
+    assert exported is not None
+    import csv
+    import io
+
+    exported_rows = list(csv.reader(io.StringIO(exported.body.decode())))
+    assert len(exported_rows) == 21
+    assert exported_rows[1] == list(preview.captured_rows[0])
+    assert exported_rows[-1] == list(preview.captured_rows[-1])
+
+
+@pytest.mark.parametrize("column", ["paid_amount", "refunded_amount", "net_paid_amount"])
+@pytest.mark.parametrize("value", ["0.01", -2.5, 5])
+def test_preview_prefers_each_captured_activity_amount(column: str, value: object) -> None:
+    artifacts = _artifacts()
+    raw = artifacts[SNAPSHOT_ARTIFACT_TYPE]["workflows"][0]["output_preview"]
+    raw["columns"] = ["customer_sk", column]
+    raw["rows"] = [{"customer_sk": i, column: 0} for i in range(20)]
+    raw["rows"][-1][column] = value
+    preview = _page(artifacts).primary.preview
+    assert preview.rows[-1] == ("19", str(value))
+    assert len(preview.rows) == 8
+    assert "No nonzero" not in preview.note
+
+
+@pytest.mark.parametrize("value", [0, "0.00", None, True, "NaN", "Infinity", "bad amount"])
+def test_preview_reports_absent_captured_activity_without_inferring_full_mart(
+    value: object,
+) -> None:
+    artifacts = _artifacts()
+    raw = artifacts[SNAPSHOT_ARTIFACT_TYPE]["workflows"][0]["output_preview"]
+    raw["columns"] = ["customer_sk", "paid_amount", "refunded_amount", "net_paid_amount"]
+    raw["rows"] = [
+        {"customer_sk": i, "paid_amount": value, "refunded_amount": 0, "net_paid_amount": 0}
+        for i in range(20)
+    ]
+    preview = _page(artifacts).primary.preview
+    assert preview.rows == tuple(
+        (str(i), "null" if value is None else str(value), "0", "0") for i in range(8)
+    )
+    assert "No nonzero paid_amount, refunded_amount or net_paid_amount" in preview.note
+    assert "Activity outside this sample is unknown" in preview.note
+
+
+def test_preview_uses_only_declared_columns_and_handles_empty_captured_output() -> None:
+    artifacts = _artifacts()
+    raw = artifacts[SNAPSHOT_ARTIFACT_TYPE]["workflows"][0]["output_preview"]
+    raw["rows"][0]["paid_amount"] = 100
+    assert "No nonzero" in _page(artifacts).primary.preview.note
+    raw["rows"] = [None, "not a row"]
+    preview = _page(artifacts).primary.preview
+    assert preview.rows == ()
+    assert preview.displayed_row_count == 0
+
+
+def test_preview_covers_captured_invoice_activity_alongside_payment_activity() -> None:
+    artifacts = _artifacts()
+    raw = artifacts[SNAPSHOT_ARTIFACT_TYPE]["workflows"][0]["output_preview"]
+    raw["columns"] = ["customer_sk", "invoiced_amount", "paid_amount"]
+    raw["rows"] = [{"customer_sk": i, "invoiced_amount": 0, "paid_amount": 5} for i in range(20)]
+    raw["rows"][19]["invoiced_amount"] = 10
+    preview = _page(artifacts).primary.preview
+    assert preview.rows == tuple((str(i), "0", "5") for i in range(7)) + (("19", "10", "5"),)
 
 
 def test_complete_evidence_populates_every_stage_from_persisted_values() -> None:

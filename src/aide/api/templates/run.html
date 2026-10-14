@@ -135,7 +135,7 @@
           </div>
         </details>
         <div class="notice correctness" style="margin-top: 14px;">
-          <strong>Business correctness: {{ page.business_correctness }}.</strong>
+          <strong data-business-correctness="{{ page.business_correctness }}">Business correctness: {{ ui.business_label(page.business_correctness) }}.</strong>
           Validated for the defined synthetic business contract by an independent fixture oracle. A verifier PASS remains evidence consistency for the drift repair, not production financial validation.
           <details class="disclosure quiet" style="margin-top: 8px; border-color: #d8c8ee;">
             <summary>Validation scope</summary>
@@ -177,7 +177,8 @@
           <details class="disclosure quiet" style="margin-top: 12px;">
             <summary>Workflow identifiers and phase sequence <span class="muted small">{{ w.phase_sequence | length }} transitions</span></summary>
             <div class="disclosure-body">
-              <p class="small muted">Primary workflow <span class="mono">{{ w.workflow_id }}</span> · control-plane state {{ ui.badge(w.control_plane_state) }} · benchmark outcome {{ ui.badge(w.benchmark_outcome) }}{% if w.duration != "unavailable" %} · {{ w.duration }}{% endif %}</p>
+              <p class="small muted">Primary workflow <span class="mono">{{ w.workflow_id }}</span> · persisted control plane state {{ ui.badge(w.control_plane_state) }} · benchmark outcome {{ ui.badge(w.benchmark_outcome) }}{% if w.duration != "unavailable" %} · {{ w.duration }}{% endif %}</p>
+              <p class="small muted">{{ ui.workflow_state_note() }}</p>
               {% if w.phase_sequence %}
                 <div class="chip-row" style="margin-top: 8px;">{% for phase in w.phase_sequence %}<span class="chip">{{ phase }}</span>{% endfor %}</div>
               {% else %}
@@ -269,9 +270,14 @@
                 {{ ui.kv("Column type", (w.incident.old_data_type ~ " → " ~ w.incident.new_data_type) if w.incident.old_data_type != "unavailable" else "unavailable", mono=True) }}
                 {{ ui.kv("Observed", w.incident.observed_at, mono=True) }}
               </dl>
-              <div class="subhead" style="margin-top: 14px;"><h3>Original failure</h3><span class="count">{{ w.incident.failure_messages | length if w.incident.failure_messages else "unavailable" }}</span></div>
               {% if w.incident.failure_messages %}
-                <ul class="small mono">{% for message in w.incident.failure_messages %}<li>{{ message }}</li>{% endfor %}</ul>
+                <details class="disclosure quiet" style="margin-top: 14px;" id="original-failure">
+                  <summary>Original model failure messages <span class="muted small">{{ w.incident.failure_messages | length }} recorded</span></summary>
+                  <div class="disclosure-body">
+                    <p class="muted small">Complete recorded error messages, including repeated downstream failures. The original failure artifact remains in the evidence bundle.</p>
+                    <ul class="small mono">{% for message in w.incident.failure_messages %}<li>{{ message }}</li>{% endfor %}</ul>
+                  </div>
+                </details>
               {% else %}
                 <p class="muted">Original failure messages unavailable.</p>
               {% endif %}
@@ -366,9 +372,10 @@
             <ul class="inline-list" style="margin-bottom: 10px;">
               <li>Relation <strong class="mono">{{ w.preview.relation }}</strong></li>
               <li>Columns <strong>{{ w.preview.columns | length }}</strong></li>
-              <li>Sampled rows <strong>{{ w.preview.sampled_row_count }}</strong></li>
+              <li>Displayed rows <strong>{{ w.preview.displayed_row_count }}</strong></li>
+              <li>Captured sample rows <strong>{{ w.preview.sampled_row_count }}</strong></li>
               <li>Total rows <strong>{{ w.preview.total_row_count }}</strong></li>
-              <li>Truncated <strong>{{ w.preview.truncated }}</strong></li>
+              <li>Capture truncated <strong>{{ w.preview.truncated }}</strong></li>
             </ul>
             <div class="scroll table-frame" tabindex="0" role="region" aria-label="Scrollable evidence table">
               <table class="table preview-table">
@@ -381,13 +388,14 @@
                 </tbody>
               </table>
             </div>
-            <p class="muted small" style="margin-top: 8px;">{{ w.preview.note }}</p>
+            <p class="muted small" style="margin-top: 8px;">{{ w.preview.note }} The output-preview export retains every captured sample row.</p>
           {% else %}
             <p class="muted">{{ w.preview.note }}</p>
           {% endif %}
         </div>
         <div class="panel-body">
           <div class="subhead"><h3>Generated SQL</h3><span class="count">{% if w.models %}{{ w.models | length }} dbt SQL files (staging, intermediate, marts){% else %}unavailable{% endif %}</span></div>
+          <p class="muted small">{{ w.model_count_note }}</p>
           {% if w.models %}
             {% for model in w.models %}
               <details class="disclosure">
@@ -407,7 +415,7 @@
           <div>
             <div class="kicker">Quality</div>
             <h2>Tests, quality checks, and reconciliation</h2>
-            <p class="lede">These stay separate. dbt tests check model contracts. Quality checks inspect the mart. Reconciliation compares source totals with the mart and confirms tool dispatches. None of them validates business correctness.</p>
+            <p class="lede">dbt tests check model contracts. Quality Engine checks inspect the mart, including source-to-mart reconciliation. Reconciliation also shows the persisted Supervisor revenue and payment flag and the gateway dispatch flag. None of them validates business correctness.</p>
           </div>
         </div>
         <div class="panel-body">
@@ -418,14 +426,15 @@
               <div class="card-note">Aggregate flag {{ ui.flag_badge(w.quality.aggregate_test_flag, "ok", "failed") }}</div>
             </article>
             <article class="card">
-              <div class="card-label">Quality checks</div>
+              <div class="card-label">Ordinary quality checks</div>
               <div class="card-value small" data-quality="{{ w.quality.quality_state }}">{% if w.quality.quality_state == "present" %}{{ w.quality.quality_checks | length }} checks{% else %}unavailable{% endif %}</div>
+              <div class="card-note">{{ w.quality.quality_count_note }}</div>
               <div class="card-note">Report {{ ui.flag_badge(w.quality.quality_passed) }}{% if w.quality.quality_row_count != "unavailable" %} · {{ w.quality.quality_row_count }} mart rows{% endif %}</div>
             </article>
             <article class="card">
-              <div class="card-label">Reconciliation</div>
-              <div class="card-value small">{% if w.quality.reconciliation_state == "present" %}{{ w.quality.reconciliation | length }} checks{% else %}unavailable{% endif %}</div>
-              <div class="card-note">Source totals versus mart, and gateway dispatch reconciliation</div>
+              <div class="card-label">Reconciliation signals</div>
+              <div class="card-value small">{% if w.quality.reconciliation_state == "present" %}{{ w.quality.reconciliation | length }} signals{% else %}unavailable{% endif %}</div>
+              <div class="card-note">{{ w.quality.reconciliation_count_note }}</div>
             </article>
             <article class="card">
               <div class="card-label">Independent verification</div>
@@ -449,9 +458,9 @@
         </div>
         <div class="panel-body detail-section">
           <details class="disclosure">
-            <summary>Quality checks · individual evidence</summary>
+            <summary>Ordinary quality checks · individual evidence</summary>
             <div class="disclosure-body">
-              <div class="subhead"><h3>Quality checks</h3>{{ ui.badge(w.quality.quality_state, "info" if w.quality.quality_state == "present" else "neutral", "persisted" if w.quality.quality_state == "present" else "unavailable") }}</div>
+              <div class="subhead"><h3>Ordinary quality checks</h3>{{ ui.badge(w.quality.quality_state, "info" if w.quality.quality_state == "present" else "neutral", "persisted" if w.quality.quality_state == "present" else "unavailable") }}</div>
               {% if w.quality.quality_checks %}
                 {{ ui.check_table(w.quality.quality_checks) }}
               {% else %}
@@ -462,11 +471,11 @@
         </div>
         <div class="panel-body detail-section">
           <details class="disclosure">
-            <summary>Reconciliation · individual evidence</summary>
+            <summary>Reconciliation signals · individual evidence</summary>
             <div class="disclosure-body">
               <div class="subhead"><h3>Reconciliation</h3>{{ ui.badge(w.quality.reconciliation_state, "info" if w.quality.reconciliation_state == "present" else "neutral", "persisted" if w.quality.reconciliation_state == "present" else "unavailable") }}</div>
               {% if w.quality.reconciliation %}
-                {{ ui.check_table(w.quality.reconciliation) }}
+                {{ ui.check_table(w.quality.reconciliation, "Check or persisted flag") }}
               {% else %}
                 <p class="muted">Reconciliation evidence unavailable.</p>
               {% endif %}
@@ -600,12 +609,13 @@
               <div class="kicker">Determinism</div>
               <h2>Second workflow</h2>
               <p class="lede">The benchmark runs the scenario twice and compares normalized fingerprints. Equivalent {{ ui.flag_badge(page.determinism, "yes", "no") }}</p>
+              <p class="muted small">{{ ui.workflow_state_note() }}</p>
             </div>
           </div>
           <div class="panel-body">
             <div class="scroll table-frame" tabindex="0" role="region" aria-label="Scrollable evidence table">
               <table class="table compact">
-                <thead><tr><th>Workflow</th><th>State</th><th>Outcome</th><th>Tests</th><th>Quality</th><th>Reconciliation</th><th>Repair</th><th>Verifier</th><th>Duration</th></tr></thead>
+                <thead><tr><th>Workflow</th><th>Persisted control plane state</th><th>Benchmark outcome</th><th>Tests</th><th>Quality</th><th>Reconciliation</th><th>Repair</th><th>Verifier</th><th>Duration</th></tr></thead>
                 <tbody>
                   {% for item in page.workflows %}
                     <tr>

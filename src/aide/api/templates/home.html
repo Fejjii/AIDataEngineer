@@ -83,7 +83,7 @@
         <div>
           <div class="kicker">Latest completed run</div>
           <h2 id="latest-title">{% if latest %}Review the result and its evidence{% else %}Ready for the first workflow{% endif %}</h2>
-          <p class="lede">{% if latest %}{{ latest.started_at }} · {{ latest.models_generated }} models generated{% else %}Run the fixed scenario to generate models and record the engineering loop.{% endif %}</p>
+          <p class="lede">{% if latest %}{{ latest.started_at }} · {{ latest.models_generated }} required Interview MVP models (benchmark count){% else %}Run the fixed scenario to generate models and record the engineering loop.{% endif %}</p>
         </div>
         {% if latest %}<a class="button secondary" href="/console/runs/{{ latest.run_id }}#summary">View executive summary</a>{% endif %}
       </div>
@@ -201,7 +201,7 @@
                     <td>{{ ui.badge(run.status) }}</td>
                     <td class="num">{{ run.workflow_count }}</td>
                     <td>{{ ui.badge(run.verifier_verdict) }}</td>
-                    <td>{{ ui.badge(run.business_correctness, "correctness") }}</td>
+                    <td>{{ ui.business_badge(run.business_correctness) }}</td>
                   </tr>
                 {% endfor %}
               </tbody>

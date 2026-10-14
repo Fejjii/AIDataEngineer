@@ -219,10 +219,8 @@ def failure_messages(body: dict[str, Any] | None) -> tuple[str, ...]:
             continue
         message = item.get("message")
         model = item.get("model") or item.get("name") or "model"
-        text = str(message or "error")[:400]
+        text = str(message or "error")
         messages.append(f"{model}: {text}")
-        if len(messages) >= 8:
-            break
     return tuple(messages)
 
 

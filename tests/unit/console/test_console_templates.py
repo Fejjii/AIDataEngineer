@@ -9,7 +9,12 @@ from typing import Any
 
 import pytest
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
-from tests.unit.console.test_console_presentation import _artifacts, _page, _snapshot
+from tests.unit.console.test_console_presentation import (
+    _artifacts,
+    _full_count_artifacts,
+    _page,
+    _snapshot,
+)
 
 from aide.app.console.present import RunSummary, build_dashboard
 from aide.app.console.sources import group_source_catalog, load_source_catalog
@@ -100,7 +105,9 @@ def test_overview_keeps_objective_action_and_separate_judgements(status: str) ->
     parsed = _PageHTML(html)
     visible = " ".join(parsed.visible_text)
     assert INTERVIEW_REQUEST in visible
-    assert "VALIDATED_SYNTHETIC_CONTRACT" in visible
+    assert "Validated synthetic contract" in visible
+    assert "VALIDATED_SYNTHETIC_CONTRACT" not in visible
+    assert 'data-business-correctness="VALIDATED_SYNTHETIC_CONTRACT"' in html
     assert "production financial correctness" in visible
     assert html.index('id="scenario"') < html.index('class="panel latest-run"')
     assert html.index('class="panel latest-run"') < html.index('id="estate"')
@@ -125,7 +132,9 @@ def test_run_results_visible_and_secondary_evidence_disclosed(artifacts: dict[st
     parsed = _PageHTML(html)
     visible = " ".join(parsed.visible_text)
     assert page.what_happened in visible
-    assert "VALIDATED_SYNTHETIC_CONTRACT" in visible
+    assert "Validated synthetic contract" in visible
+    assert "VALIDATED_SYNTHETIC_CONTRACT" not in visible
+    assert 'data-business-correctness="VALIDATED_SYNTHETIC_CONTRACT"' in html
     assert "not production financial validation" in visible
     signals = [(a["data-signal"], hidden) for _, a, hidden in parsed.nodes if "data-signal" in a]
     assert signals == [("technical", False), ("verification", False), ("business", False)]
@@ -169,12 +178,92 @@ def test_sql_failure_and_preview_text_remain_escaped() -> None:
         "customer_sk"
     ] = '<script>alert("preview")</script>'
     artifacts["repair_proposal"]["patched_sql"] = '<script>alert("sql")</script>'
+    artifacts["original_failure"]["results"][0]["message"] = '<script>alert("failure")</script>'
     page = replace(_page(artifacts), error_message='<script>alert("error")</script>')
     html = _ENV.get_template("run.html").render(page=page, csrf_token="test-csrf")
     parsed = _PageHTML(html)
     assert not any(t == "script" for t, _, _ in parsed.nodes)
     assert "&lt;script&gt;" in html
     assert 'tabindex="0" aria-label="Repaired SQL"' in html
+
+
+def test_clarified_model_quality_and_reconciliation_counts_are_visible() -> None:
+    page = _page(_full_count_artifacts())
+    parsed = _PageHTML(_ENV.get_template("run.html").render(page=page, csrf_token="test-csrf"))
+    visible = " ".join(" ".join(parsed.visible_text).split())
+    assert "Required MVP models" in visible
+    assert "21 required Interview MVP models" in visible
+    assert "22 generated SQL model files" in visible
+    assert "fct_invoices.sql is additional to the required MVP models" in visible
+    assert (
+        "33 Quality Engine checks = 31 ordinary quality checks + 2 reconciliation checks" in visible
+    )
+    assert "4 reconciliation signals = 2 checks included in the 33 Quality Engine checks" in visible
+    assert "2 additional persisted flags. These flags are outside that check total" in visible
+
+
+def test_latest_run_uses_required_benchmark_model_label() -> None:
+    html = _home((RunSummary("run-id", "completed", "stored-start", "", 2, models_generated="21"),))
+    visible = " ".join(_PageHTML(html).visible_text)
+    assert "21 required Interview MVP models (benchmark count)" in visible
+
+
+def test_rerun_table_explains_persisted_phase_separately_from_verified_outcome() -> None:
+    page = _page(_artifacts())
+    page = replace(page, workflows=(page.primary, replace(page.primary, workflow_id="rerun-id")))
+    html = _ENV.get_template("run.html").render(page=page, csrf_token="test-csrf")
+    visible = " ".join(" ".join(_PageHTML(html).visible_text).split())
+    assert "Persisted control plane state" in visible
+    assert "Benchmark outcome" in visible
+    assert "Successful Interview MVP workflows remain in VALIDATION" in visible
+    assert "VERIFIED is the separate benchmark outcome" in visible
+    assert all(item.control_plane_state == "VALIDATION" for item in page.workflows)
+    assert all(item.benchmark_outcome == "VERIFIED" for item in page.workflows)
+
+
+def test_complete_failure_messages_are_disclosed_while_repair_story_stays_visible() -> None:
+    artifacts = _artifacts()
+    messages = [f"failure-{index}: " + "long detail " * 50 for index in range(12)]
+    artifacts["original_failure"]["results"] = [
+        {"status": "error", "model": f"model_{index}", "message": message}
+        for index, message in enumerate(messages)
+    ]
+    page = _page(artifacts)
+    assert len(page.primary.incident.failure_messages) == 12
+    html = _ENV.get_template("run.html").render(page=page, csrf_token="test-csrf")
+    parsed = _PageHTML(html)
+    visible = " ".join(parsed.visible_text)
+    for message in messages:
+        assert message in html
+        assert message not in visible
+    disclosure = next(a for _, a, _ in parsed.nodes if a.get("id") == "original-failure")
+    assert "open" not in disclosure
+    for detail in [
+        "SCHEMA_MISMATCH",
+        "VANTARA_RAW.BILLING.INVOICES",
+        "INVOICE_STATUS → STATUS",
+        "source column renamed",
+        "Repair target",
+        "Repairs in this workflow",
+        "Original SQL",
+        "Repaired SQL",
+        "Revalidation after repair",
+    ]:
+        assert detail in visible
+
+
+def test_preview_displays_truthful_capture_limitation_and_distinct_row_counts() -> None:
+    artifacts = _artifacts()
+    raw = artifacts[SNAPSHOT_ARTIFACT_TYPE]["workflows"][0]["output_preview"]
+    raw["rows"] *= 20
+    raw["sampled_row_count"] = 20
+    page = _page(artifacts)
+    html = _ENV.get_template("run.html").render(page=page, csrf_token="test-csrf")
+    visible = " ".join(" ".join(_PageHTML(html).visible_text).split())
+    assert "Displayed rows 8" in visible
+    assert "Captured sample rows 20" in visible
+    assert "No nonzero paid_amount, refunded_amount or net_paid_amount" in visible
+    assert "Activity outside this sample is unknown" in visible
 
 
 @pytest.mark.parametrize("configured", [True, False])
